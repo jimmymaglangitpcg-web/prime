@@ -29,7 +29,8 @@ public sealed class MachineryConfiguration : IEntityTypeConfiguration<Machinery>
         builder.HasOne(x => x.Property).WithMany().HasForeignKey(x => x.PropertyId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.MachineryType).WithMany().HasForeignKey(x => x.MachineryTypeId).OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(x => x.RpuId);
+        // Exactly one Machinery row per RPU (CLAUDE.md §22) — see LandConfiguration.
+        builder.HasIndex(x => x.RpuId).IsUnique();
         builder.HasIndex(x => x.PropertyId);
         builder.HasIndex(x => x.SerialNumber);
     }

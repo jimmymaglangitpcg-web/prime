@@ -53,6 +53,11 @@ public sealed class SmvService(
         {
             return Result.Failure<SmvDto>("SMV_ALREADY_APPROVED", "This SMV has already been approved.");
         }
+        // Maker-checker (CLAUDE.md §46): the creator may not approve their own SMV.
+        if (currentUser.AppUserId is not null && smv.CreatedBy == currentUser.AppUserId)
+        {
+            return Result.Failure<SmvDto>("CANNOT_APPROVE_OWN_SMV", "The SMV's creator cannot also approve it.");
+        }
 
         smv.Status = WorkflowStatus.Approved;
         smv.ApprovedBy = currentUser.AppUserId;
@@ -153,6 +158,11 @@ public sealed class SmvService(
         if (schedule.Status is WorkflowStatus.Approved or WorkflowStatus.Posted)
         {
             return Result.Failure<SmvScheduleDto>("SMV_SCHEDULE_ALREADY_APPROVED", "This SMV schedule has already been approved.");
+        }
+        // Maker-checker (CLAUDE.md §46): the creator may not approve their own schedule.
+        if (currentUser.AppUserId is not null && schedule.CreatedBy == currentUser.AppUserId)
+        {
+            return Result.Failure<SmvScheduleDto>("CANNOT_APPROVE_OWN_SCHEDULE", "The schedule's creator cannot also approve it.");
         }
 
         schedule.Status = WorkflowStatus.Approved;

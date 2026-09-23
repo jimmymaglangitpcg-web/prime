@@ -1,8 +1,11 @@
+using Hangfire;
+using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Prime.Application.Common.Interfaces;
 using Prime.Infrastructure.Identity;
+using Prime.Infrastructure.Jobs;
 using Prime.Infrastructure.Persistence;
 using Prime.Infrastructure.Persistence.HealthChecks;
 using Prime.Infrastructure.Persistence.Interceptors;
@@ -35,6 +38,17 @@ public static class DependencyInjection
         services.AddHealthChecks()
             .AddNpgSql(connectionString, name: "postgresql", tags: ["ready"])
             .AddCheck<PostGisHealthCheck>("postgis", tags: ["ready"]);
+
+        // Background jobs (CLAUDE.md §33/§72 General Revision; ARCHITECTURE.md
+        // §3.8). Packages were referenced since Phase 2 and deliberately left
+        // unwired until Phase 6 actually needed them.
+        services.AddHangfire(config => config
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString)));
+        services.AddHangfireServer();
+        services.AddScoped<IBackgroundJobScheduler, HangfireBackgroundJobScheduler>();
 
         return services;
     }

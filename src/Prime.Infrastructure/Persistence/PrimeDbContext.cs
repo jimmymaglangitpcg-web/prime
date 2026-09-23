@@ -53,6 +53,8 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<SmvSchedule> SmvSchedules => Set<SmvSchedule>();
     public DbSet<AssessmentLevel> AssessmentLevels => Set<AssessmentLevel>();
     public DbSet<Valuation> Valuations => Set<Valuation>();
+    public DbSet<Assessment> Assessments => Set<Assessment>();
+    public DbSet<GeneralRevisionJob> GeneralRevisionJobs => Set<GeneralRevisionJob>();
 
     // Identity / authorization (CLAUDE.md §47; Supabase Auth owns credentials)
     public DbSet<AppUser> AppUsers => Set<AppUser>();

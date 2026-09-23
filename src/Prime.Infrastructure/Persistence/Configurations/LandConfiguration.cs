@@ -27,7 +27,10 @@ public sealed class LandConfiguration : IEntityTypeConfiguration<Land>
         builder.HasOne(x => x.Zone).WithMany().HasForeignKey(x => x.ZoneId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.RoadType).WithMany().HasForeignKey(x => x.RoadTypeId).OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(x => x.RpuId);
+        // Exactly one Land row per RPU (CLAUDE.md §22) — was an unenforced
+        // assumption until Phase 6's assessment logic needed it to actually
+        // hold; safe additive change, verified no duplicates exist yet.
+        builder.HasIndex(x => x.RpuId).IsUnique();
         builder.HasIndex(x => x.PropertyId);
     }
 }

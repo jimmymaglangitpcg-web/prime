@@ -27,8 +27,6 @@ namespace Prime.Application.Features.Valuation;
 /// </summary>
 public sealed class ValuationService(IApplicationDbContext db) : IValuationService
 {
-    private const string LandPropertyTypeCode = "LAND";
-    private const string BuildingPropertyTypeCode = "BUILDING";
 
     public async Task<Result<ValuationDto>> ComputeForLandAsync(Guid landId, CancellationToken cancellationToken = default)
     {
@@ -38,10 +36,10 @@ public sealed class ValuationService(IApplicationDbContext db) : IValuationServi
             return Result.Failure<ValuationDto>("LAND_NOT_FOUND", "No Land record was found with the given id.");
         }
 
-        var propertyType = await db.PropertyTypes.FirstOrDefaultAsync(x => x.Code == LandPropertyTypeCode, cancellationToken);
+        var propertyType = await db.PropertyTypes.FirstOrDefaultAsync(x => x.Code == PropertyTypeCodes.Land, cancellationToken);
         if (propertyType is null)
         {
-            return Result.Failure<ValuationDto>("PROPERTY_TYPE_NOT_CONFIGURED", $"No PropertyType with code '{LandPropertyTypeCode}' is configured.");
+            return Result.Failure<ValuationDto>("PROPERTY_TYPE_NOT_CONFIGURED", $"No PropertyType with code '{PropertyTypeCodes.Land}' is configured.");
         }
 
         var asOf = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -70,19 +68,16 @@ public sealed class ValuationService(IApplicationDbContext db) : IValuationServi
         // Building doesn't carry Classification/ActualUse itself (§25) — it
         // borrows them from its own current Tax Declaration, the same way a
         // building's assessed classification is a Tax Declaration concept.
-        var taxDeclaration = await db.TaxDeclarations
-            .Where(x => x.RpuId == building.RpuId)
-            .OrderByDescending(x => x.RevisionNumber)
-            .FirstOrDefaultAsync(cancellationToken);
+        var taxDeclaration = await TaxDeclarationLookup.GetCurrentAsync(db, building.RpuId, cancellationToken);
         if (taxDeclaration is null)
         {
             return Result.Failure<ValuationDto>("TAX_DECLARATION_NOT_FOUND", "A Tax Declaration (for its classification/actual use) is required before a Building can be valued.");
         }
 
-        var propertyType = await db.PropertyTypes.FirstOrDefaultAsync(x => x.Code == BuildingPropertyTypeCode, cancellationToken);
+        var propertyType = await db.PropertyTypes.FirstOrDefaultAsync(x => x.Code == PropertyTypeCodes.Building, cancellationToken);
         if (propertyType is null)
         {
-            return Result.Failure<ValuationDto>("PROPERTY_TYPE_NOT_CONFIGURED", $"No PropertyType with code '{BuildingPropertyTypeCode}' is configured.");
+            return Result.Failure<ValuationDto>("PROPERTY_TYPE_NOT_CONFIGURED", $"No PropertyType with code '{PropertyTypeCodes.Building}' is configured.");
         }
 
         var asOf = DateOnly.FromDateTime(DateTime.UtcNow);

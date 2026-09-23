@@ -28,7 +28,8 @@ public sealed class BuildingConfiguration : IEntityTypeConfiguration<Building>
 
         builder.HasMany(x => x.Components).WithOne(x => x.Building).HasForeignKey(x => x.BuildingId).OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasIndex(x => x.RpuId);
+        // Exactly one Building row per RPU (CLAUDE.md §22) — see LandConfiguration.
+        builder.HasIndex(x => x.RpuId).IsUnique();
         builder.HasIndex(x => x.PropertyId);
     }
 }

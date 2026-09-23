@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Prime.Infrastructure.Persistence;
 namespace Prime.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PrimeDbContext))]
-    partial class PrimeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260923200228_AssessmentFoundations")]
+    partial class AssessmentFoundations
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -23,94 +26,6 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("Prime.Domain.Entities.Assessment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("ApprovedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ApprovedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("AssessedValue")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("AssessmentLevelId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("AssessmentPercentage")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)");
-
-                    b.Property<int>("AssessmentYear")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("EffectiveDate")
-                        .HasColumnType("date");
-
-                    b.Property<decimal>("MarketValue")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid?>("PreviousAssessmentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PropertyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Remarks")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<Guid?>("RevisionReference")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("RpuId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ValuationId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssessmentLevelId");
-
-                    b.HasIndex("AssessmentYear");
-
-                    b.HasIndex("PreviousAssessmentId");
-
-                    b.HasIndex("PropertyId");
-
-                    b.HasIndex("RevisionReference");
-
-                    b.HasIndex("ValuationId");
-
-                    b.HasIndex("RpuId", "EffectiveDate");
-
-                    b.ToTable("Assessments");
-                });
 
             modelBuilder.Entity("Prime.Domain.Entities.AssessmentLevel", b =>
                 {
@@ -454,63 +369,6 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("RelatedEntityType", "RelatedEntityId");
 
                     b.ToTable("Documents");
-                });
-
-            modelBuilder.Entity("Prime.Domain.Entities.GeneralRevisionJob", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("FailedCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ProcessedCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Remarks")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<int>("RevisionYear")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset?>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("StartedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<int>("TotalCount")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RevisionYear");
-
-                    b.HasIndex("Status");
-
-                    b.ToTable("GeneralRevisionJobs");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.Identity.AppUser", b =>
@@ -2275,53 +2133,6 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("SourceType", "SourceId", "ComputedAt");
 
                     b.ToTable("Valuations");
-                });
-
-            modelBuilder.Entity("Prime.Domain.Entities.Assessment", b =>
-                {
-                    b.HasOne("Prime.Domain.Entities.AssessmentLevel", "AssessmentLevel")
-                        .WithMany()
-                        .HasForeignKey("AssessmentLevelId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Prime.Domain.Entities.Assessment", "PreviousAssessment")
-                        .WithMany()
-                        .HasForeignKey("PreviousAssessmentId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Prime.Domain.Entities.PropertyEntity", "Property")
-                        .WithMany()
-                        .HasForeignKey("PropertyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Prime.Domain.Entities.GeneralRevisionJob", null)
-                        .WithMany()
-                        .HasForeignKey("RevisionReference")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Prime.Domain.Entities.RealPropertyUnit", "Rpu")
-                        .WithMany()
-                        .HasForeignKey("RpuId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Prime.Domain.Entities.Valuation", "Valuation")
-                        .WithMany()
-                        .HasForeignKey("ValuationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("AssessmentLevel");
-
-                    b.Navigation("PreviousAssessment");
-
-                    b.Navigation("Property");
-
-                    b.Navigation("Rpu");
-
-                    b.Navigation("Valuation");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.AssessmentLevel", b =>

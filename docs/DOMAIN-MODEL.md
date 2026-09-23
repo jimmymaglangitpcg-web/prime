@@ -378,6 +378,44 @@ Never overwritten (§32); a new assessment year/revision is a new row
 referencing the prior one via `RevisionReference` / the TD supersession
 chain.
 
+**Resolved (Phase 6, 2026-09-23)**: built as sketched, with two
+refinements found necessary while implementing. First, `AssessmentLevel`
+is a foreign key (`AssessmentLevelId`), not just the bare `AssessmentLevel`
+value shown above — but the `AssessmentPercentage` value it held at
+computation time is *also* copied onto the row directly, since
+`AssessmentLevel` rows are themselves versioned/effective-dated (§29): a
+historical Assessment must keep meaning the same thing even if its
+`AssessmentLevel` is later superseded. Second, `PropertyId` was added
+(denormalized from `Valuation`, matching the same convention Land/Building/
+Machinery already use) purely for query convenience. `RevisionReference`
+is a nullable FK to `GeneralRevisionJob` (§3.13a below), not
+`PropertyTransaction` — see that section for why. `PreviousAssessmentId`
+(a TaxDeclaration-style self-reference, not explicitly named above but
+implied by "referencing the prior one") is what "reassessment" actually
+uses: creating a new Assessment with `PreviousAssessmentId` set to the
+prior one is the entire reassessment mechanism — no separate service or
+entity was needed for it.
+
+### 3.13a GeneralRevisionJob (§33/§72, new in Phase 6)
+
+```text
+GeneralRevisionJobId, RevisionYear
+JobExecutionStatus (Queued | Running | Completed | Failed)
+TotalCount, ProcessedCount, FailedCount
+StartedBy, StartedAt, CompletedAt
+Remarks
+```
+
+Tracks a General Revision batch's background-job execution progress —
+distinct from `Assessment.Status` (`WorkflowStatus`, maker-checker
+approval state): `JobExecutionStatus` describes whether the job itself
+finished running, not whether its output has been reviewed/approved yet.
+Deliberately not the generic `PropertyTransaction` (§34, still unbuilt in
+this codebase) — General Revision is the only batch transaction type any
+phase has needed so far, so a small purpose-built entity was used instead
+of inventing Transfer/Subdivision/Consolidation structure ahead of a phase
+that actually needs it.
+
 ### 3.14 PropertyTransaction (§34)
 
 ```text

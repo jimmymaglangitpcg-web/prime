@@ -1,6 +1,11 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Prime.Application.Features.AssessmentLevels;
+using Prime.Application.Features.Assessments;
+using Prime.Application.Features.Buildings;
+using Prime.Application.Features.GeneralRevision;
+using Prime.Application.Features.Lands;
+using Prime.Application.Features.MachineryUnits;
 using Prime.Application.Features.Parcels;
 using Prime.Application.Features.Properties;
 using Prime.Application.Features.RealPropertyUnits;
@@ -23,10 +28,16 @@ public static class DependencyInjection
         services.AddScoped<IParcelService, ParcelService>();
         services.AddScoped<IRealPropertyUnitService, RealPropertyUnitService>();
         services.AddScoped<ITaxDeclarationService, TaxDeclarationService>();
+        services.AddScoped<ILandService, LandService>();
+        services.AddScoped<IBuildingService, BuildingService>();
+        services.AddScoped<IMachineryService, MachineryService>();
         services.AddScoped<IReferenceDataService, ReferenceDataService>();
         services.AddScoped<ISmvService, SmvService>();
         services.AddScoped<IAssessmentLevelService, AssessmentLevelService>();
         services.AddScoped<IValuationService, ValuationService>();
+        services.AddScoped<IAssessmentService, AssessmentService>();
+        services.AddScoped<IGeneralRevisionService, GeneralRevisionService>();
+        services.AddScoped<GeneralRevisionJobRunner>();
 
         return services;
     }

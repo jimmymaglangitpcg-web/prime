@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentValidation;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
@@ -113,6 +114,12 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+
+    // Hangfire's default dashboard authorization allows all requests —
+    // fine for local development, but CLAUDE.md §67 requires real
+    // authorization before this is ever exposed outside Development.
+    // DOMAIN VERIFICATION REQUIRED before enabling in any other environment.
+    app.UseHangfireDashboard();
 
     if (useDevAuthBypass)
     {

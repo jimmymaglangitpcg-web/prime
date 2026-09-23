@@ -36,11 +36,18 @@ public interface IApplicationDbContext
     DbSet<SubClassification> SubClassifications { get; }
     DbSet<OwnershipType> OwnershipTypes { get; }
     DbSet<PropertyType> PropertyTypes { get; }
+    DbSet<RoadType> RoadTypes { get; }
+    DbSet<Condition> Conditions { get; }
+    DbSet<BuildingType> BuildingTypes { get; }
+    DbSet<StructuralType> StructuralTypes { get; }
+    DbSet<MachineryType> MachineryTypes { get; }
 
     DbSet<Smv> Smvs { get; }
     DbSet<SmvSchedule> SmvSchedules { get; }
     DbSet<AssessmentLevel> AssessmentLevels { get; }
     DbSet<Valuation> Valuations { get; }
+    DbSet<Assessment> Assessments { get; }
+    DbSet<GeneralRevisionJob> GeneralRevisionJobs { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

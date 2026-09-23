@@ -20,4 +20,15 @@ public interface ICurrentUserService
     /// it. Null for ordinary create/update of non-workflow entities.
     /// </summary>
     string? Reason { get; set; }
+
+    /// <summary>
+    /// Sets <see cref="AppUserId"/> for a background job execution (e.g.
+    /// <c>GeneralRevisionJobRunner</c>), where no HTTP request exists to
+    /// have populated it via the normal provisioning middleware. Deliberately
+    /// separate from an ordinary settable property — this exists only for
+    /// background job entry points to declare "acting as the user who
+    /// started this job," not for request-scoped feature handlers to spoof
+    /// identity.
+    /// </summary>
+    void ActAsForBackgroundJob(Guid? userId);
 }

@@ -85,6 +85,11 @@ public sealed class AssessmentLevelService(
         {
             return Result.Failure<AssessmentLevelDto>("ASSESSMENT_LEVEL_ALREADY_APPROVED", "This assessment level has already been approved.");
         }
+        // Maker-checker (CLAUDE.md §46): the creator may not approve their own assessment level.
+        if (currentUser.AppUserId is not null && assessmentLevel.CreatedBy == currentUser.AppUserId)
+        {
+            return Result.Failure<AssessmentLevelDto>("CANNOT_APPROVE_OWN_ASSESSMENT_LEVEL", "The assessment level's creator cannot also approve it.");
+        }
 
         assessmentLevel.Status = WorkflowStatus.Approved;
         assessmentLevel.ApprovedBy = currentUser.AppUserId;

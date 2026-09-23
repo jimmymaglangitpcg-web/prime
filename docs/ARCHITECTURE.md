@@ -284,17 +284,44 @@ object storage).
 
 ### 3.8 Background processing
 
-- **Hangfire** (PostgreSQL storage provider) is proposed for:
+- **Hangfire** (PostgreSQL storage provider), wired in as of Phase 6, is
+  used for:
   - General Revision (§33/§72) — CREATE JOB → QUEUE → PROCESS → VALIDATE →
-    GENERATE RESULTS → REVIEW → APPROVE → POST, with progress tracked in a
-    job-status table the UI can poll.
-  - Large CSV/Excel imports (§60/§73).
-  - Report generation and large exports.
+    GENERATE RESULTS → REVIEW → APPROVE → POST, with progress tracked in
+    `GeneralRevisionJob` (a job-status table the UI can poll —
+    docs/DOMAIN-MODEL.md §3.13a).
+  - Large CSV/Excel imports (§60/§73) and report generation/large exports
+    — proposed, not yet built (Phase 13/11).
 - Rationale: Hangfire integrates natively with ASP.NET Core, persists job
   state in the same PostgreSQL instance (no extra infrastructure like Redis
   required to start), provides a dashboard for operational visibility, and
   supports retry policies — matching the "trackable, retryable where safe,
   auditable" requirement in §73.
+- **`Prime.Application` never references Hangfire directly** (Clean
+  Architecture dependency direction, §2) — an `IBackgroundJobScheduler`
+  interface in `Prime.Application/Common/Interfaces/` is what
+  Application-layer services depend on to enqueue work;
+  `HangfireBackgroundJobScheduler` in `Prime.Infrastructure/Jobs/` is the
+  only place that touches Hangfire's own API. Any future background job
+  (imports, exports, reports) should depend on this interface too, the
+  same way `IApplicationDbContext`/`ICurrentUserService` abstract EF Core
+  and the current-user context.
+- A job class (e.g. `GeneralRevisionJobRunner`) is invoked by Hangfire
+  outside any HTTP request — `Hangfire.AspNetCore`'s built-in
+  `AspNetCoreJobActivator` resolves it from a fresh DI scope per
+  execution, the same way a controller gets one per request, so plain
+  constructor injection of scoped Application services is sufficient; no
+  manual `IServiceScopeFactory` handling is needed in the job class
+  itself. Because that scope has no HTTP request behind it, nothing
+  populates `ICurrentUserService` the normal per-request way — a job
+  entry point must call `ICurrentUserService.ActAsForBackgroundJob(userId)`
+  as its first action so `CreatedBy` on rows it produces reflects who
+  actually started the job (required for maker-checker, §46, to mean
+  anything on those rows afterward).
+- The Hangfire Dashboard's default authorization allows all requests —
+  mapped Development-only in `Program.cs` until real authorization is
+  designed for it (CLAUDE.md §67); `DOMAIN VERIFICATION REQUIRED` before
+  enabling it anywhere else.
 - Jobs that mutate assessment/billing data must be **idempotent** (safe to
   retry) and must themselves go through the same audit logging as
   interactive requests.

@@ -557,6 +557,153 @@ posted; a general revision job can run against a batch of demo properties
 without blocking a browser request; history is preserved and queryable
 "as of" a date.
 
+**Status (2026-09-23): complete and verified.** `Assessment` applies a
+resolved `AssessmentLevel` to a Phase 5 `Valuation`'s market value to
+produce `AssessedValue`, through the full DRAFT → PENDING_REVIEW →
+APPROVED/REJECTED → POSTED workflow (`WorkflowStatus`, reused as-is — no
+new enum needed), with real maker-checker (the creator cannot approve
+their own assessment) and reassessment via a `PreviousAssessmentId` chain.
+Hangfire — referenced since Phase 2, deliberately left unwired — is now
+wired in, and `GeneralRevisionJob` runs a batch of RPUs through
+Valuation+Assessment as a real, progress-tracked background job.
+
+### Architecture decisions made while implementing
+
+1. **`Land`/`Building`/`Machinery`'s `RpuId` index is now unique.** It was
+   a plain (non-unique) index since Phase 3 — nothing before this phase
+   actually needed "exactly one detail row per RPU" to be a real invariant.
+   Verified safe before changing: the local dev database's `Lands`/
+   `Buildings`/`MachineryUnits` tables were empty at the time (no create
+   endpoint exists yet for any of the three — see "Not yet done" below),
+   so tightening this was a risk-free additive migration, not a breaking one.
+2. **`TaxDeclarationLookup`** (`Prime.Application/Common/`) extracted from
+   Phase 5's `ValuationService.ComputeForBuildingAsync` — `AssessmentService`
+   needs the identical "current Tax Declaration for an RPU" query for
+   Building *and* Machinery (Machinery has no `ClassificationId` either,
+   discovered while implementing this phase, not anticipated during
+   planning — `AssessmentLevel` is keyed the same way `SmvSchedule` is).
+   Alongside it, `PropertyTypeCodes` centralizes the `"LAND"`/`"BUILDING"`/
+   `"MACHINERY"` `PropertyType.Code` constants both `ValuationService` and
+   `AssessmentService` resolve against, so the two services can't drift.
+3. **Maker-checker creator-check is now real** on `Assessment.ApproveAsync`,
+   and retrofitted onto Phase 5's `SmvService`/`AssessmentLevelService`
+   approve methods too (same one-line `CreatedBy == currentUser.AppUserId`
+   check) — cheap because `AuditSaveChangesInterceptor` already stamps
+   `CreatedBy` on every insert. Closes something Phase 5 explicitly
+   flagged as deferred. "Creator cannot approve their own record" is now
+   enforced; full RBAC/permission-based maker-checker configuration is
+   still Phase 12.
+4. **`GeneralRevisionJob`, not the generic `PropertyTransaction` (§34)** —
+   General Revision is the only batch-transaction type Phase 6 needs; a
+   purpose-built entity avoids inventing Transfer/Subdivision/Consolidation
+   structure ahead of a phase that actually needs it.
+5. **`IBackgroundJobScheduler`** (`Prime.Application/Common/Interfaces/`),
+   implemented by `HangfireBackgroundJobScheduler` in
+   `Prime.Infrastructure/Jobs/` — discovered while implementing, not
+   anticipated during planning: `Prime.Application` cannot reference
+   Hangfire directly (Clean Architecture dependency direction,
+   ARCHITECTURE.md §2), so `GeneralRevisionService`/`GeneralRevisionJobRunner`
+   depend on this Application-owned interface instead, the same pattern
+   already used for `IApplicationDbContext`/`ICurrentUserService`. Any
+   future background job (large imports/exports, Phase 13) should use the
+   same interface rather than referencing Hangfire from Application code.
+6. **`ICurrentUserService.ActAsForBackgroundJob(Guid?)`** — a narrow,
+   deliberately-named addition (not a general setter) so
+   `GeneralRevisionJobRunner` can declare "acting as the user who started
+   this job" when Hangfire invokes it outside any HTTP request (nothing
+   populates `AppUserId` the normal per-request way there), without
+   opening identity-spoofing to ordinary request-scoped feature handlers.
+7. **`GeneralRevisionJobRunner` doesn't manage its own `IServiceScopeFactory`
+   scope** — `Hangfire.AspNetCore`'s built-in `AspNetCoreJobActivator`
+   already resolves job classes from a fresh DI scope per execution (the
+   same way a controller gets one per HTTP request), so plain constructor
+   injection is sufficient; this simplified an earlier assumption made
+   during planning that manual scope management would be needed.
+8. **Hangfire Dashboard is Development-only** (`Program.cs`) — its default
+   authorization allows all requests, which CLAUDE.md §67 does not permit
+   outside Development without real authorization wired up first
+   (`DOMAIN VERIFICATION REQUIRED` before enabling elsewhere).
+
+### Verified, not assumed
+
+- Full build: 0 warnings, 0 errors, after all new files across three
+  migrations (`AssessmentFoundations`, `Assessments`, `GeneralRevision`).
+- All three migrations applied cleanly to the local database; `/health`
+  re-checked `Healthy` after each.
+- 35 tests pass solution-wide (17 Domain + 3 Application + 15 Integration,
+  up from 31 before this phase): new integration tests (rolled-back-
+  transaction pattern) prove an Assessment's `AssessedValue`/frozen
+  percentage compute correctly; `ApproveAsync` rejects when the acting
+  user matches `CreatedBy` and succeeds with a different one (maker-checker
+  actually exercised with two distinct simulated users, not merely
+  asserted to exist in code); reassessment correctly chains via
+  `PreviousAssessmentId`; and `GeneralRevisionJobRunner.RunAsync`, called
+  directly (not through the real Hangfire enqueue/worker pipeline — see
+  the test file's own reasoning), processes a batch of seeded RPUs into
+  tracked, `RevisionReference`-tagged Draft assessments with correct
+  progress counts.
+- Hangfire actually smoke-tested against the running app, not just unit
+  tested: `/health` stayed `Healthy`, `/hangfire` (the dashboard) returned
+  HTTP 200, and a real HTTP `POST /api/smv` round-tripped end-to-end
+  through the full auth/routing/JSON pipeline (cleaned up from the dev
+  database afterward, since it was a real request, not a rolled-back test
+  transaction).
+- Dev database confirmed empty of `Assessments`/`GeneralRevisionJobs`/
+  `Valuations`/`Smvs` rows after the full test run (checked directly via
+  `psql`) — the rolled-back-transaction pattern held even with Hangfire's
+  own background server running in the same test host.
+
+### Not yet done — explicitly deferred, not overlooked
+
+- **Frontend UI** — backend-only this pass, same precedent as Phases 4/5.
+- **Full RBAC/permission-based maker-checker configuration** (§46 —
+  configuring *which* transactions require it, by role) is Phase 12; this
+  phase only enforces the universal "creator ≠ approver" rule.
+- **General Revision's SELECT stage is caller-supplied RPU ids only** — no
+  UI or saved-filter mechanism (e.g. "all Land RPUs in Barangay X") exists
+  yet to build that list; the API accepts an explicit list today.
+
+### Follow-up (2026-09-23): Land/Building/Machinery registration gap closed
+
+Phase 4's own status notes flagged that Land/Building/Machinery had no
+Application-layer service or controller at all — only direct EF
+construction in tests — and Phase 6's unique-`RpuId`-index change made
+that gap visible again (General Revision needs to reliably find "the
+Land/Building/Machinery for this RPU"). Closed as a follow-up, same
+pattern as every other Phase 4 entity (`ILandService`/`IBuildingService`/
+`IMachineryService`, `/api/land`, `/api/buildings`, `/api/machinery`,
+plus `~/api/rpus/{rpuId}/land|building|machinery` singular lookups since
+each is 1:1 with its RPU):
+
+- Each `Create*Async` validates the RPU exists, that its `RpuType`
+  matches (`RPU_TYPE_MISMATCH` otherwise — e.g. rejects creating a Land
+  record against a Building RPU), and that no record already exists for
+  that RPU (`*_ALREADY_EXISTS_FOR_RPU`, a friendly error ahead of the
+  Phase 6 unique-index constraint), plus FK-existence checks for every
+  reference field (Classification/ActualUse/SubClassification/Zone/
+  RoadType for Land; BuildingType/StructuralType/ActualUse/Condition for
+  Building; MachineryType for Machinery).
+- `IApplicationDbContext` gained `RoadTypes`/`Conditions`/`BuildingTypes`/
+  `StructuralTypes`/`MachineryTypes` — these lookup tables existed on
+  `PrimeDbContext` since Phase 3 but were never exposed through the
+  Application-facing interface because nothing needed them before.
+- **Create/Get only, matching the existing Phase 4 precedent that
+  Update/Delete needs its own design pass** (CLAUDE.md §49/§76) — not
+  added here for these three either.
+- No new migration — `Lands`/`Buildings`/`MachineryUnits` tables already
+  existed from Phase 3; this only added the Application/WebApi layers.
+- Feature folders are named after the plural `DbSet` property
+  (`Features/Lands/`, `Features/Buildings/`, `Features/MachineryUnits/`),
+  not the singular entity name, to avoid the entity/namespace collision
+  that `Features/Smv/`/`Features/Valuation/` (Phase 5) already
+  demonstrated works but is easy to get wrong without the qualification
+  those files needed.
+- Verified: 39 tests pass solution-wide (up from 35), including 4 new
+  integration tests proving duplicate rejection, RPU-type-mismatch
+  rejection, and correct default values (`AreaUnit` defaults to `"sqm"`,
+  `NumberOfStoreys` to 1, `CompletionPercentage` to 100) against the real
+  local database.
+
 ## Phase 7 — GIS
 
 **Goal**: the map is live and linked to the Property Profile.
@@ -699,26 +846,35 @@ per-phase tasks:
 
 ## Immediate next action
 
-Phases 0–5 are complete and verified (backend + frontend UI through Phase
-4; Phase 5's SMV/AssessmentLevel/ValuationService backend, see status
-above — no UI yet). **Nothing has been committed to git yet** — the
-repository has no commits; all work described in this document exists
-only in the working tree. Candidates for what's next, in no particular
-priority order:
+Phases 0–6 are complete and verified (backend + frontend UI through Phase
+4; Phase 5's Valuation and Phase 6's Assessment/General Revision backend,
+see status above — no UI for either yet; the Land/Building/Machinery
+registration backend gap flagged after Phase 6 was closed as a follow-up,
+see above — still no UI for that either). The repository was committed
+for the first time on 2026-09-23 (root commit, all of Phases 0–5) and
+pushed to `origin` (GitHub) — Phase 6's work and the registration
+follow-up are normal commits from here. Candidates for what's next, in no
+particular priority order:
 
-- **Phase 6 — Assessment**: the natural next phase — `AssessmentService`
-  applies Phase 5's `AssessmentLevel` to a `Valuation.ComputedMarketValue`
-  to produce `AssessedValue`, plus the assessment workflow/general
-  revision/maker-checker approval machinery.
-- **Phase 5 UI** (SMV/AssessmentLevel administration, a "compute
-  valuation" action + breakdown view on the Property Profile) — deferred
-  backend-first this pass, same precedent as Phase 4.
-- Remaining Phase 4 items: **Update/Delete** endpoints (needs its own
-  design pass per CLAUDE.md's history-preservation rules, §49/§76, not a
-  quick CRUD addition), **cross-entity global search** (CLAUDE.md §56: TD
-  number, RPU number, TIN, address — currently only Property's own fields
-  are searchable), and a **real Supabase JWT exercised end-to-end** (needs
-  a real sign-up UI, which doesn't exist yet).
+- **Phase 7 — GIS**: the natural next phase per the roadmap sequence —
+  PostGIS-backed parcel geometry, map rendering, spatial search, parcel →
+  Property Profile navigation. Needs the canonical SRID open question
+  (docs/DATABASE.md §"Spatial reference system") resolved first.
+- **Phase 4/5/6 UI**: property-detail (Land/Building/Machinery)
+  registration forms, SMV/AssessmentLevel/Assessment administration, a
+  "compute valuation" + "assess" action with breakdown view on the
+  Property Profile, a General Revision batch screen with progress — all
+  deferred backend-first, same precedent as Phase 4's own UI. The backend
+  is now fully in place for all of these (no more service/controller
+  gaps blocking it) — this is now purely a frontend task.
+- Remaining Phase 4 items: **Update/Delete** endpoints (now that Phase 6
+  established a second "versioned, never-overwritten" precedent beyond
+  Phase 5's, a design pass here has more to generalize from — see Phase 6
+  status), **cross-entity global search** (CLAUDE.md §56: TD number, RPU
+  number, TIN, address — currently only Property's own fields are
+  searchable — safe to do anytime, no dependencies), and a **real
+  Supabase JWT exercised end-to-end** (belongs with Phase 12's real
+  sign-up/login UI, not built standalone).
 
 Await explicit instruction on which to pick up; per CLAUDE.md §12/§108,
 none of this happens automatically.
