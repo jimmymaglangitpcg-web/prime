@@ -1,0 +1,205 @@
+using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+using Prime.Application.Common;
+using Prime.Application.Common.Interfaces;
+using Prime.Domain.Entities;
+using Prime.Domain.Enums;
+
+namespace Prime.Application.Features.Properties;
+
+public sealed class PropertyService(IApplicationDbContext db, IValidator<CreatePropertyRequest> validator) : IPropertyService
+{
+    public async Task<Result<PropertyDto>> CreateAsync(CreatePropertyRequest request, CancellationToken cancellationToken = default)
+    {
+        var validation = await validator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return Result.Failure<PropertyDto>("VALIDATION_FAILED", string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)));
+        }
+
+        if (await db.Properties.AnyAsync(p => p.PropertyIdentificationNumber == request.PropertyIdentificationNumber, cancellationToken))
+        {
+            return Result.Failure<PropertyDto>("PROPERTY_PIN_DUPLICATE", $"A property with PIN '{request.PropertyIdentificationNumber}' already exists.");
+        }
+
+        if (!await db.Provinces.AnyAsync(x => x.Id == request.ProvinceId, cancellationToken))
+        {
+            return Result.Failure<PropertyDto>("PROVINCE_NOT_FOUND", "The specified province does not exist.");
+        }
+        if (!await db.Municipalities.AnyAsync(x => x.Id == request.MunicipalityId && x.ProvinceId == request.ProvinceId, cancellationToken))
+        {
+            return Result.Failure<PropertyDto>("MUNICIPALITY_NOT_FOUND", "The specified municipality does not exist within the specified province.");
+        }
+        if (!await db.Barangays.AnyAsync(x => x.Id == request.BarangayId && x.MunicipalityId == request.MunicipalityId, cancellationToken))
+        {
+            return Result.Failure<PropertyDto>("BARANGAY_NOT_FOUND", "The specified barangay does not exist within the specified municipality.");
+        }
+        if (request.ZoneId is not null && !await db.Zones.AnyAsync(x => x.Id == request.ZoneId, cancellationToken))
+        {
+            return Result.Failure<PropertyDto>("ZONE_NOT_FOUND", "The specified zone does not exist.");
+        }
+
+        var property = new PropertyEntity
+        {
+            PropertyIdentificationNumber = request.PropertyIdentificationNumber,
+            ProvinceId = request.ProvinceId,
+            MunicipalityId = request.MunicipalityId,
+            BarangayId = request.BarangayId,
+            ZoneId = request.ZoneId,
+            Street = request.Street,
+            Sitio = request.Sitio,
+            LotNumber = request.LotNumber,
+            BlockNumber = request.BlockNumber,
+            SurveyNumber = request.SurveyNumber,
+            TitleNumber = request.TitleNumber,
+            TaxMapNumber = request.TaxMapNumber,
+            Status = RecordStatus.Active,
+        };
+
+        db.Properties.Add(property);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(await MapToDto(property.Id, cancellationToken)
+            ?? throw new InvalidOperationException("Property was just created but could not be reloaded."));
+    }
+
+    public async Task<Result<PropertyProfileDto>> GetProfileAsync(Guid propertyId, CancellationToken cancellationToken = default)
+    {
+        var property = await MapToDto(propertyId, cancellationToken);
+        if (property is null)
+        {
+            return Result.Failure<PropertyProfileDto>("PROPERTY_NOT_FOUND", "No property was found with the given id.");
+        }
+
+        var ownerRows = await db.PropertyTaxpayers
+            .Where(pt => pt.PropertyId == propertyId)
+            .Select(pt => new
+            {
+                pt.Id,
+                pt.TaxpayerId,
+                Taxpayer = new { pt.Taxpayer!.TaxpayerType, pt.Taxpayer.LastName, pt.Taxpayer.FirstName, pt.Taxpayer.MiddleName, pt.Taxpayer.Suffix, pt.Taxpayer.CorporateName },
+                OwnershipTypeName = pt.OwnershipType!.Name,
+                pt.OwnershipPercentage,
+                pt.StartDate,
+                pt.EndDate,
+                pt.IsCurrent,
+            })
+            .OrderByDescending(x => x.IsCurrent).ThenByDescending(x => x.StartDate)
+            .ToListAsync(cancellationToken);
+
+        var owners = ownerRows.Select(o => new PropertyOwnerDto(
+            o.Id,
+            o.TaxpayerId,
+            TaxpayerNameFormatter.Format(o.Taxpayer.TaxpayerType, o.Taxpayer.LastName, o.Taxpayer.FirstName, o.Taxpayer.MiddleName, o.Taxpayer.Suffix, o.Taxpayer.CorporateName),
+            o.OwnershipTypeName,
+            o.OwnershipPercentage,
+            o.StartDate,
+            o.EndDate,
+            o.IsCurrent)).ToList();
+
+        var parcels = await db.Parcels
+            .Where(p => p.PropertyId == propertyId)
+            .Select(p => new ParcelSummaryDto(p.Id, p.Area, p.LotNumber, p.Barangay!.Name, p.Status))
+            .ToListAsync(cancellationToken);
+
+        var rpus = await db.RealPropertyUnits
+            .Where(r => r.PropertyId == propertyId)
+            .OrderByDescending(r => r.EffectivityDate)
+            .Select(r => new RpuSummaryDto(r.Id, r.RpuNumber, r.RpuType, r.Status, r.EffectivityDate))
+            .ToListAsync(cancellationToken);
+
+        var taxDeclarations = await db.TaxDeclarations
+            .Where(td => td.PropertyId == propertyId)
+            .OrderByDescending(td => td.EffectivityDate)
+            .Select(td => new TaxDeclarationSummaryDto(td.Id, td.TaxDeclarationNumber, td.RevisionNumber, td.AssessmentYear, td.Status, td.EffectivityDate))
+            .ToListAsync(cancellationToken);
+
+        return Result.Success(new PropertyProfileDto(property, owners, parcels, rpus, taxDeclarations));
+    }
+
+    public async Task<Result<PagedResult<PropertyDto>>> SearchAsync(PropertySearchRequest request, CancellationToken cancellationToken = default)
+    {
+        var query = db.Properties.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(request.SearchTerm))
+        {
+            // .ToLower().Contains() (not EF.Functions.ILike) deliberately —
+            // keeps Application decoupled from the Npgsql-specific
+            // provider; translates to a portable case-insensitive LIKE.
+            var term = request.SearchTerm.Trim().ToLower();
+            query = query.Where(p =>
+                p.PropertyIdentificationNumber.ToLower().Contains(term) ||
+                (p.LotNumber != null && p.LotNumber.ToLower().Contains(term)) ||
+                (p.TitleNumber != null && p.TitleNumber.ToLower().Contains(term)) ||
+                (p.SurveyNumber != null && p.SurveyNumber.ToLower().Contains(term)) ||
+                (p.TaxMapNumber != null && p.TaxMapNumber.ToLower().Contains(term)));
+        }
+
+        if (request.BarangayId is not null)
+        {
+            query = query.Where(p => p.BarangayId == request.BarangayId);
+        }
+        if (request.MunicipalityId is not null)
+        {
+            query = query.Where(p => p.MunicipalityId == request.MunicipalityId);
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var entities = await IncludeReferences(query)
+            .OrderBy(p => p.PropertyIdentificationNumber)
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
+        var items = entities.Select(ProjectToDto).ToList();
+
+        return Result.Success(new PagedResult<PropertyDto>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = request.Page,
+            PageSize = request.PageSize,
+        });
+    }
+
+    // .Include() is required here even though ProjectToDto only reads
+    // navigation properties (Province/Municipality/Barangay/Zone): EF Core
+    // cannot translate a call to a separately-defined method inside
+    // Select() into SQL, so it silently falls back to loading the raw
+    // entity and invoking the method client-side — without Include, the
+    // navigation properties are null and ProjectToDto throws a
+    // NullReferenceException (found by actually running this against a
+    // real database, not assumed).
+    private async Task<PropertyDto?> MapToDto(Guid propertyId, CancellationToken cancellationToken)
+    {
+        var property = await IncludeReferences(db.Properties).SingleOrDefaultAsync(p => p.Id == propertyId, cancellationToken);
+        return property is null ? null : ProjectToDto(property);
+    }
+
+    private static IQueryable<PropertyEntity> IncludeReferences(IQueryable<PropertyEntity> query) => query
+        .Include(p => p.Province)
+        .Include(p => p.Municipality)
+        .Include(p => p.Barangay)
+        .Include(p => p.Zone);
+
+    private static PropertyDto ProjectToDto(PropertyEntity p) => new(
+        p.Id,
+        p.PropertyIdentificationNumber,
+        p.ProvinceId,
+        p.Province!.Name,
+        p.MunicipalityId,
+        p.Municipality!.Name,
+        p.BarangayId,
+        p.Barangay!.Name,
+        p.ZoneId,
+        p.Zone == null ? null : p.Zone.Name,
+        p.Street,
+        p.Sitio,
+        p.LotNumber,
+        p.BlockNumber,
+        p.SurveyNumber,
+        p.TitleNumber,
+        p.TaxMapNumber,
+        p.Status,
+        p.CreatedAt);
+}

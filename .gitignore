@@ -1,0 +1,61 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.userosscache
+*.sln.docstates
+
+## EF Core
+*.dbmdl
+*.dbproj.schemaview
+
+## Node / React
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+## Environment / secrets
+.env
+.env.*
+!.env.example
+appsettings.*.json
+!appsettings.json
+
+## Logs
+*.log
+logs/
+
+## OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+## Test / coverage
+coverage/
+TestResults/
+*.trx
+
+## Local data / uploads
+/uploads/
+/storage/local/
+
+## Database local artifacts
+*.bak
+*.sql.gz
+
+## Local scratch / ad hoc verification tooling (not part of the product)
+.scratch/

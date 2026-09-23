@@ -1,0 +1,6 @@
+@Prime.WebApi_HostAddress = https://localhost:7221
+
+GET {{Prime.WebApi_HostAddress}}/health
+Accept: application/json
+
+###

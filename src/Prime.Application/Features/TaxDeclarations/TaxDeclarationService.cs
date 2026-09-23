@@ -1,0 +1,120 @@
+using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+using Prime.Application.Common;
+using Prime.Application.Common.Interfaces;
+using Prime.Domain.Entities;
+using Prime.Domain.Enums;
+
+namespace Prime.Application.Features.TaxDeclarations;
+
+public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<CreateTaxDeclarationRequest> validator) : ITaxDeclarationService
+{
+    public async Task<Result<TaxDeclarationDto>> CreateAsync(CreateTaxDeclarationRequest request, CancellationToken cancellationToken = default)
+    {
+        var validation = await validator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return Result.Failure<TaxDeclarationDto>("VALIDATION_FAILED", string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)));
+        }
+
+        var rpu = await db.RealPropertyUnits.FirstOrDefaultAsync(r => r.Id == request.RpuId, cancellationToken);
+        if (rpu is null)
+        {
+            return Result.Failure<TaxDeclarationDto>("RPU_NOT_FOUND", "No RPU was found with the given id.");
+        }
+        if (await db.TaxDeclarations.AnyAsync(td => td.TaxDeclarationNumber == request.TaxDeclarationNumber, cancellationToken))
+        {
+            return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NUMBER_DUPLICATE", $"A Tax Declaration with number '{request.TaxDeclarationNumber}' already exists.");
+        }
+        if (!await db.Classifications.AnyAsync(x => x.Id == request.ClassificationId, cancellationToken))
+        {
+            return Result.Failure<TaxDeclarationDto>("CLASSIFICATION_NOT_FOUND", "The specified classification does not exist.");
+        }
+        if (!await db.ActualUses.AnyAsync(x => x.Id == request.ActualUseId, cancellationToken))
+        {
+            return Result.Failure<TaxDeclarationDto>("ACTUAL_USE_NOT_FOUND", "The specified actual use does not exist.");
+        }
+
+        var revisionNumber = 1;
+        if (request.PreviousTaxDeclarationId is not null)
+        {
+            var previous = await db.TaxDeclarations.FirstOrDefaultAsync(td => td.Id == request.PreviousTaxDeclarationId, cancellationToken);
+            if (previous is null)
+            {
+                return Result.Failure<TaxDeclarationDto>("PREVIOUS_TAX_DECLARATION_NOT_FOUND", "The specified previous Tax Declaration does not exist.");
+            }
+            revisionNumber = previous.RevisionNumber + 1;
+        }
+
+        var taxDeclaration = new TaxDeclaration
+        {
+            RpuId = request.RpuId,
+            PropertyId = rpu.PropertyId,
+            TaxDeclarationNumber = request.TaxDeclarationNumber,
+            RevisionNumber = revisionNumber,
+            EffectivityDate = request.EffectivityDate,
+            Taxability = request.Taxability,
+            ClassificationId = request.ClassificationId,
+            ActualUseId = request.ActualUseId,
+            SubClassificationId = request.SubClassificationId,
+            AssessmentYear = request.AssessmentYear,
+            PreviousTaxDeclarationId = request.PreviousTaxDeclarationId,
+            Remarks = request.Remarks,
+            Status = WorkflowStatus.Draft,
+        };
+
+        db.TaxDeclarations.Add(taxDeclaration);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(await MapToDto(taxDeclaration.Id, cancellationToken)
+            ?? throw new InvalidOperationException("Tax Declaration was just created but could not be reloaded."));
+    }
+
+    public async Task<Result<TaxDeclarationDto>> GetByIdAsync(Guid taxDeclarationId, CancellationToken cancellationToken = default)
+    {
+        var dto = await MapToDto(taxDeclarationId, cancellationToken);
+        return dto is null
+            ? Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NOT_FOUND", "No Tax Declaration was found with the given id.")
+            : Result.Success(dto);
+    }
+
+    public async Task<Result<IReadOnlyList<TaxDeclarationDto>>> ListByRpuAsync(Guid rpuId, CancellationToken cancellationToken = default)
+    {
+        var entities = await IncludeReferences(db.TaxDeclarations)
+            .Where(td => td.RpuId == rpuId)
+            .OrderByDescending(td => td.RevisionNumber)
+            .ToListAsync(cancellationToken);
+
+        return Result.Success<IReadOnlyList<TaxDeclarationDto>>(entities.Select(ProjectToDto).ToList());
+    }
+
+    // .Include() required — see the identical comment in PropertyService.MapToDto.
+    private async Task<TaxDeclarationDto?> MapToDto(Guid id, CancellationToken cancellationToken)
+    {
+        var entity = await IncludeReferences(db.TaxDeclarations).SingleOrDefaultAsync(td => td.Id == id, cancellationToken);
+        return entity is null ? null : ProjectToDto(entity);
+    }
+
+    private static IQueryable<TaxDeclaration> IncludeReferences(IQueryable<TaxDeclaration> query) => query
+        .Include(td => td.Classification)
+        .Include(td => td.ActualUse);
+
+    private static TaxDeclarationDto ProjectToDto(TaxDeclaration td) => new(
+        td.Id,
+        td.RpuId,
+        td.PropertyId,
+        td.TaxDeclarationNumber,
+        td.RevisionNumber,
+        td.EffectivityDate,
+        td.Taxability,
+        td.ClassificationId,
+        td.Classification!.Name,
+        td.ActualUseId,
+        td.ActualUse!.Name,
+        td.SubClassificationId,
+        td.AssessmentYear,
+        td.Status,
+        td.PreviousTaxDeclarationId,
+        td.Remarks,
+        td.CreatedAt);
+}

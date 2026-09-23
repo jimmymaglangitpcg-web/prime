@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Prime.Application/Prime.Application.csproj" />
+    <Project Path="src/Prime.Domain/Prime.Domain.csproj" />
+    <Project Path="src/Prime.Infrastructure/Prime.Infrastructure.csproj" />
+    <Project Path="src/Prime.WebApi/Prime.WebApi.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Prime.Application.Tests/Prime.Application.Tests.csproj" />
+    <Project Path="tests/Prime.Domain.Tests/Prime.Domain.Tests.csproj" />
+    <Project Path="tests/Prime.IntegrationTests/Prime.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
