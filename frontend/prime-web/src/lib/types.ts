@@ -219,6 +219,35 @@ export interface ParcelDto {
   version: number;
 }
 
+// --- GIS (docs/GIS.md §4) ------------------------------------------
+
+/** Identifiers only — no owner names/TINs/values on the bulk map layer (CLAUDE.md §68). */
+export interface ParcelFeatureProperties {
+  parcelId: string;
+  propertyId: string;
+  propertyIdentificationNumber: string;
+  lotNumber: string | null;
+  blockNumber: string | null;
+  surveyNumber: string | null;
+  barangayName: string;
+}
+
+export interface ParcelFeature {
+  type: 'Feature';
+  id: string;
+  /** GeoJSON geometry in WGS84 (EPSG:4326). */
+  geometry: unknown;
+  properties: ParcelFeatureProperties;
+}
+
+export interface ParcelFeatureCollection {
+  type: 'FeatureCollection';
+  features: ParcelFeature[];
+  /** True when the extent held more parcels than `limit` — zoom in. */
+  truncated: boolean;
+  limit: number;
+}
+
 // --- RPU -----------------------------------------------------------
 
 export interface CreateRpuRequest {

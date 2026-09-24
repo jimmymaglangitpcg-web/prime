@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Layout, Menu, Typography } from 'antd';
-import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined } from '@ant-design/icons';
+import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const { Header, Sider, Content } = Layout;
@@ -9,11 +9,15 @@ const navItems = [
   { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
   { key: '/properties', icon: <HomeOutlined />, label: 'Properties' },
   { key: '/taxpayers', icon: <TeamOutlined />, label: 'Taxpayers' },
+  { key: '/gis', icon: <GlobalOutlined />, label: 'Tax Map' },
   { key: '/health', icon: <HeartOutlined />, label: 'System Health' },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
+  // Below the md breakpoint the sidebar collapses fully (antd shows a
+  // trigger tab) so pages keep the screen width — CLAUDE.md §84.
+  const [narrow, setNarrow] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -27,7 +31,19 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed}>
+      <Sider
+        collapsible
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        breakpoint="md"
+        collapsedWidth={narrow ? 0 : 80}
+        // Sits in the header's left gutter instead of over page content.
+        zeroWidthTriggerStyle={{ top: 12 }}
+        onBreakpoint={(broken) => {
+          setNarrow(broken);
+          setCollapsed(broken);
+        }}
+      >
         <div style={{ height: 48, margin: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Typography.Text strong style={{ color: '#fff', fontSize: collapsed ? 16 : 20 }}>
             {collapsed ? 'P' : 'PRIME'}
@@ -42,12 +58,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         />
       </Sider>
       <Layout>
-        <Header style={{ background: '#fff', padding: '0 24px', display: 'flex', alignItems: 'center', borderBottom: '1px solid #f0f0f0' }}>
-          <Typography.Title level={4} style={{ margin: 0 }}>
-            Property Registry, Information, Mapping &amp; Evaluation System
+        <Header style={{ background: '#fff', padding: narrow ? '0 16px 0 56px' : '0 24px', display: 'flex', alignItems: 'center', borderBottom: '1px solid #f0f0f0', minWidth: 0 }}>
+          <Typography.Title level={4} ellipsis={{ tooltip: true }} style={{ margin: 0, minWidth: 0 }}>
+            {narrow ? 'PRIME' : 'Property Registry, Information, Mapping & Evaluation System'}
           </Typography.Title>
         </Header>
-        <Content style={{ margin: 24 }}>{children}</Content>
+        <Content style={{ margin: narrow ? 16 : 24, minWidth: 0 }}>{children}</Content>
       </Layout>
     </Layout>
   );

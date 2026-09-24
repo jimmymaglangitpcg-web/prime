@@ -1,6 +1,6 @@
 # PRIME — GIS & Tax Mapping
 
-Status: Phase 7 in progress (steps 1–2 of 4 done). Sections marked **(planned)** describe work not
+Status: Phase 7 in progress (steps 1–3 of 4 done). Sections marked **(planned)** describe work not
 yet implemented; everything else reflects code that exists and is tested.
 
 ## 1. Scope
@@ -96,10 +96,44 @@ too small for the planner to prefer an index on its own) shows
 — asserted by `GisQueryTests.SpatialFilter_TranslatesToIndexableSql_…`.
 Re-check with real data volumes in Phase 14.
 
-## 5. Frontend **(planned — Phase 7 step 3)**
+## 5. Frontend — Tax Map workspace (`/gis`)
 
-OpenLayers GIS workspace: parcel layer, search, click → popup → Property
-Profile.
+`frontend/prime-web/src/pages/gis/GisWorkspacePage.tsx`, OpenLayers 10
+(`ol`), sidebar entry "Tax Map".
+
+- **Basemap** — XYZ tiles, configurable (`src/lib/mapConfig.ts`):
+
+  | Env var | Default |
+  |---|---|
+  | `VITE_MAP_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` |
+  | `VITE_MAP_TILE_ATTRIBUTION` | OpenStreetMap contributors |
+  | `VITE_MAP_INITIAL_CENTER` | `122.0,12.5` (Philippines) |
+  | `VITE_MAP_INITIAL_ZOOM` | `6` |
+
+  > **Deployment item:** the public OSM tile server is for development
+  > only — its usage policy does not allow heavy production use. Each
+  > deployment must point `VITE_MAP_TILE_URL` at an LGU-owned or
+  > contracted tile service.
+- **Parcel layer** — OpenLayers bbox loading strategy against
+  `GET /api/gis/parcels`, only at zoom ≥ 14 (`mapConfig.parcelMinZoom`), so
+  a province/country view requests nothing. A truncated response is not
+  remembered as loaded, so zooming in re-fetches it; a "zoom in" tag is
+  shown meanwhile.
+- **Click** → `GET /api/gis/parcels/at` (server-side, so it is correct even
+  if the visible layer was truncated) → highlighted boundary + selection
+  card(s) with **Open Property Profile**. More than one hit shows a
+  warning (shared boundary or overlap — data quality).
+- **Search** → existing property search; **Locate** loads that property's
+  Active parcels (`/api/properties/{id}/parcels`, WKT), fits the map and
+  highlights them; a property with no mapped parcel says so.
+- **Property Profile → "View on map"** opens `/gis?propertyId=…` zoomed to
+  that property — both directions of §38's parcel ↔ profile link.
+- Accessibility: the map container is focusable (arrow-key pan, +/- zoom),
+  labelled as an application region; search results are a labelled list
+  with per-row "Locate {PIN}" button names.
+- Not in this step: drawing/editing boundaries in the browser (the PUT
+  endpoint exists; an editing UI needs its own design pass), reference
+  layers, printable tax map.
 
 ## 6. Verification so far
 
@@ -117,3 +151,10 @@ Profile.
   version rejected with nothing written; historical parcels refused; HTTP
   400 codes for bad input; FeatureCollection JSON shape; GiST index use;
   OpenAPI document still generates.
+- **Browser (Playwright, real API + real PostGIS, 2026-09-24):** 10-step
+  flow — initial view makes no parcel requests; search → Locate fits and
+  highlights; clicking parcel 1 / its east neighbour / empty ground selects
+  the correct parcel or shows the empty state; Open Property Profile lands
+  on the right property; View on map deep-links back; an unmapped property
+  is reported; no horizontal overflow at 390 px; zero console errors.
+  DEMO-labelled test rows were deleted afterwards.

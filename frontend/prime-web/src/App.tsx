@@ -7,6 +7,7 @@ import { PropertyRegisterPage } from './pages/properties/PropertyRegisterPage';
 import { PropertyProfilePage } from './pages/properties/PropertyProfilePage';
 import { TaxpayerSearchPage } from './pages/taxpayers/TaxpayerSearchPage';
 import { TaxpayerRegisterPage } from './pages/taxpayers/TaxpayerRegisterPage';
+import { GisWorkspacePage } from './pages/gis/GisWorkspacePage';
 
 function DashboardPlaceholder() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/properties/:id" element={<PropertyProfilePage />} />
         <Route path="/taxpayers" element={<TaxpayerSearchPage />} />
         <Route path="/taxpayers/new" element={<TaxpayerRegisterPage />} />
+        <Route path="/gis" element={<GisWorkspacePage />} />
       </Routes>
     </AppShell>
   );

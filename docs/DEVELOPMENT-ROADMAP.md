@@ -778,7 +778,14 @@ Executed in checkpointed steps (user asked to stop at each):
    `ParcelConcurrencyToken` is DDL-free). GiST index use verified via
    `EXPLAIN` (exit criterion). 81 tests pass (+14 unit, +14 integration
    this step). Details: docs/GIS.md §4.
-3. ⏳ OpenLayers GIS workspace + parcel → Property Profile navigation.
+3. ✅ **Tax Map workspace** (`/gis`, OpenLayers 10): extent-loaded parcel
+   layer from zoom 14, click → selection → Open Property Profile, search →
+   Locate, Property Profile "View on map" deep link, configurable basemap
+   (OSM default — dev only). **Exit criterion met:** clicking a parcel
+   opens the correct Property Profile, verified in a real browser. Also
+   fixed a pre-existing app-shell issue found while testing at phone width
+   (sidebar never collapsed; header title overlapped content) — sidebar
+   now collapses fully below `md` (CLAUDE.md §84). Details: docs/GIS.md §5.
 4. ⏳ Reference layers (barangay/zone/road) and printable tax map.
 
 ## Phase 8 — Billing

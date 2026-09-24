@@ -1,5 +1,6 @@
-import { useParams } from 'react-router-dom';
-import { Alert, Card, Descriptions, Skeleton, Tabs, Tag, Typography } from 'antd';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Alert, Button, Card, Descriptions, Skeleton, Tabs, Tag, Typography } from 'antd';
+import { GlobalOutlined } from '@ant-design/icons';
 import { usePropertyProfile } from '../../api/properties';
 import { OwnersSection } from './sections/OwnersSection';
 import { ParcelsSection } from './sections/ParcelsSection';
@@ -8,13 +9,14 @@ import { RpuSection } from './sections/RpuSection';
 /**
  * CLAUDE.md §50 Property Profile — "one of the most important screens in
  * PRIME." Sections shown here (Basic Info, Owners, Parcels, RPUs/Tax
- * Declarations) are the ones with real data as of Phase 4. GIS map,
- * current assessment, billing, payments, and delinquency sections are not
+ * Declarations) are the ones with real data as of Phase 4; the GIS map is
+ * reached via "View on map" (the Phase 7 GIS workspace). Current assessment, billing, payments, and delinquency sections are not
  * rendered yet — those phases haven't landed, and a placeholder claiming
  * data that doesn't exist would be worse than omitting the section.
  */
 export function PropertyProfilePage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { data: profile, isLoading, isError, error } = usePropertyProfile(id);
 
   if (isLoading) {
@@ -29,7 +31,14 @@ export function PropertyProfilePage() {
 
   return (
     <div>
-      <Typography.Title level={3}>{property.propertyIdentificationNumber}</Typography.Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        <Typography.Title level={3} style={{ margin: 0 }}>
+          {property.propertyIdentificationNumber}
+        </Typography.Title>
+        <Button icon={<GlobalOutlined />} onClick={() => navigate(`/gis?propertyId=${property.id}`)}>
+          View on map
+        </Button>
+      </div>
 
       <Card style={{ marginBottom: 24 }}>
         <Descriptions title="Basic Information" bordered column={2} size="small">
