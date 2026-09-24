@@ -26,7 +26,7 @@ namespace Prime.Application.Features.Valuation;
 /// convention that <c>Code</c>, not the display <c>Name</c>, is a lookup
 /// row's stable identifier (docs/DOMAIN-MODEL.md §3.10).
 /// </summary>
-public sealed class ValuationService(IApplicationDbContext db, IOptions<ValuationOptions> options) : IValuationService
+public sealed class ValuationService(IApplicationDbContext db, IOptions<ValuationOptions> options, IClock clock) : IValuationService
 {
 
     public async Task<Result<ValuationDto>> ComputeForLandAsync(Guid landId, CancellationToken cancellationToken = default)
@@ -43,7 +43,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
             return Result.Failure<ValuationDto>("PROPERTY_TYPE_NOT_CONFIGURED", $"No PropertyType with code '{PropertyTypeCodes.Land}' is configured.");
         }
 
-        var asOf = DateOnly.FromDateTime(DateTime.UtcNow);
+        var asOf = clock.Today;
         var schedule = await ResolveScheduleAsync(land.ClassificationId, land.ActualUseId, propertyType.Id, land.ZoneId, asOf, cancellationToken);
         if (schedule is null)
         {
@@ -81,7 +81,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
             return Result.Failure<ValuationDto>("PROPERTY_TYPE_NOT_CONFIGURED", $"No PropertyType with code '{PropertyTypeCodes.Building}' is configured.");
         }
 
-        var asOf = DateOnly.FromDateTime(DateTime.UtcNow);
+        var asOf = clock.Today;
         // Zone-based rate differentiation only exists on Land in the current
         // domain model (§24) — Buildings resolve a zone-agnostic schedule.
         var schedule = await ResolveScheduleAsync(taxDeclaration.ClassificationId, taxDeclaration.ActualUseId, propertyType.Id, null, asOf, cancellationToken);
@@ -112,7 +112,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 $"Machinery that is not brand-new is valued from its replacement or reproduction cost and its remaining vs. estimated economic life (LGC §224(a)). Missing: {missing}.");
         }
 
-        var asOf = DateOnly.FromDateTime(DateTime.UtcNow);
+        var asOf = clock.Today;
         var parameters = new MachineryValuationParameters(options.Value.MachineryMinimumRemainingValuePercent!.Value);
         var calc = ValuationCalculator.CalculateMachinery(machinery, parameters);
         var valuation = Persist(machinery.RpuId, machinery.PropertyId, ValuationSourceType.Machinery, machinery.Id, null, calc, asOf);

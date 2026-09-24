@@ -81,8 +81,8 @@ public class GeneralRevisionFlowTests(WebApplicationFactory<Program> factory) : 
 
         var classification = new Classification { Code = $"CL{Guid.NewGuid():N}"[..8], Name = "DEMO_Residential" };
         var actualUse = new ActualUse { Code = $"AU{Guid.NewGuid():N}"[..8], Name = "DEMO_Residential Use" };
-        var propertyType = new PropertyType { Code = "LAND", Name = "DEMO_Land" };
-        db.AddRange(classification, actualUse, propertyType);
+        var propertyType = await TestSeed.LandPropertyTypeAsync(db);
+        db.AddRange(classification, actualUse);
         await db.SaveChangesAsync();
 
         var smvService = services.GetRequiredService<ISmvService>();

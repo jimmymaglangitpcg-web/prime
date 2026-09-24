@@ -3,7 +3,7 @@ using Prime.Domain.Enums;
 namespace Prime.Application.Features.Properties;
 
 public sealed record CreatePropertyRequest(
-    string PropertyIdentificationNumber,
+    string? PropertyIdentificationNumber,
     Guid ProvinceId,
     Guid MunicipalityId,
     Guid BarangayId,

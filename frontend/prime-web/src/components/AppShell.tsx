@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Layout, Menu, Typography } from 'antd';
-import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined } from '@ant-design/icons';
+import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const { Header, Sider, Content } = Layout;
@@ -10,6 +10,7 @@ const navItems = [
   { key: '/properties', icon: <HomeOutlined />, label: 'Properties' },
   { key: '/taxpayers', icon: <TeamOutlined />, label: 'Taxpayers' },
   { key: '/gis', icon: <GlobalOutlined />, label: 'Tax Map' },
+  { key: '/admin/forms', icon: <FileTextOutlined />, label: 'Forms & Numbering' },
   { key: '/health', icon: <HeartOutlined />, label: 'System Health' },
 ];
 
@@ -27,7 +28,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     navItems
       .map((item) => item.key)
       .filter((key) => key === '/' ? location.pathname === '/' : location.pathname.startsWith(key))
-      .sort((a, b) => b.length - a.length)[0] ?? '/';
+      .sort((a, b) => b.length - a.length)[0] ?? '';
 
   return (
     <Layout style={{ minHeight: '100vh' }}>

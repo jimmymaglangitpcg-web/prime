@@ -1,9 +1,7 @@
 # PRIME — Billing (Phase 8)
 
-Status: **§3 rule model implemented** (Phase 8 step 1 — entities, the
-`BillingRules` migration, and create/get/approve endpoints under
-`/api/billing/...` (list supports `?asOf=`), with tax types at `/api/reference/tax-types`).
-§4 (bill) and §5 (engine) are still outlines. All values used in
+Status: **implemented through Phase 8 step 3** — rule model (§3), bill
+(§4), engine (§5), and bill service/API/UI (§6). All values used in
 development and tests are **DEMO** values (CLAUDE.md §81) until official
 ordinance values are supplied.
 
@@ -45,7 +43,7 @@ Open question for the LGU/legal reviewer: whether RA 12001 or its IRR
 changed any billing-side rule above, and from which effective date. The
 one change identified so far — the increase cap — is modelled in §3.7.
 
-## 3. Rule model (proposed)
+## 3. Rule model (implemented)
 
 Every rule table shares these fields (the `AssessmentLevel`/`Smv`
 precedent — ordinance fields inline, since no `Ordinance` table exists):
@@ -190,39 +188,155 @@ is explainable (CLAUDE.md §31).
 - Whether a statutory cap is needed for SMVs after the first under the Act
   (the text speaks of "the first SMV"); later caps are ordinance-only.
 
-## 4. Bill (step 3 — outline only)
+## 4. Bill (step 3 — implemented)
 
 ```text
-TaxBill:        Id, PropertyId, RpuId, TaxDeclarationId, AssessmentId,
-                TaxYear, AssessedValue (frozen), BillDate, AsOfDate,
-                Status (Draft → Posted → Cancelled/Superseded), BillNumber
-TaxBillDetail:  Id, TaxBillId, InstallmentSequence, TaxTypeId,
-                ComponentType (BASIC_RPT | ADDITIONAL_LEVY | DISCOUNT |
-                               PENALTY | INTEREST),
-                RuleTable + RuleId (the rule applied), RateApplied (frozen),
-                BaseAmount, Amount, DueDate, Explanation
+TaxBill:         Id, PropertyId, RpuId, TaxDeclarationId, AssessmentId,
+                 TaxYear, AsOfDate, RulesAsOfDate,
+                 AssessedValue, ClassificationId, DiscountStackingAllowed (frozen),
+                 Notes, Status (Draft → Posted → Cancelled),
+                 PostedAt/By, CancelledAt/By, CancellationReason,
+                 SupersededByBillId, audit fields
+TaxBillTaxType:  TaxBillId, TaxTypeId, TaxRateId, RatePercent,
+                 ComputedAnnualTax, CapRuleId, CapBaselineTax, CapLimit,
+                 AnnualTax
+TaxBillDetail:   TaxBillId, LineNumber, InstallmentSequence, DueDate,
+                 TaxTypeId, Component (Tax | Discount | Penalty | Interest),
+                 RuleId, RatePercent (frozen), BaseAmount, Amount, Months,
+                 Explanation
 ```
-- **Total = Σ details**, always (DOMAIN-MODEL.md §2) — never stored
-  separately from its lines.
-- Every line freezes the rule id **and** the rate it used, so a bill keeps
-  its meaning after the rule is superseded (the `Assessment` precedent).
-- Discounts, penalties and interest depend on *when* payment happens, so a
-  bill is computed **as of a date**; recomputing for a later date produces
-  a new bill version, never an edit (§76). Idempotency: one current bill
-  per (RPU, tax year, as-of date).
-- Money: `decimal` / `numeric(18,2)`, rounding at line level with
-  `MidpointRounding.AwayFromZero` (the `AssessmentService` precedent) until
-  the LGU confirms otherwise.
+- Basic RPT vs. an additional levy is told apart by the line's tax type,
+  not by `Component`, so no tax type is special-cased in code.
+- **Total = Σ details**, always — never stored.
+- Every line freezes its rule id **and** rate, so a bill keeps its meaning
+  after a rule is superseded. `RuleId` has no FK because it spans four rule
+  tables; rules are never deleted. `TaxBillTaxType` has real FKs to its
+  `TaxRate` and cap rule.
+- Bills are never edited or deleted (§76). A recomputation is a new bill.
+- Constraints (migration `TaxBills`, additive):
+  - One live (non-cancelled) bill per (RPU, tax year, as-of date):
+    `UX_TaxBills_Rpu_TaxYear_AsOf_Live`.
+  - At most one **posted** bill per (RPU, tax year):
+    `UX_TaxBills_Rpu_TaxYear_Posted`.
+  - Discounts are the only negative lines.
+  - Annual tax is at most the computed annual tax.
+  - Status and timestamp consistency.
+- Money: `numeric(18,2)`, with rounding per line (§5).
+- Bill numbers are **not** assigned yet. Document numbering must be
+  configurable (CLAUDE.md §7) and is still to be designed; bills are
+  identified by id until then.
 
-## 5. Engine (step 2 — outline only)
+## 5. Engine (step 2 — implemented)
 
-A pure, deterministic `BillingCalculator` (no database access): input =
-assessed value, classification, tax year, as-of date and the set of
-applicable approved rules; output = the lines with explanations. The
-database-facing `BillingService` resolves the rules and persists the
-result. This keeps every financial case in §75 unit-testable.
+`Prime.Domain.DomainServices.BillingCalculator` — pure and deterministic
+(no database access; the `ValuationCalculator` pattern). Input
+(`BillingCalculationInput`): assessed value, classification, tax year,
+as-of date, the approved rules in force, and cap baselines. Output
+(`BillingCalculationResult`): per tax type the computed and capped annual
+tax, plus bill lines that each carry the rule id, the rate used, the base,
+the amount and a readable explanation. `Total` is always the sum of the lines.
+The database-facing `BillService` (§6) decides which rules are in force
+and saves the result.
 
-## 6. Out of scope for Phase 8
+What it does, per tax type:
+
+1. **Annual tax** = AV × rate, rounded. A classification-specific rate wins
+   over the general one; a rate for another classification is ignored.
+2. **Cap** (§3.7): if a cap applies (tax-type-specific wins over general)
+   and a baseline of the cap's kind was supplied, annual tax =
+   min(annual tax, round(baseline × (1 + MaxIncreasePercent/100))). With
+   no baseline the cap is **not** applied and a note says so. A zero
+   baseline is applied literally (limit 0).
+3. **Installments**: each share = round(annual × share%); the **last
+   installment takes the remainder**, so installments always add up to the
+   annual tax.
+4. Per installment, as of the as-of date (a bill assumes full payment on
+   that date; nothing is assumed already paid — payments are Phase 9):
+   - **not overdue** (as-of ≤ due date): prompt-payment discount; advance
+     discount if as-of ≤ its cutoff (tax year + offset, month, day). If
+     both apply, only the larger one is given unless the
+     `AllowDiscountStacking` option is on.
+   - **overdue**: never a discount. Penalty once days past due exceed the
+     rule's grace days: rate × the installment's tax, or the fixed amount.
+     Interest = tax × RatePerMonth × months, where months are counted from
+     the due date's day of month (31 Mar → 30 Apr is one completed month),
+     rounded up for a partial month or not according to the rule's
+     `MonthCounting`, and capped at `MaxMonths`.
+   - Penalty and interest are charged on the installment's tax only (not
+     on each other).
+
+Refused, with the reason, before calculating (`Validate`): negative
+assessed value; any rule that is not Approved; no applicable tax rate; two
+rules with the same scope (e.g. two general prompt-payment discounts);
+installment shares that do not total 100; an advance discount with no
+cutoff; a **fixed-amount penalty with no tax type**, because charging a
+fixed amount "for every tax type" would add it once per tax type, and
+nobody has confirmed that reading.
+
+Rounding: 2 decimals per line, `MidpointRounding.AwayFromZero`.
+
+**DOMAIN VERIFICATION REQUIRED** (engine choices made without a legal source;
+each can be changed in one place):
+- Rounding mode and level (per line vs. per total).
+- Discount stacking (defaults to off, passed in as an option).
+- Whether interest compounds or includes penalties (currently it does neither).
+- The start of the interest month count (currently the due date itself, with
+  delinquency beginning the day after).
+- Whether a fixed penalty applies per installment (currently yes).
+- Which date picks the rules in force for a tax year (default chosen in §6.1).
+
+Tests: `tests/Prime.Domain.Tests/DomainServices/BillingCalculatorTests.cs`
+(46 cases, all using DEMO values) cover zero, large amounts, fractional rates,
+midpoint rounding, uneven installment splits, caps, each discount kind with
+and without stacking, interest month counting and the MaxMonths cap,
+penalty grace days, mixed past-due and future installments, traceability,
+determinism and every refusal.
+
+## 6. Bill service, API and UI (step 3)
+
+`BillService` resolves the inputs, calls `BillingCalculator` and saves the
+result. It does no arithmetic of its own.
+
+API:
+- `POST /api/bills {rpuId, taxYear, asOfDate}` → Draft bill.
+- `POST /api/bills/{id}/post`
+- `POST /api/bills/{id}/cancel {reason}`
+- `GET /api/bills/{id}`
+- `GET /api/properties/{id}/bills`
+- `GET /api/properties/{id}/statement-of-account`
+
+UI: a **Billing** tab on the Property Profile (generate, post with
+confirmation, cancel with a reason, full per-line breakdown) and a printable
+**Statement of Account** page (`/properties/:id/statement-of-account`).
+
+### 6.1 Defaults chosen for now (2026-09-25; user: "decide what is efficient, I'll change it later")
+
+Each default is changeable in one place, and each is **DOMAIN
+VERIFICATION REQUIRED**:
+
+| Decision | Default | Where to change |
+|---|---|---|
+| Date the rules and the assessment are taken as in force | **1 January of the tax year** (LGC §221 January-1 effectivity) — frozen on the bill as `RulesAsOfDate` | `BillService.RulesAsOfDate` |
+| Which assessment is billed | The latest **Posted** assessment for the RPU effective on or before that date. No proration for mid-year (e.g. next-quarter) effectivity | `BillService.GenerateAsync` |
+| Classification and taxability | From the RPU's current Tax Declaration. A non-taxable TD is refused (`BILL_PROPERTY_EXEMPT`); exemptions are out of scope | `BillService.GenerateAsync` |
+| Which caps apply | Approved caps in force on the rules date whose SMV is the one the assessment's valuation used (machinery has no SMV, so it is never capped) | `BillService.GenerateAsync` |
+| Cap baseline source | PRIME's own **posted** bills for the RPU. `TaxBeforeSmv` → latest posted bill for a tax year before the SMV's effectivity year. `PreviousTaxYear` → the posted bill for tax year − 1. With no such bill the cap is **not applied** and the bill's notes say so. Pre-PRIME tax history (data migration, Phase 13) will be needed for real use | `BillService.CapBaselinesAsync` |
+| Discount stacking | Off (`Billing:AllowDiscountStacking` in appsettings); frozen on each bill | configuration |
+| Recomputing a bill | A new bill. Posting it cancels the previously posted bill for the same RPU and tax year (`SupersededByBillId`); the statement of account lists only posted bills | `BillService.PostAsync` |
+| Maker-checker on posting | **Not enforced** (posting is not an approval of a rule); role gating is Phase 12 | `BillService.PostAsync` |
+
+Errors: `BILL_ASSESSMENT_NOT_FOUND`, `TAX_DECLARATION_NOT_FOUND`,
+`BILL_PROPERTY_EXEMPT`, `BILL_DUPLICATE` (409),
+`BILL_PAYMENT_SCHEDULE_NOT_FOUND` (not exactly one in force),
+`BILL_RULES_INVALID` (the calculator's own refusals), `BILL_NOT_DRAFT`,
+`BILL_POST_CONFLICT` (409), `BILL_ALREADY_CANCELLED`, `BILL_NOT_FOUND`.
+
+Tests: `tests/Prime.IntegrationTests/BillingFlowTests.cs` (8). The flow
+was also verified live in a browser against the dev database on
+2026-09-25, using the property `DEMO-BILL-AE94B8`: generate → breakdown →
+post → statement of account, total 1,990.00, matching a hand calculation.
+
+## 7. Out of scope for Phase 8
 
 Payments and allocation (Phase 9), delinquency aging and reports
 (Phase 10), exemptions (§43), the Treasurer's billing UI beyond a

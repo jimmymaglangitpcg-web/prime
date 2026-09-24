@@ -59,3 +59,7 @@ TestResults/
 
 ## Local scratch / ad hoc verification tooling (not part of the product)
 .scratch/
+
+## Proprietary reference material (LAM, LGU ordinances, templates derived from them).
+## Never commit — docs/FORMS-REVISION-PLAN.md section 7.
+docs/References/private/

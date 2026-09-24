@@ -3,7 +3,10 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Prime.Domain.Entities;
 using Prime.Domain.Entities.Billing;
+using Prime.Domain.Entities.Forms;
+using Prime.Domain.Entities.Workflow;
 using Prime.Domain.Entities.Gis;
+using Prime.Domain.Entities.Identity;
 using Prime.Domain.Entities.Reference;
 
 namespace Prime.Application.Common.Interfaces;
@@ -31,6 +34,18 @@ public interface IApplicationDbContext
     DbSet<InterestRule> InterestRules { get; }
     DbSet<PenaltyRule> PenaltyRules { get; }
     DbSet<TaxIncreaseCapRule> TaxIncreaseCapRules { get; }
+    DbSet<TaxBill> TaxBills { get; }
+    DbSet<TaxBillTaxType> TaxBillTaxTypes { get; }
+    DbSet<TaxBillDetail> TaxBillDetails { get; }
+    DbSet<NumberingScheme> NumberingSchemes { get; }
+    DbSet<NumberSequence> NumberSequences { get; }
+    DbSet<FormDefinition> FormDefinitions { get; }
+    DbSet<IssuedForm> IssuedForms { get; }
+    DbSet<ApprovalChain> ApprovalChains { get; }
+    DbSet<ApprovalChainStep> ApprovalChainSteps { get; }
+    DbSet<ApprovalRecord> ApprovalRecords { get; }
+    /// <summary>Read by forms and approvals for signatory names.</summary>
+    DbSet<AppUser> AppUsers { get; }
     DbSet<BarangayBoundary> BarangayBoundaries { get; }
     DbSet<ZoneBoundary> ZoneBoundaries { get; }
     DbSet<RoadSegment> RoadSegments { get; }

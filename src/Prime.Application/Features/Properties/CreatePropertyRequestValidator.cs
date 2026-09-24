@@ -6,7 +6,8 @@ public sealed class CreatePropertyRequestValidator : AbstractValidator<CreatePro
 {
     public CreatePropertyRequestValidator()
     {
-        RuleFor(x => x.PropertyIdentificationNumber).NotEmpty().MaximumLength(50);
+        // Optional: generated when a numbering scheme is in force (docs/FORMS-REVISION-PLAN.md section 4.4).
+        RuleFor(x => x.PropertyIdentificationNumber).MaximumLength(50);
         RuleFor(x => x.ProvinceId).NotEmpty();
         RuleFor(x => x.MunicipalityId).NotEmpty();
         RuleFor(x => x.BarangayId).NotEmpty();

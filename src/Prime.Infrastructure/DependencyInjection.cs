@@ -4,7 +4,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Common;
+using Prime.Application.Features.Billing;
 using Prime.Application.Features.Valuation;
+using Prime.Infrastructure.Documents;
 using Prime.Infrastructure.GIS;
 using Prime.Infrastructure.Identity;
 using Prime.Infrastructure.Jobs;
@@ -56,6 +59,17 @@ public static class DependencyInjection
             .Validate(o => !string.IsNullOrWhiteSpace(o.MachineryMinimumRemainingValueLegalBasis),
                 "Valuation:MachineryMinimumRemainingValueLegalBasis is required.")
             .ValidateOnStart();
+
+        // Billing engine policy choices (docs/BILLING.md §5); each bill freezes the value used.
+        services.AddOptions<BillingOptions>().Bind(configuration.GetSection(BillingOptions.SectionName));
+
+        // Forms foundation (docs/FORMS-REVISION-PLAN.md): LGU branding, numbering, rendering, provisional forms.
+        services.AddOptions<LguOptions>().Bind(configuration.GetSection(LguOptions.SectionName));
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IClock, LguClock>();
+        services.AddScoped<INumberSequenceAllocator, NumberSequenceAllocator>();
+        services.AddSingleton<IFormRenderer, FluidFormRenderer>();
+        services.AddHostedService<ProvisionalFormSeeder>();
 
         services.AddHealthChecks()
             .AddNpgSql(connectionString, name: "postgresql", tags: ["ready"])

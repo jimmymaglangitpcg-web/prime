@@ -868,8 +868,33 @@ supplied. Checkpointed steps:
      cap on the increase from a new SMV, bounded windows with a
      no-overlap exclusion constraint (`btree_gist`). The `BillingRules`
      migration was regenerated.
-2. ⏳ Pure `BillingCalculator` + §75 financial unit tests.
-3. ⏳ `TaxBill`/`TaxBillDetail`, bill generation API, statement of account UI.
+2. ✅ Pure `BillingCalculator` + §75 financial unit tests (2026-09-25) —
+   docs/BILLING.md §5. Per tax type: AV × rate → per-tax-type cap →
+   installment split (last takes remainder) → discounts / penalty /
+   interest as of a date; every line names its rule and frozen rate.
+   Refuses non-approved rules, ambiguous scopes, and fixed-amount
+   penalties without a tax type. 46 unit tests, DEMO values only; engine
+   choices listed there as DOMAIN VERIFICATION REQUIRED.
+3. ✅ `TaxBill`/`TaxBillTaxType`/`TaxBillDetail` (migration `TaxBills`,
+   additive; applied to local dev DB only), `BillService` + `/api/bills`,
+   Billing tab on the Property Profile and a printable Statement of
+   Account (2026-09-25). Defaults for the open decisions (rules as of
+   1 January of the tax year; cap baselines from PRIME's own posted bills;
+   no discount stacking) chosen per the user's "decide what is efficient"
+   and listed in docs/BILLING.md §6.1 as DOMAIN VERIFICATION REQUIRED.
+   Verified: 8 integration tests; live browser run against the dev DB
+   (generate → breakdown → post → statement, total matched a hand
+   calculation). Also fixed: flow tests inserted their own `LAND`
+   PropertyType and broke once the dev DB had one — now shared get-or-create
+   (`tests/Prime.IntegrationTests/TestSeed.cs`).
+
+**Phase 8 exit criteria met** with DEMO values: a posted assessment plus
+DEMO rules yields a bill whose breakdown (tax − discounts + penalties +
+interest = total) is auditable line by line; §75 edge cases are unit-tested.
+Carried forward: bill numbering (needs configurable document numbering),
+pre-PRIME tax history for cap baselines (Phase 13), real ordinance values,
+and Supabase migration (still at 10/10, i.e. without `BillingRules`,
+`MachineryReplacementCost`, `TaxBills`).
 
 ## Phase 9 — Collection
 
@@ -986,36 +1011,40 @@ per-phase tasks:
 
 ## Immediate next action
 
-Phases 0–7 are complete and verified (Phase 7 — GIS finished 2026-09-24;
-see its status block and docs/GIS.md §7 for carried-forward items).
-All Phase 7 commits are pushed to `origin` (through `6b1cf04`). Still
-missing UI from earlier phases: Phase 5 (SMV/AssessmentLevel
-administration) and Phase 6 (a "compute valuation"/"assess" action with
-breakdown display, a General Revision batch screen). Candidates for
-what's next, in no particular priority order:
+Phases 0–8 are complete with DEMO values (Phase 8 — Billing finished
+2026-09-25; see its status block and docs/BILLING.md §6.1 for the defaults
+awaiting LGU/legal confirmation). Commits `0b9c987` (billing rules) and
+`6b3d1f4` (machinery §224/§225) are local and not pushed. Billing steps 2–3
+are **uncommitted**. The three newest migrations are applied to the local
+dev DB only, not Supabase. The local dev DB also holds a DEMO billing
+scenario (property `DEMO-BILL-AE94B8`, DEMO tax types and approved DEMO
+rules).
 
-- **Phase 8 — Billing**: next in the roadmap sequence. Needs demo/test
-  rates only (never invented real ones), and depends on posted
-  assessments — which currently can only be produced via the API, since
-  the Phase 6 UI doesn't exist yet.
-- **Run the API against Supabase** (Staging config) as a smoke test —
-  migrations are now applied, but Hangfire's behaviour behind Supabase's
-  transaction-mode pooler (port 6543) has never been exercised.
-- **Phase 5/6 UI**: SMV/AssessmentLevel administration screens, a
-  "compute valuation" + "assess" action with breakdown view on the
-  Property Profile (now that Land/Building/Machinery can actually be
-  registered, there's something real to value/assess), a General
-  Revision batch screen with progress — deferred backend-first, same
-  precedent as every other phase's UI. The backend has zero remaining
-  service/controller gaps for any of this.
-- Remaining Phase 4 items: **Update/Delete** endpoints (now that Phase 6
-  established a second "versioned, never-overwritten" precedent beyond
-  Phase 5's, a design pass here has more to generalize from — see Phase 6
-  status), **cross-entity global search** (CLAUDE.md §56: TD number, RPU
-  number, TIN, address — currently only Property's own fields are
-  searchable — safe to do anytime, no dependencies), and a **real
-  Supabase JWT exercised end-to-end** (belongs with Phase 12's real
-  sign-up/login UI, not built standalone).
+**Forms Foundation done (2026-09-25, uncommitted):** docs/FORMS-REVISION-PLAN.md
+§11. Configurable numbering schemes (PIN, TD and bill numbers), versioned
+form definitions with frozen issued snapshots, provisional TAX_BILL and
+TAX_DECLARATION forms, and N-step approval chains for assessments. Also an
+`IClock` on the LGU time zone, which fixes UTC "today" throughout.
+Migration `FormsFoundation` (additive) is applied to the local dev DB only.
+Remaining plan items A4–A10 (owner roles, TD annotations,
+PropertyTransaction, Notice of Assessment, FAAS aggregate, building
+depreciation hook, LAM intake checklist) are not started.
+
+Candidates, in roadmap order:
+
+- **Phase 9 — Collection**: payments, allocation, reversal, eOR-compliant
+  receipts (S7 §7.1 minimum content, configurable numbering pending the
+  BLGF format). It builds directly on posted bills.
+- **Phase 5/6 UI**: SMV/AssessmentLevel admin and billing-rule admin
+  screens (rules can currently only be created through the API), a
+  valuation/assessment action with breakdown, and a General Revision
+  screen.
+- **Supabase**: apply the three new migrations and run a smoke test
+  (Hangfire behind the port-6543 pooler is untested).
+- Regulatory gaps: building depreciation and the SMV certification
+  lifecycle (regulatory baseline §6).
+- Phase 4 leftovers (Update/Delete, cross-entity search, real JWT with
+  Phase 12).
 
 Await explicit instruction on which to pick up; per CLAUDE.md §12/§108,
 none of this happens automatically.

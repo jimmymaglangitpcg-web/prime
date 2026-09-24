@@ -31,7 +31,8 @@ public sealed class GeneralRevisionJobRunner(
     IApplicationDbContext db,
     ICurrentUserService currentUser,
     IValuationService valuationService,
-    IAssessmentService assessmentService)
+    IAssessmentService assessmentService,
+    IClock clock)
 {
     public async Task RunAsync(Guid jobId, IReadOnlyList<Guid> rpuIds, int revisionYear, CancellationToken cancellationToken)
     {
@@ -82,7 +83,7 @@ public sealed class GeneralRevisionJobRunner(
             new CreateAssessmentRequest(
                 valuationResult.Value.Id,
                 revisionYear,
-                DateOnly.FromDateTime(DateTime.UtcNow),
+                clock.Today,
                 previousAssessment?.Id,
                 job.Id,
                 $"General Revision {revisionYear}"),

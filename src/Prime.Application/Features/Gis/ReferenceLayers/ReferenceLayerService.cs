@@ -11,7 +11,7 @@ using Prime.Domain.Entities.Gis;
 
 namespace Prime.Application.Features.Gis.ReferenceLayers;
 
-public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUserService currentUser) : IReferenceLayerService
+public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUserService currentUser, IClock clock) : IReferenceLayerService
 {
     // Technical limits, not business rules.
     public const int MaxImportFeatures = 10_000;
@@ -415,7 +415,7 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
             return Result.Failure<ReferenceLayerFeatureCollection>(envelope.Code!, envelope.Message!);
         }
 
-        var date = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var date = asOf ?? clock.Today;
         var effectiveLimit = Math.Clamp(limit ?? DefaultFeatureLimit, 1, MaxFeatureLimit);
         var extent = GeometryFactory.ToGeometry(envelope.Value);
 

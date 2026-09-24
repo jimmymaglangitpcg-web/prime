@@ -5,12 +5,14 @@ import { usePropertyProfile } from '../../api/properties';
 import { OwnersSection } from './sections/OwnersSection';
 import { ParcelsSection } from './sections/ParcelsSection';
 import { RpuSection } from './sections/RpuSection';
+import { BillingSection } from './sections/BillingSection';
 
 /**
  * CLAUDE.md §50 Property Profile — "one of the most important screens in
  * PRIME." Sections shown here (Basic Info, Owners, Parcels, RPUs/Tax
  * Declarations) are the ones with real data as of Phase 4; the GIS map is
- * reached via "View on map" (the Phase 7 GIS workspace). Current assessment, billing, payments, and delinquency sections are not
+ * reached via "View on map" (the Phase 7 GIS workspace); Billing is the
+ * Phase 8 tab. Current assessment, payments, and delinquency sections are not
  * rendered yet — those phases haven't landed, and a placeholder claiming
  * data that doesn't exist would be worse than omitting the section.
  */
@@ -66,6 +68,7 @@ export function PropertyProfilePage() {
             { key: 'owners', label: `Owners (${profile.owners.length})`, children: <OwnersSection propertyId={property.id} owners={profile.owners} /> },
             { key: 'parcels', label: `Parcels (${profile.parcels.length})`, children: <ParcelsSection propertyId={property.id} parcels={profile.parcels} /> },
             { key: 'rpus', label: `RPUs (${profile.rpus.length})`, children: <RpuSection propertyId={property.id} rpus={profile.rpus} /> },
+            { key: 'billing', label: 'Billing', children: <BillingSection propertyId={property.id} rpus={profile.rpus} /> },
           ]}
         />
       </Card>
@@ -74,8 +77,8 @@ export function PropertyProfilePage() {
         style={{ marginTop: 24 }}
         type="info"
         showIcon
-        title="GIS map, current assessment, billing, payments, and delinquency sections are not shown yet"
-        description="Those sections arrive with Phase 5 (Valuation), Phase 6 (Assessment), Phase 7 (GIS), Phase 8 (Billing), and Phase 9 (Collection) respectively."
+        title="Current assessment, payments, and delinquency sections are not shown yet"
+        description="Assessments exist in the API (Phase 6) but have no screen yet; payments arrive with Phase 9 (Collection) and delinquency with Phase 10."
       />
     </div>
   );

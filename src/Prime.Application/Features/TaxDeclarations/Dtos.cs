@@ -4,7 +4,7 @@ namespace Prime.Application.Features.TaxDeclarations;
 
 public sealed record CreateTaxDeclarationRequest(
     Guid RpuId,
-    string TaxDeclarationNumber,
+    string? TaxDeclarationNumber,
     DateOnly EffectivityDate,
     Taxability Taxability,
     Guid ClassificationId,

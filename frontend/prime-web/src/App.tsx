@@ -9,6 +9,9 @@ import { TaxpayerSearchPage } from './pages/taxpayers/TaxpayerSearchPage';
 import { TaxpayerRegisterPage } from './pages/taxpayers/TaxpayerRegisterPage';
 import { GisWorkspacePage } from './pages/gis/GisWorkspacePage';
 import { GisPrintPage } from './pages/gis/GisPrintPage';
+import { StatementOfAccountPage } from './pages/billing/StatementOfAccountPage';
+import { FormDocumentPage } from './pages/documents/FormDocumentPage';
+import { FormsAdminPage } from './pages/admin/FormsAdminPage';
 
 function DashboardPlaceholder() {
   return (
@@ -33,10 +36,14 @@ export default function App() {
         <Route path="/properties" element={<PropertySearchPage />} />
         <Route path="/properties/new" element={<PropertyRegisterPage />} />
         <Route path="/properties/:id" element={<PropertyProfilePage />} />
+        <Route path="/properties/:id/statement-of-account" element={<StatementOfAccountPage />} />
         <Route path="/taxpayers" element={<TaxpayerSearchPage />} />
         <Route path="/taxpayers/new" element={<TaxpayerRegisterPage />} />
         <Route path="/gis" element={<GisWorkspacePage />} />
         <Route path="/gis/print" element={<GisPrintPage />} />
+        <Route path="/documents/preview" element={<FormDocumentPage />} />
+        <Route path="/documents/:id" element={<FormDocumentPage />} />
+        <Route path="/admin/forms" element={<FormsAdminPage />} />
       </Routes>
     </AppShell>
   );

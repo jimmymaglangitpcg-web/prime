@@ -7,7 +7,8 @@ public sealed class CreateTaxDeclarationRequestValidator : AbstractValidator<Cre
     public CreateTaxDeclarationRequestValidator()
     {
         RuleFor(x => x.RpuId).NotEmpty();
-        RuleFor(x => x.TaxDeclarationNumber).NotEmpty().MaximumLength(50);
+        // Optional: generated when a numbering scheme is in force (docs/FORMS-REVISION-PLAN.md section 4.4).
+        RuleFor(x => x.TaxDeclarationNumber).MaximumLength(50);
         RuleFor(x => x.EffectivityDate).NotEmpty();
         RuleFor(x => x.Taxability).IsInEnum();
         RuleFor(x => x.ClassificationId).NotEmpty();

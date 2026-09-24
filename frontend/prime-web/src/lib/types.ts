@@ -48,7 +48,8 @@ export interface BarangayDto {
 // --- Property -----------------------------------------------------------
 
 export interface CreatePropertyRequest {
-  propertyIdentificationNumber: string;
+  /** Omit to generate from the PIN numbering scheme in force. */
+  propertyIdentificationNumber?: string;
   provinceId: string;
   municipalityId: string;
   barangayId: string;
@@ -294,7 +295,8 @@ export interface RpuDto {
 
 export interface CreateTaxDeclarationRequest {
   rpuId: string;
-  taxDeclarationNumber: string;
+  /** Omit to generate from the TD numbering scheme in force. */
+  taxDeclarationNumber?: string;
   effectivityDate: string;
   taxability: Taxability;
   classificationId: string;
@@ -453,4 +455,211 @@ export interface MachineryDto {
   assessedValue: number | null;
   status: RecordStatus;
   createdAt: string;
+}
+
+// --- Billing (Phase 8; docs/BILLING.md §4–§6) ---
+
+export type BillingComponent = 'Tax' | 'Discount' | 'Penalty' | 'Interest';
+
+export interface GenerateBillRequest {
+  rpuId: string;
+  taxYear: number;
+  asOfDate: string;
+}
+
+export interface TaxBillTaxTypeDto {
+  taxTypeId: string;
+  taxTypeCode: string;
+  taxTypeName: string;
+  taxRateId: string;
+  ratePercent: number;
+  computedAnnualTax: number;
+  capRuleId: string | null;
+  capBaselineTax: number | null;
+  capLimit: number | null;
+  annualTax: number;
+}
+
+export interface TaxBillDetailDto {
+  lineNumber: number;
+  installmentSequence: number;
+  dueDate: string;
+  taxTypeId: string;
+  taxTypeCode: string;
+  component: BillingComponent;
+  ruleId: string;
+  ratePercent: number | null;
+  baseAmount: number;
+  amount: number;
+  months: number | null;
+  explanation: string;
+}
+
+export interface TaxBillDto {
+  id: string;
+  propertyId: string;
+  rpuId: string;
+  rpuNumber: string;
+  taxDeclarationId: string;
+  taxDeclarationNumber: string;
+  assessmentId: string;
+  billNumber: string | null;
+  taxYear: number;
+  asOfDate: string;
+  rulesAsOfDate: string;
+  assessedValue: number;
+  classificationId: string;
+  discountStackingAllowed: boolean;
+  notes: string | null;
+  status: WorkflowStatus;
+  createdAt: string;
+  createdBy: string | null;
+  postedAt: string | null;
+  postedBy: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  supersededByBillId: string | null;
+  total: number;
+  taxTypes: TaxBillTaxTypeDto[];
+  details: TaxBillDetailDto[];
+}
+
+export interface StatementLineDto {
+  billId: string;
+  rpuId: string;
+  rpuNumber: string;
+  taxDeclarationNumber: string;
+  taxYear: number;
+  asOfDate: string;
+  assessedValue: number;
+  tax: number;
+  discount: number;
+  penalty: number;
+  interest: number;
+  total: number;
+}
+
+export interface StatementOfAccountDto {
+  propertyId: string;
+  propertyIdentificationNumber: string;
+  generatedAt: string;
+  bills: StatementLineDto[];
+  totalBilled: number;
+}
+
+// --- Forms foundation (docs/FORMS-REVISION-PLAN.md) ---
+
+export type NumberedDocumentKind =
+  | 'PropertyIdentificationNumber'
+  | 'TaxDeclaration'
+  | 'TaxBill'
+  | 'Faas'
+  | 'NoticeOfAssessment'
+  | 'OfficialReceipt';
+export type FormAuthority = 'PrimeProvisional' | 'Lam' | 'Blgf' | 'LguOrdinance' | 'Other';
+export type FormSubjectType = 'TaxBill' | 'TaxDeclaration';
+export type ApprovalSubjectType = 'Assessment';
+
+interface ConfigurationHeader {
+  id: string;
+  legalBasis: string;
+  effectiveDate: string;
+  endDate: string | null;
+  status: WorkflowStatus;
+  createdBy: string | null;
+  createdAt: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  remarks: string | null;
+}
+
+export interface NumberingSchemeDto extends ConfigurationHeader {
+  appliesTo: NumberedDocumentKind;
+  name: string;
+  pattern: string;
+  validationRegex: string | null;
+  allowManualEntry: boolean;
+  example: string;
+}
+
+export interface CreateNumberingSchemeRequest {
+  legalBasis: string;
+  effectiveDate: string;
+  remarks?: string;
+  appliesTo: NumberedDocumentKind;
+  name: string;
+  pattern: string;
+  validationRegex?: string;
+  allowManualEntry: boolean;
+}
+
+export interface FormDefinitionDto extends ConfigurationHeader {
+  code: string;
+  version: number;
+  title: string;
+  subjectType: FormSubjectType;
+  authority: FormAuthority;
+  sourceReference: string | null;
+  templateBody: string | null;
+}
+
+export interface CreateFormDefinitionRequest {
+  legalBasis: string;
+  effectiveDate: string;
+  remarks?: string;
+  code: string;
+  title: string;
+  subjectType: FormSubjectType;
+  authority: FormAuthority;
+  sourceReference?: string;
+  templateBody: string;
+}
+
+export interface ApprovalStepDto {
+  sequence: number;
+  stepCode: string;
+  label: string;
+  signatoryPosition: string | null;
+}
+
+export interface ApprovalChainDto extends ConfigurationHeader {
+  subjectType: ApprovalSubjectType;
+  name: string;
+  steps: ApprovalStepDto[];
+}
+
+export interface CreateApprovalChainRequest {
+  legalBasis: string;
+  effectiveDate: string;
+  remarks?: string;
+  subjectType: ApprovalSubjectType;
+  name: string;
+  steps: { sequence: number; stepCode: string; label: string; signatoryPosition?: string }[];
+}
+
+export interface FormPreviewDto {
+  formCode: string;
+  formVersion: number;
+  title: string;
+  authority: FormAuthority;
+  issueBlocker: string | null;
+  html: string;
+}
+
+export interface IssuedFormDto {
+  id: string;
+  formCode: string;
+  formVersion: number;
+  title: string;
+  authority: FormAuthority;
+  subjectType: FormSubjectType;
+  subjectId: string;
+  documentNumber: string | null;
+  status: WorkflowStatus;
+  issuedAt: string;
+  issuedBy: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  renderedHtmlSha256: string;
+  html: string | null;
 }

@@ -50,7 +50,7 @@ export function PropertyRegisterPage() {
         <Form.Item
           name="propertyIdentificationNumber"
           label="Property Identification Number (PIN)"
-          rules={[{ required: true, message: 'PIN is required' }]}
+          extra="Leave blank to generate it when a PIN numbering scheme is in force."
         >
           <Input placeholder="e.g. 012-34-567-890" />
         </Form.Item>

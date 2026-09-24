@@ -634,6 +634,241 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.Billing.TaxBill", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("AsOfDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("AssessedValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("AssessmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BillNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CancelledBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("DiscountStackingAllowed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTimeOffset?>("PostedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PostedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PropertyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RpuId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("RulesAsOfDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("SupersededByBillId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TaxDeclarationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("TaxYear")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssessmentId");
+
+                    b.HasIndex("BillNumber")
+                        .IsUnique();
+
+                    b.HasIndex("ClassificationId");
+
+                    b.HasIndex("SupersededByBillId");
+
+                    b.HasIndex("TaxDeclarationId");
+
+                    b.HasIndex("PropertyId", "TaxYear");
+
+                    b.HasIndex("RpuId", "TaxYear")
+                        .IsUnique()
+                        .HasDatabaseName("UX_TaxBills_Rpu_TaxYear_Posted")
+                        .HasFilter("\"Status\" = 'Posted'");
+
+                    b.HasIndex("RpuId", "TaxYear", "AsOfDate")
+                        .IsUnique()
+                        .HasDatabaseName("UX_TaxBills_Rpu_TaxYear_AsOf_Live")
+                        .HasFilter("\"Status\" <> 'Cancelled'");
+
+                    b.ToTable("TaxBills", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TaxBills_AssessedValue", "\"AssessedValue\" >= 0");
+
+                            t.HasCheckConstraint("CK_TaxBills_Cancelled", "(\"Status\" = 'Cancelled') = (\"CancelledAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_TaxBills_Posted", "(\"Status\" = 'Draft' AND \"PostedAt\" IS NULL) OR (\"Status\" = 'Posted' AND \"PostedAt\" IS NOT NULL) OR \"Status\" = 'Cancelled'");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Billing.TaxBillDetail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("BaseAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Component")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Explanation")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("InstallmentSequence")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LineNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Months")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("RatePercent")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<Guid>("RuleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TaxBillId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TaxTypeId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaxTypeId");
+
+                    b.HasIndex("TaxBillId", "LineNumber")
+                        .IsUnique();
+
+                    b.ToTable("TaxBillDetails", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TaxBillDetails_Installment", "\"InstallmentSequence\" >= 1");
+
+                            t.HasCheckConstraint("CK_TaxBillDetails_Sign", "(\"Component\" = 'Discount') = (\"Amount\" < 0) OR \"Amount\" = 0");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Billing.TaxBillTaxType", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AnnualTax")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("CapBaselineTax")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("CapLimit")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("CapRuleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ComputedAnnualTax")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("RatePercent")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<Guid>("TaxBillId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TaxRateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TaxTypeId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CapRuleId");
+
+                    b.HasIndex("TaxRateId");
+
+                    b.HasIndex("TaxTypeId");
+
+                    b.HasIndex("TaxBillId", "TaxTypeId")
+                        .IsUnique();
+
+                    b.ToTable("TaxBillTaxTypes", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TaxBillTaxTypes_AnnualTax", "\"AnnualTax\" >= 0 AND \"AnnualTax\" <= \"ComputedAnnualTax\"");
+                        });
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Billing.TaxIncreaseCapRule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1023,6 +1258,312 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("RelatedEntityType", "RelatedEntityId");
 
                     b.ToTable("Documents");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Forms.FormDefinition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Authority")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LegalBasis")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("SourceReference")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("TemplateBody")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_FormDefinitions_OpenApproved")
+                        .HasFilter("\"Status\" = 'Approved' AND \"EndDate\" IS NULL");
+
+                    b.HasIndex("Code", "Version")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "EffectiveDate");
+
+                    b.ToTable("FormDefinitions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_FormDefinitions_Approval", "(\"Status\" IN ('Approved', 'Posted')) = (\"ApprovedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_FormDefinitions_EndDate", "\"EndDate\" IS NULL OR \"EndDate\" >= \"EffectiveDate\"");
+
+                            t.HasCheckConstraint("CK_FormDefinitions_Version", "\"Version\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Forms.IssuedForm", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Authority")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CancelledBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DataSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("DocumentNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FormCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("FormDefinitionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("FormVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("IssuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("IssuedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RenderedHtml")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RenderedHtmlSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FormDefinitionId", "SubjectId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_IssuedForms_Definition_Subject_Valid")
+                        .HasFilter("\"Status\" = 'Posted'");
+
+                    b.HasIndex("SubjectType", "SubjectId");
+
+                    b.ToTable("IssuedForms", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_IssuedForms_Cancelled", "(\"Status\" = 'Cancelled') = (\"CancelledAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_IssuedForms_Status", "\"Status\" IN ('Posted', 'Cancelled')");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Forms.NumberSequence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("LastValue")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("NumberingSchemeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ScopeKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NumberingSchemeId", "ScopeKey")
+                        .IsUnique();
+
+                    b.ToTable("NumberSequences", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_NumberSequences_LastValue", "\"LastValue\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Forms.NumberingScheme", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AllowManualEntry")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("AppliesTo")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LegalBasis")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Pattern")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ValidationRegex")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppliesTo")
+                        .IsUnique()
+                        .HasDatabaseName("UX_NumberingSchemes_OpenApproved")
+                        .HasFilter("\"Status\" = 'Approved' AND \"EndDate\" IS NULL");
+
+                    b.HasIndex("Status", "EffectiveDate");
+
+                    b.ToTable("NumberingSchemes", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_NumberingSchemes_Approval", "(\"Status\" IN ('Approved', 'Posted')) = (\"ApprovedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_NumberingSchemes_EndDate", "\"EndDate\" IS NULL OR \"EndDate\" >= \"EffectiveDate\"");
+                        });
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.GeneralRevisionJob", b =>
@@ -3113,6 +3654,173 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.ToTable("Valuations");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.Workflow.ApprovalChain", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LegalBasis")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubjectType")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ApprovalChains_OpenApproved")
+                        .HasFilter("\"Status\" = 'Approved' AND \"EndDate\" IS NULL");
+
+                    b.HasIndex("Status", "EffectiveDate");
+
+                    b.ToTable("ApprovalChains", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ApprovalChains_Approval", "(\"Status\" IN ('Approved', 'Posted')) = (\"ApprovedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ApprovalChains_EndDate", "\"EndDate\" IS NULL OR \"EndDate\" >= \"EffectiveDate\"");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Workflow.ApprovalChainStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApprovalChainId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SignatoryPosition")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("StepCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovalChainId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("ApprovalChainSteps", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ApprovalChainSteps_Sequence", "\"Sequence\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Workflow.ApprovalRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApprovalChainId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("SignatoryName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("SignatoryPosition")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("SignedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StepCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("StepSequence")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovalChainId");
+
+                    b.HasIndex("SubjectType", "SubjectId", "StepSequence")
+                        .IsUnique();
+
+                    b.ToTable("ApprovalRecords", (string)null);
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Assessment", b =>
                 {
                     b.HasOne("Prime.Domain.Entities.AssessmentLevel", "AssessmentLevel")
@@ -3222,6 +3930,99 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TaxTypeId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("TaxType");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Billing.TaxBill", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Assessment", "Assessment")
+                        .WithMany()
+                        .HasForeignKey("AssessmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Classification", "Classification")
+                        .WithMany()
+                        .HasForeignKey("ClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.PropertyEntity", "Property")
+                        .WithMany()
+                        .HasForeignKey("PropertyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.RealPropertyUnit", "Rpu")
+                        .WithMany()
+                        .HasForeignKey("RpuId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Billing.TaxBill", null)
+                        .WithMany()
+                        .HasForeignKey("SupersededByBillId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.TaxDeclaration", "TaxDeclaration")
+                        .WithMany()
+                        .HasForeignKey("TaxDeclarationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Assessment");
+
+                    b.Navigation("Classification");
+
+                    b.Navigation("Property");
+
+                    b.Navigation("Rpu");
+
+                    b.Navigation("TaxDeclaration");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Billing.TaxBillDetail", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Billing.TaxBill", null)
+                        .WithMany("Details")
+                        .HasForeignKey("TaxBillId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Reference.TaxType", "TaxType")
+                        .WithMany()
+                        .HasForeignKey("TaxTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("TaxType");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Billing.TaxBillTaxType", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Billing.TaxIncreaseCapRule", null)
+                        .WithMany()
+                        .HasForeignKey("CapRuleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Billing.TaxBill", null)
+                        .WithMany("TaxTypes")
+                        .HasForeignKey("TaxBillId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Billing.TaxRate", null)
+                        .WithMany()
+                        .HasForeignKey("TaxRateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Reference.TaxType", "TaxType")
+                        .WithMany()
+                        .HasForeignKey("TaxTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.Navigation("TaxType");
                 });
@@ -3341,6 +4142,26 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("DocumentType");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Forms.IssuedForm", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Forms.FormDefinition", "FormDefinition")
+                        .WithMany()
+                        .HasForeignKey("FormDefinitionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("FormDefinition");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Forms.NumberSequence", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Forms.NumberingScheme", null)
+                        .WithMany()
+                        .HasForeignKey("NumberingSchemeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.Gis.BarangayBoundary", b =>
@@ -3771,9 +4592,34 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("SmvSchedule");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.Workflow.ApprovalChainStep", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Workflow.ApprovalChain", null)
+                        .WithMany("Steps")
+                        .HasForeignKey("ApprovalChainId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Workflow.ApprovalRecord", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Workflow.ApprovalChain", null)
+                        .WithMany()
+                        .HasForeignKey("ApprovalChainId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Billing.PaymentSchedule", b =>
                 {
                     b.Navigation("Installments");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Billing.TaxBill", b =>
+                {
+                    b.Navigation("Details");
+
+                    b.Navigation("TaxTypes");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.Building", b =>
@@ -3796,6 +4642,11 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("RolePermissions");
 
                     b.Navigation("UserRoles");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Workflow.ApprovalChain", b =>
+                {
+                    b.Navigation("Steps");
                 });
 #pragma warning restore 612, 618
         }

@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Features.Approvals;
 using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.Assessments;
@@ -18,7 +19,9 @@ namespace Prime.Application.Features.Assessments;
 public sealed class AssessmentService(
     IApplicationDbContext db,
     IValidator<CreateAssessmentRequest> validator,
-    ICurrentUserService currentUser) : IAssessmentService
+    ICurrentUserService currentUser,
+    IApprovalChainService approvals,
+    IClock clock) : IAssessmentService
 {
     public async Task<Result<AssessmentDto>> CreateAsync(CreateAssessmentRequest request, CancellationToken cancellationToken = default)
     {
@@ -120,16 +123,37 @@ public sealed class AssessmentService(
         {
             return Result.Failure<AssessmentDto>("ASSESSMENT_NOT_PENDING_REVIEW", "Only an assessment pending review can be approved.");
         }
-        // Maker-checker (CLAUDE.md §46): the creator may not approve their own assessment.
-        if (currentUser.AppUserId is not null && assessment.CreatedBy == currentUser.AppUserId)
+        // A configured approval chain (docs/FORMS-REVISION-PLAN.md §4.5): each call signs the
+        // next step; the assessment is Approved when the last step is signed.
+        var step = await approvals.SignNextStepAsync(ApprovalSubjectType.Assessment, assessment.Id, assessment.CreatedBy,
+            clock.Today, null, cancellationToken);
+        if (step.IsFailure)
         {
-            return Result.Failure<AssessmentDto>("CANNOT_APPROVE_OWN_ASSESSMENT", "The assessment's creator cannot also approve it.");
+            return Result.Failure<AssessmentDto>(step.Code!, step.Message!);
         }
-
-        assessment.Status = WorkflowStatus.Approved;
-        assessment.ApprovedBy = currentUser.AppUserId;
-        assessment.ApprovedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
+        if (!step.Value.ChainInForce)
+        {
+            // No chain configured — maker-checker (CLAUDE.md §46): the creator may not approve their own assessment.
+            if (currentUser.AppUserId is not null && assessment.CreatedBy == currentUser.AppUserId)
+            {
+                return Result.Failure<AssessmentDto>("CANNOT_APPROVE_OWN_ASSESSMENT", "The assessment's creator cannot also approve it.");
+            }
+        }
+        if (!step.Value.ChainInForce || step.Value.Completed)
+        {
+            assessment.Status = WorkflowStatus.Approved;
+            assessment.ApprovedBy = currentUser.AppUserId;
+            assessment.ApprovedAt = DateTimeOffset.UtcNow;
+        }
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // IX_ApprovalRecords_SubjectType_SubjectId_StepSequence: someone signed this step at the same time.
+            return Result.Failure<AssessmentDto>("APPROVAL_STEP_CONFLICT", "This approval step was signed by someone else at the same time. Reload and try again.");
+        }
 
         return Result.Success(ToDto(assessment));
     }

@@ -50,7 +50,7 @@ export function AddTaxDeclarationModal({
         onFinish={(values) => {
           const request: CreateTaxDeclarationRequest = {
             rpuId,
-            taxDeclarationNumber: values.taxDeclarationNumber,
+            taxDeclarationNumber: values.taxDeclarationNumber?.trim() || undefined,
             effectivityDate: values.effectivityDate.format('YYYY-MM-DD'),
             taxability: values.taxability,
             classificationId: values.classificationId,
@@ -62,7 +62,11 @@ export function AddTaxDeclarationModal({
           createTaxDeclaration.mutate(request, { onSuccess: handleClose });
         }}
       >
-        <Form.Item name="taxDeclarationNumber" label="Tax Declaration Number" rules={[{ required: true, message: 'Required' }]}>
+        <Form.Item
+          name="taxDeclarationNumber"
+          label="Tax Declaration Number"
+          extra="Leave blank to generate it when a TD numbering scheme is in force."
+        >
           <Input />
         </Form.Item>
 

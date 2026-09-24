@@ -5,6 +5,7 @@ import type { RpuSummaryDto } from '../../../lib/types';
 import { useTaxDeclarationsByRpu } from '../../../api/taxDeclarations';
 import { AddRpuModal } from '../modals/AddRpuModal';
 import { AddTaxDeclarationModal } from '../modals/AddTaxDeclarationModal';
+import { PrintFormButton } from '../../../components/PrintFormButton';
 import { PropertyDetailForRpu } from './PropertyDetailForRpu';
 
 const workflowStatusColor: Record<string, string> = {
@@ -43,6 +44,13 @@ function TaxDeclarationsForRpu({ propertyId, rpuId }: { propertyId: string; rpuI
             title: 'Status',
             dataIndex: 'status',
             render: (status: string) => <Tag color={workflowStatusColor[status] ?? 'default'}>{status}</Tag>,
+          },
+          {
+            title: 'Form',
+            key: 'form',
+            render: (_: unknown, td: { id: string; status: string }) => (
+              <PrintFormButton formCode="TAX_DECLARATION" subjectId={td.id} issuable={td.status !== 'Cancelled' && td.status !== 'Voided'} />
+            ),
           },
         ]}
       />

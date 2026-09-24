@@ -206,7 +206,7 @@ public class PropertyDetailRegistrationTests(WebApplicationFactory<Program> fact
 
         result.IsSuccess.ShouldBeFalse();
         result.Code.ShouldBe("MACHINERY_VALUATION_INPUTS_MISSING");
-        result.Message.ShouldContain("replacement or reproduction cost");
+        result.Message.ShouldNotBeNull().ShouldContain("replacement or reproduction cost");
     }
 
     [Fact]
