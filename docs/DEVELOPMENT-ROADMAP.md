@@ -809,6 +809,22 @@ carried forward (Supabase migrations, real boundary data, per-LGU PRS92
 zone, production basemap, role gating, import UI) are listed in
 docs/GIS.md §7.
 
+**Supabase brought up to date (2026-09-24).** Read-only inspection first
+showed Supabase had only 3 of 10 migrations (through Phase 3's
+`AuditLog` — Phases 5–7 had never been applied) and **no business data**
+(0 properties/taxpayers/RPUs/parcels/audit rows; no duplicate `RpuId`s
+that would break Phase 6's unique indexes). The 7 pending migrations were
+applied via the session pooler (port 5432, per DATABASE.md). Verified
+afterwards: 10/10 in `__EFMigrationsHistory`; all four geometry columns
+typed `…,4326`; check constraints and `UX_*_Current` indexes present;
+**RLS is enabled on all 43 PRIME tables with zero policies** — Supabase's
+`ensure_rls` event trigger enables it on every new table — so the
+auto-generated REST/GraphQL API is deny-by-default for them, while PRIME's
+backend connects as the owner role. Only PostGIS's own `spatial_ref_sys`
+lacks RLS (public EPSG reference data). Not yet exercised: running the
+API itself (including Hangfire, which uses the transaction-mode pooler in
+Staging config) against Supabase.
+
 ## Phase 8 — Billing
 
 **Goal**: a tax bill can be generated from a posted assessment using
@@ -940,7 +956,7 @@ per-phase tasks:
 
 Phases 0–7 are complete and verified (Phase 7 — GIS finished 2026-09-24;
 see its status block and docs/GIS.md §7 for carried-forward items).
-Phase 7 commits are local on `master` and **not yet pushed**. Still
+All Phase 7 commits are pushed to `origin` (through `6b1cf04`). Still
 missing UI from earlier phases: Phase 5 (SMV/AssessmentLevel
 administration) and Phase 6 (a "compute valuation"/"assess" action with
 breakdown display, a General Revision batch screen). Candidates for
@@ -950,8 +966,9 @@ what's next, in no particular priority order:
   rates only (never invented real ones), and depends on posted
   assessments — which currently can only be produced via the API, since
   the Phase 6 UI doesn't exist yet.
-- **Apply pending migrations to Supabase** (Phases 5–7), after confirming
-  which ones it actually has.
+- **Run the API against Supabase** (Staging config) as a smoke test —
+  migrations are now applied, but Hangfire's behaviour behind Supabase's
+  transaction-mode pooler (port 6543) has never been exercised.
 - **Phase 5/6 UI**: SMV/AssessmentLevel administration screens, a
   "compute valuation" + "assess" action with breakdown view on the
   Property Profile (now that Land/Building/Machinery can actually be

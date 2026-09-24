@@ -259,9 +259,10 @@ Re-check with real data volumes in Phase 14.
 
 ## 7. Open items after Phase 7
 
-- **Supabase** has not had this phase's migrations applied
-  (`TypedParcelGeometry`, `ParcelConcurrencyToken`, `GisReferenceLayers`)
-  — earlier docs only confirm Supabase was migrated through Phase 3.
+- ~~Supabase migrations~~ — applied 2026-09-24 (see roadmap Phase 7
+  status). Supabase runs PostGIS 3.3.7 (local dev: 3.6.2); the parcel
+  normalization in `ParcelService` does not depend on the newer
+  auto-promotion behaviour.
 - **Real boundary data** (barangays, valuation zones, roads) must come
   from official sources; none is loaded.
 - **Per-LGU PRS92 zone** for `Gis:MeasurementSrid` — DOMAIN VERIFICATION
