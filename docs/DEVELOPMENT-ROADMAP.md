@@ -839,6 +839,30 @@ generated with a correct, auditable breakdown (basic RPT + levies −
 discounts + penalties + interest = total); financial edge cases from
 CLAUDE.md §75 (zero, large amounts, rounding) covered by unit tests.
 
+### Status — in progress (started 2026-09-24)
+
+User direction: **DEMO values only** until official ordinance values are
+supplied. Checkpointed steps:
+
+1. ✅ **Rule model** — docs/BILLING.md §3 (TaxType, TaxRate,
+   PaymentSchedule, DiscountRule, InterestRule, PenaltyRule,
+   TaxIncreaseCapRule; approval-time supersession; legal items listed as
+   DOMAIN VERIFICATION REQUIRED). Implemented: entities, migration
+   `BillingRules` (applied to local dev DB; **not** Supabase),
+   `IBillingRuleService`, `/api/billing/*` create/get/list(`?asOf=`)/approve
+   endpoints, `/api/reference/tax-types`. Error codes ending `_CONFLICT`
+   now map to HTTP 409 (previously only `_CONCURRENCY_CONFLICT`; this also
+   moves the existing SMV/AssessmentLevel effective-date conflicts from
+   400 to 409).
+   - 2026-09-24 regulatory alignment (step 1 of the patch plan from
+     docs/analysis/current-real-property-regulatory-baseline.md §6):
+     added `TaxIncreaseCapRule` (RA 12001 §29 ¶3; IRR §55) — per-tax-type
+     cap on the increase from a new SMV, bounded windows with a
+     no-overlap exclusion constraint (`btree_gist`). The `BillingRules`
+     migration was regenerated.
+2. ⏳ Pure `BillingCalculator` + §75 financial unit tests.
+3. ⏳ `TaxBill`/`TaxBillDetail`, bill generation API, statement of account UI.
+
 ## Phase 9 — Collection
 
 **Goal**: payments can be posted, allocated, reversed, and reconciled.

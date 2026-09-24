@@ -61,4 +61,8 @@ public class ReferenceDataController(IReferenceDataService referenceDataService)
     [HttpGet("machinery-types")]
     public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetMachineryTypes(CancellationToken cancellationToken) =>
         Ok(await referenceDataService.GetMachineryTypesAsync(cancellationToken));
+
+    [HttpGet("tax-types")]
+    public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetTaxTypes(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetTaxTypesAsync(cancellationToken));
 }

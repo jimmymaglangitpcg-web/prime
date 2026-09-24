@@ -62,3 +62,10 @@ public sealed class DocumentType : LookupEntity;
 /// added in Phase 5 because it's the first feature that actually needs it.
 /// </summary>
 public sealed class PropertyType : LookupEntity;
+
+/// <summary>
+/// CLAUDE.md §27 "Tax Type" — the tax/levy a bill line belongs to (e.g. basic
+/// RPT, Special Education Fund). LGU-configurable; drives per-fund
+/// collection reporting (§41). docs/BILLING.md §3.1.
+/// </summary>
+public sealed class TaxType : LookupEntity;

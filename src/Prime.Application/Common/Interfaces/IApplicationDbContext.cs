@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Prime.Domain.Entities;
+using Prime.Domain.Entities.Billing;
 using Prime.Domain.Entities.Gis;
 using Prime.Domain.Entities.Reference;
 
@@ -23,6 +24,13 @@ public interface IApplicationDbContext
     DbSet<Taxpayer> Taxpayers { get; }
     DbSet<PropertyTaxpayer> PropertyTaxpayers { get; }
     DbSet<Parcel> Parcels { get; }
+    DbSet<TaxType> TaxTypes { get; }
+    DbSet<TaxRate> TaxRates { get; }
+    DbSet<PaymentSchedule> PaymentSchedules { get; }
+    DbSet<DiscountRule> DiscountRules { get; }
+    DbSet<InterestRule> InterestRules { get; }
+    DbSet<PenaltyRule> PenaltyRules { get; }
+    DbSet<TaxIncreaseCapRule> TaxIncreaseCapRules { get; }
     DbSet<BarangayBoundary> BarangayBoundaries { get; }
     DbSet<ZoneBoundary> ZoneBoundaries { get; }
     DbSet<RoadSegment> RoadSegments { get; }

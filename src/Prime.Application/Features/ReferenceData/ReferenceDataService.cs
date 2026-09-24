@@ -69,6 +69,9 @@ public sealed class ReferenceDataService(IApplicationDbContext db) : IReferenceD
     public Task<IReadOnlyList<LookupDto>> GetMachineryTypesAsync(CancellationToken cancellationToken = default) =>
         GetLookupAsync(db.MachineryTypes, cancellationToken);
 
+    public Task<IReadOnlyList<LookupDto>> GetTaxTypesAsync(CancellationToken cancellationToken = default) =>
+        GetLookupAsync(db.TaxTypes, cancellationToken);
+
     private static async Task<IReadOnlyList<LookupDto>> GetLookupAsync<T>(IQueryable<T> query, CancellationToken cancellationToken)
         where T : LookupEntity
     {

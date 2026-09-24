@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common.Interfaces;
 using Prime.Domain.Entities;
+using Prime.Domain.Entities.Billing;
 using Prime.Domain.Entities.Gis;
 using Prime.Domain.Entities.Audit;
 using Prime.Domain.Entities.Documents;
@@ -42,6 +43,13 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<Taxpayer> Taxpayers => Set<Taxpayer>();
     public DbSet<PropertyTaxpayer> PropertyTaxpayers => Set<PropertyTaxpayer>();
     public DbSet<Parcel> Parcels => Set<Parcel>();
+    public DbSet<TaxType> TaxTypes => Set<TaxType>();
+    public DbSet<TaxRate> TaxRates => Set<TaxRate>();
+    public DbSet<PaymentSchedule> PaymentSchedules => Set<PaymentSchedule>();
+    public DbSet<DiscountRule> DiscountRules => Set<DiscountRule>();
+    public DbSet<InterestRule> InterestRules => Set<InterestRule>();
+    public DbSet<PenaltyRule> PenaltyRules => Set<PenaltyRule>();
+    public DbSet<TaxIncreaseCapRule> TaxIncreaseCapRules => Set<TaxIncreaseCapRule>();
     public DbSet<BarangayBoundary> BarangayBoundaries => Set<BarangayBoundary>();
     public DbSet<ZoneBoundary> ZoneBoundaries => Set<ZoneBoundary>();
     public DbSet<RoadSegment> RoadSegments => Set<RoadSegment>();
@@ -76,6 +84,8 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("postgis");
+        // Exclusion constraint over uuid/text + daterange on TaxIncreaseCapRules.
+        modelBuilder.HasPostgresExtension("btree_gist");
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PrimeDbContext).Assembly);
 
