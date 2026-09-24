@@ -23,6 +23,8 @@ public sealed class PropertyTaxpayerConfiguration : IEntityTypeConfiguration<Pro
         // Existing rows are owners.
         builder.Property(x => x.Role).HasConversion<string>().HasMaxLength(30).HasDefaultValue(PropertyPartyRole.Owner).HasSentinel(PropertyPartyRole.Owner);
         builder.Property(x => x.EndReason).HasMaxLength(500);
+        builder.HasOne<Prime.Domain.Entities.Transactions.PropertyTransaction>().WithMany().HasForeignKey(x => x.StartedByTransactionId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Prime.Domain.Entities.Transactions.PropertyTransaction>().WithMany().HasForeignKey(x => x.EndedByTransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.Property(x => x.OwnershipPercentage).HasPrecision(9, 6);
         // At most one current unknown-owner declaration per property.
         builder.HasIndex(x => x.PropertyId).IsUnique().HasFilter("\"Role\" = 'UnknownOwner' AND \"IsCurrent\"")

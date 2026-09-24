@@ -3,9 +3,9 @@
 **FAAS, Tax Declaration and related assessment forms: from the initial
 system to the forms prescribed under the Local Assessment Manual (LAM)**
 
-Status: **A1–A4 implemented 2026-09-25**; A5–A10 not started. See §11
-(A1–A3) and §12 (A4) for what was built and where it deviates from this
-plan.
+Status: **A1–A5 implemented 2026-09-25**; A6–A10 not started. See §11
+(A1–A3), §12 (A4) and §13 (A5) for what was built and where it deviates
+from this plan.
 
 ---
 
@@ -515,4 +515,91 @@ the database. The DEMO type `DEMO-LEVY` was added to the local dev DB.
 Migration `PartiesAndTdLifecycle`: additive. The only change to existing
 columns is making `PropertyTaxpayers.TaxpayerId` and `OwnershipTypeId`
 nullable. Applied to the local dev DB only.
+
+---
+
+## 13. Implementation status — A5 property transactions, 2026-09-25
+
+**Catalogue.** `TransactionType` is versioned configuration: a new version
+must be approved by a second user, and approving it ends the previous
+version of the same code.
+- Each type has an LGU/LAM `Code`, `Name` and `Rank` over a statutory
+  `Kind`, which is the 12 events of CLAUDE.md §34 and is what PRIME acts
+  on.
+- Each type carries a prerequisite checklist (code, label, mandatory,
+  legal basis).
+- Administered in Forms & Numbering → Transaction types.
+
+**Transactions.** `PropertyTransaction` records:
+- the type code, name and kind, frozen from the type version it was opened
+  under;
+- an optional number from a `PropertyTransaction` numbering scheme;
+- the property, effective date and description;
+- a checklist copied from the type, where each item is marked satisfied
+  with an evidence reference;
+- its own TDs (`TaxDeclaration.PropertyTransactionId`);
+- TDs it cancels outright;
+- related source and result properties;
+- for a transfer, the new parties.
+
+Lifecycle: Draft → PendingReview (submit) → Approved (two-person check, or
+an approval chain of subject `PropertyTransaction`) | Rejected | Cancelled
+(withdrawn).
+
+**Rules:**
+- Submit requires every mandatory prerequisite to be satisfied, and the
+  transaction must do something (a TD, a TD to cancel, or new parties).
+- A transfer must name owners totalling exactly 100%, or a single
+  unknown-owner declaration, and must take effect after the current
+  parties started. This is checked at submit and again at approval.
+- Only a transfer may change parties.
+- A TD to cancel must be a current TD of the property or of a related
+  property.
+- TDs inside a transaction cannot be submitted, approved or rejected on
+  their own; they move with the transaction.
+
+**Approval** applies everything in one database transaction, in this
+order:
+1. The listed TDs are cancelled ("Cancelled by transaction …").
+2. The transaction's own TDs are approved through the same helper as direct
+   TD approval (`TaxDeclarationApproval`), which cancels the TDs they
+   replace.
+3. For a transfer, the current owners and any unknown-owner declaration are
+   ended the day before the effective date, and the new parties start on
+   it.
+
+Both ends of the ownership change point to the transaction
+(`PropertyTaxpayer.StartedByTransactionId` / `EndedByTransactionId`,
+CLAUDE.md §35). Rejecting or withdrawing the transaction rejects its TDs,
+which never took effect.
+
+**Deviations and open items:**
+- **Subdivision and consolidation** record source and result properties
+  only through the API (no UI yet); child properties are registered
+  separately rather than created by the transaction.
+- **Attachments:** evidence is a reference number until document storage
+  exists.
+- **Partial transfers** of co-owned property are not supported (the whole
+  ownership passes). DOMAIN VERIFICATION REQUIRED.
+- Direct TD approval (outside a transaction) remains possible. Making
+  transactions mandatory for every TD change is a policy switch still to
+  add.
+
+**Also fixed while verifying:** a confirmation dialog stayed open over the
+error when its action failed (transactions, TD list, bill posting). It now
+closes and the error shows in the page.
+
+**Verified:**
+- 7 integration tests: a full transfer (prerequisite gate, TD in the
+  transaction, owner handover with links, replaced TD cancelled), the
+  100% share rule, the effective-date rule at submit, outright
+  cancellation, rejection rejecting its TDs, refusal cases, and numbering.
+- Live in the browser against the dev DB: transfer type created in the
+  admin UI and approved by a second user; transfer opened with a buyer;
+  TD added inside it with "Replaces" defaulted; submit blocked until
+  evidence was recorded; self-approval refused; checker approval replaced
+  the owner and the TD.
+
+Migration `PropertyTransactions`: seven new tables plus three nullable
+link columns. Applied to the local dev DB only.
 

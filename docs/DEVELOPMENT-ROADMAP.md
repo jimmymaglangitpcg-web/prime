@@ -1040,8 +1040,16 @@ Migration `FormsFoundation` (additive) is applied to the local dev DB only.
 **A4 done (2026-09-25, uncommitted):** statutory party capacities including
 unknown owner, the TD lifecycle with "cancels / cancelled by" and one
 approved TD per RPU, and TD annotations (plan §12). Migration
-`PartiesAndTdLifecycle` is applied locally only. Next in the plan: **A5
-PropertyTransaction** and the transaction catalogue, then A6–A10.
+`PartiesAndTdLifecycle` is applied locally only. A4 was committed and pushed (`02b6eb9`) and
+applied to Supabase.
+
+**A5 done (2026-09-25, uncommitted):** property transactions with a
+configurable catalogue and prerequisite checklists. Approval applies the
+TDs, the cancellations and the transfer ownership handover in one step
+(plan §13). Migration `PropertyTransactions` is applied locally only.
+Next in the plan: A6 Notice of Assessment, A7 FAAS aggregate, A8 more
+provisional forms, A9 building depreciation hook, A10 LAM intake
+checklist.
 
 Candidates, in roadmap order:
 

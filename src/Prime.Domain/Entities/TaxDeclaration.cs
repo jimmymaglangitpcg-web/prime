@@ -47,6 +47,12 @@ public sealed class TaxDeclaration : AuditableEntity
     public Guid? ApprovedBy { get; set; }
     public DateTimeOffset? ApprovedAt { get; set; }
 
+    /// <summary>
+    /// The transaction this TD was drafted under, if any. Such a TD is approved
+    /// only through its transaction (docs/FORMS-REVISION-PLAN.md A5).
+    /// </summary>
+    public Guid? PropertyTransactionId { get; set; }
+
     public DateTimeOffset? CancelledAt { get; set; }
     public Guid? CancelledBy { get; set; }
     public string? CancellationReason { get; set; }

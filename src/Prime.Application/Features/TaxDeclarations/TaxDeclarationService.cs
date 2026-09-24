@@ -25,6 +25,24 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         {
             return Result.Failure<TaxDeclarationDto>("RPU_NOT_FOUND", "No RPU was found with the given id.");
         }
+        if (request.PropertyTransactionId is { } transactionId)
+        {
+            var tx = await db.PropertyTransactions.Include(x => x.RelatedProperties)
+                .FirstOrDefaultAsync(x => x.Id == transactionId, cancellationToken);
+            if (tx is null)
+            {
+                return Result.Failure<TaxDeclarationDto>("PROPERTY_TRANSACTION_NOT_FOUND", "The specified property transaction does not exist.");
+            }
+            if (tx.Status != WorkflowStatus.Draft)
+            {
+                return Result.Failure<TaxDeclarationDto>("PROPERTY_TRANSACTION_NOT_DRAFT", "TDs can be added only while the transaction is a Draft.");
+            }
+            if (tx.PropertyId != rpu.PropertyId && tx.RelatedProperties.All(r => r.PropertyId != rpu.PropertyId))
+            {
+                return Result.Failure<TaxDeclarationDto>("PROPERTY_TRANSACTION_OTHER_PROPERTY",
+                    "The RPU's property is not the transaction's property or one of its related properties.");
+            }
+        }
         if (!await db.Classifications.AnyAsync(x => x.Id == request.ClassificationId, cancellationToken))
         {
             return Result.Failure<TaxDeclarationDto>("CLASSIFICATION_NOT_FOUND", "The specified classification does not exist.");
@@ -84,6 +102,7 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
             AssessmentYear = request.AssessmentYear,
             PreviousTaxDeclarationId = request.PreviousTaxDeclarationId,
             Remarks = request.Remarks,
+            PropertyTransactionId = request.PropertyTransactionId,
             Status = WorkflowStatus.Draft,
         };
 
@@ -130,6 +149,10 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         {
             return NotFound();
         }
+        if (td.PropertyTransactionId is not null)
+        {
+            return InTransaction();
+        }
         if (td.Status != WorkflowStatus.Draft)
         {
             return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NOT_DRAFT", "Only a Draft Tax Declaration can be submitted for review.");
@@ -145,6 +168,10 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         if (td is null)
         {
             return NotFound();
+        }
+        if (td.PropertyTransactionId is not null)
+        {
+            return InTransaction();
         }
         if (td.Status != WorkflowStatus.PendingReview)
         {
@@ -165,46 +192,26 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         TaxDeclaration? previous = null;
         if (completes)
         {
-            // One current (Approved) TD per RPU: the new one must replace the current one explicitly.
-            var current = await db.TaxDeclarations.FirstOrDefaultAsync(
-                x => x.RpuId == td.RpuId && x.Id != td.Id && x.Status == WorkflowStatus.Approved, cancellationToken);
-            if (current is not null && current.Id != td.PreviousTaxDeclarationId)
+            var check = await TaxDeclarationApproval.CheckAsync(db, td, cancellationToken);
+            if (check.IsFailure)
             {
-                return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_CURRENT_EXISTS",
-                    $"TD {current.TaxDeclarationNumber} is the current declaration for this RPU; a new TD must name it as the previous TD, which it then cancels.");
+                return Result.Failure<TaxDeclarationDto>(check.Code!, check.Message!);
             }
-            previous = td.PreviousTaxDeclarationId is { } previousId
-                ? await db.TaxDeclarations.FirstOrDefaultAsync(x => x.Id == previousId, cancellationToken)
-                : null;
-            if (previous is { Status: WorkflowStatus.Cancelled or WorkflowStatus.Voided })
-            {
-                return Result.Failure<TaxDeclarationDto>("PREVIOUS_TAX_DECLARATION_CANCELLED",
-                    $"TD {previous.TaxDeclarationNumber} was cancelled after this TD was drafted; this TD can no longer replace it.");
-            }
+            previous = check.Value;
         }
 
-        // Cancel the replaced TD before approving: the one-approved-TD-per-RPU index is not deferrable.
-        var now = clock.UtcNow;
         var ownsTransaction = db.Database.CurrentTransaction is null;
         var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
         try
         {
-            if (previous is not null)
-            {
-                previous.Status = WorkflowStatus.Cancelled;
-                previous.CancelledAt = now;
-                previous.CancelledBy = currentUser.AppUserId;
-                previous.CancellationReason = $"Cancelled by TD No. {td.TaxDeclarationNumber}.";
-                previous.SupersededByTaxDeclarationId = td.Id;
-                await db.SaveChangesAsync(cancellationToken);
-            }
             if (completes)
             {
-                td.Status = WorkflowStatus.Approved;
-                td.ApprovedBy = currentUser.AppUserId;
-                td.ApprovedAt = now;
+                await TaxDeclarationApproval.ApplyAsync(db, td, previous, currentUser.AppUserId, clock.UtcNow, cancellationToken);
             }
-            await db.SaveChangesAsync(cancellationToken);
+            else
+            {
+                await db.SaveChangesAsync(cancellationToken); // the signed step
+            }
             if (transaction is not null)
             {
                 await transaction.CommitAsync(cancellationToken);
@@ -235,6 +242,10 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         if (td is null)
         {
             return NotFound();
+        }
+        if (td.PropertyTransactionId is not null)
+        {
+            return InTransaction();
         }
         if (td.Status != WorkflowStatus.PendingReview)
         {
@@ -342,6 +353,10 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         return Result.Success(ToDto(annotation));
     }
 
+    private static Result<TaxDeclarationDto> InTransaction() =>
+        Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_IN_TRANSACTION",
+            "This Tax Declaration belongs to a property transaction; it is submitted and approved with the transaction.");
+
     private static Result<TaxDeclarationDto> NotFound() =>
         Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NOT_FOUND", "No Tax Declaration was found with the given id.");
 
@@ -378,5 +393,6 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         td.CancelledAt,
         td.CancellationReason,
         td.SupersededByTaxDeclarationId,
-        td.Annotations.Count(a => a.LiftedAt == null));
+        td.Annotations.Count(a => a.LiftedAt == null),
+        td.PropertyTransactionId);
 }

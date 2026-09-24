@@ -30,4 +30,8 @@ public sealed class PropertyTaxpayer : AuditableEntity
     public bool IsCurrent { get; set; } = true;
     /// <summary>Why the row was ended, e.g. "owner identified" for an unknown-owner declaration.</summary>
     public string? EndReason { get; set; }
+
+    /// <summary>The transaction (e.g. a transfer) that started or ended this link, if any (CLAUDE.md §35).</summary>
+    public Guid? StartedByTransactionId { get; set; }
+    public Guid? EndedByTransactionId { get; set; }
 }

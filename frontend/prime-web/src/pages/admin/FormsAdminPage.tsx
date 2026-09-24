@@ -15,6 +15,7 @@ import {
   useNumberingSchemes,
 } from '../../api/forms';
 import { apiGet, ApiRequestError } from '../../lib/apiClient';
+import { TransactionTypesTab } from './TransactionTypesTab';
 import type {
   ApprovalChainDto,
   FormAuthority,
@@ -30,7 +31,7 @@ const statusColor: Partial<Record<WorkflowStatus, string>> = { Draft: 'default',
 const statusTag = (s: WorkflowStatus) => <Tag color={statusColor[s]}>{s}</Tag>;
 const period = (x: { effectiveDate: string; endDate: string | null }) => `${x.effectiveDate} → ${x.endDate ?? 'open'}`;
 
-const kinds: NumberedDocumentKind[] = ['PropertyIdentificationNumber', 'TaxDeclaration', 'TaxBill', 'Faas', 'NoticeOfAssessment', 'OfficialReceipt'];
+const kinds: NumberedDocumentKind[] = ['PropertyIdentificationNumber', 'TaxDeclaration', 'TaxBill', 'Faas', 'NoticeOfAssessment', 'OfficialReceipt', 'PropertyTransaction'];
 const authorities: FormAuthority[] = ['PrimeProvisional', 'Lam', 'Blgf', 'LguOrdinance', 'Other'];
 const subjects: FormSubjectType[] = ['TaxBill', 'TaxDeclaration'];
 
@@ -253,7 +254,7 @@ function ChainsTab() {
             steps: v.steps.map((s: { stepCode: string; label: string; signatoryPosition?: string }, i: number) => ({ ...s, sequence: i + 1 })),
           }, { onSuccess: () => { form.resetFields(); setOpen(false); } })}>
           <Form.Item name="subjectType" label="Approves" rules={[{ required: true }]}>
-            <Select options={[{ value: 'Assessment', label: 'Assessment' }]} />
+            <Select options={['Assessment', 'TaxDeclaration', 'PropertyTransaction'].map((s) => ({ value: s, label: s }))} />
           </Form.Item>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Typography.Text strong>Steps, in signing order</Typography.Text>
@@ -297,6 +298,7 @@ export function FormsAdminPage() {
           { key: 'numbering', label: 'Numbering schemes', children: <NumberingTab /> },
           { key: 'forms', label: 'Form versions', children: <FormsTab /> },
           { key: 'chains', label: 'Approval chains', children: <ChainsTab /> },
+          { key: 'transactions', label: 'Transaction types', children: <TransactionTypesTab /> },
         ]} />
       </Card>
     </div>

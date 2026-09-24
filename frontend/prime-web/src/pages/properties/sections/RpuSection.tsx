@@ -43,7 +43,8 @@ function TaxDeclarationsForRpu({ propertyId, rpuId }: { propertyId: string; rpuI
     modal.confirm({
       title: kind === 'approve' ? `Approve TD ${td.taxDeclarationNumber}?` : `Submit TD ${td.taxDeclarationNumber} for review?`,
       content: kind === 'approve' && replaces ? `Approval cancels TD ${replaces}, which this declaration replaces.` : undefined,
-      onOk: () => action.mutateAsync({ id: td.id, action: kind }),
+      // A failure shows in the alert above the table; let the dialog close rather than stay open over it.
+      onOk: () => action.mutateAsync({ id: td.id, action: kind }).catch(() => undefined),
     });
   }
 
@@ -85,9 +86,12 @@ function TaxDeclarationsForRpu({ propertyId, rpuId }: { propertyId: string; rpuI
             title: 'Actions',
             render: (_, td) => (
               <Space size={4} wrap>
-                {td.status === 'Draft' && <Button size="small" onClick={() => run(td, 'submit-for-review')}>Submit</Button>}
-                {td.status === 'PendingReview' && <Button size="small" type="primary" onClick={() => run(td, 'approve')}>Approve</Button>}
-                {td.status === 'PendingReview' && <Button size="small" danger onClick={() => run(td, 'reject')}>Reject</Button>}
+                {td.propertyTransactionId && ['Draft', 'PendingReview'].includes(td.status) && (
+                  <Tooltip title="Submitted and approved with its property transaction (Transactions tab)"><Tag color="purple">In transaction</Tag></Tooltip>
+                )}
+                {!td.propertyTransactionId && td.status === 'Draft' && <Button size="small" onClick={() => run(td, 'submit-for-review')}>Submit</Button>}
+                {!td.propertyTransactionId && td.status === 'PendingReview' && <Button size="small" type="primary" onClick={() => run(td, 'approve')}>Approve</Button>}
+                {!td.propertyTransactionId && td.status === 'PendingReview' && <Button size="small" danger onClick={() => run(td, 'reject')}>Reject</Button>}
                 {td.status === 'Approved' && <Button size="small" danger onClick={() => run(td, 'cancel')}>Cancel TD</Button>}
                 <Badge count={td.activeAnnotationCount} size="small">
                   <Button size="small" onClick={() => setAnnotating(td)}>Annotations</Button>

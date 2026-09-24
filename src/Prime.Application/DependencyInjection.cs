@@ -10,6 +10,7 @@ using Prime.Application.Features.Approvals;
 using Prime.Application.Features.Billing.Bills;
 using Prime.Application.Features.Forms;
 using Prime.Application.Features.Numbering;
+using Prime.Application.Features.Transactions;
 using Prime.Application.Features.Billing.Rules;
 using Prime.Application.Features.Gis;
 using Prime.Application.Features.Gis.ReferenceLayers;
@@ -40,6 +41,7 @@ public static class DependencyInjection
         services.AddScoped<INumberingService, NumberingService>();
         services.AddScoped<IApprovalChainService, ApprovalChainService>();
         services.AddScoped<IFormService, FormService>();
+        services.AddScoped<ITransactionService, TransactionService>();
         services.AddScoped<IFormDataProvider, TaxBillFormDataProvider>();
         services.AddScoped<IFormDataProvider, TaxDeclarationFormDataProvider>();
         services.AddScoped<IRealPropertyUnitService, RealPropertyUnitService>();

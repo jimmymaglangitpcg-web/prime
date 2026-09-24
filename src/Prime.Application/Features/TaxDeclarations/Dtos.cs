@@ -12,7 +12,8 @@ public sealed record CreateTaxDeclarationRequest(
     Guid? SubClassificationId,
     int AssessmentYear,
     Guid? PreviousTaxDeclarationId,
-    string? Remarks);
+    string? Remarks,
+    Guid? PropertyTransactionId = null);
 
 public sealed record TaxDeclarationDto(
     Guid Id,
@@ -38,7 +39,8 @@ public sealed record TaxDeclarationDto(
     DateTimeOffset? CancelledAt,
     string? CancellationReason,
     Guid? SupersededByTaxDeclarationId,
-    int ActiveAnnotationCount);
+    int ActiveAnnotationCount,
+    Guid? PropertyTransactionId);
 
 public sealed record TaxDeclarationReasonRequest(string Reason);
 

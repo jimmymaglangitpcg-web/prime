@@ -6,6 +6,7 @@ import { OwnersSection } from './sections/OwnersSection';
 import { ParcelsSection } from './sections/ParcelsSection';
 import { RpuSection } from './sections/RpuSection';
 import { BillingSection } from './sections/BillingSection';
+import { TransactionsSection } from './sections/TransactionsSection';
 
 /**
  * CLAUDE.md §50 Property Profile — "one of the most important screens in
@@ -68,6 +69,7 @@ export function PropertyProfilePage() {
             { key: 'owners', label: `Owners (${profile.owners.length})`, children: <OwnersSection propertyId={property.id} owners={profile.owners} /> },
             { key: 'parcels', label: `Parcels (${profile.parcels.length})`, children: <ParcelsSection propertyId={property.id} parcels={profile.parcels} /> },
             { key: 'rpus', label: `RPUs (${profile.rpus.length})`, children: <RpuSection propertyId={property.id} rpus={profile.rpus} /> },
+            { key: 'transactions', label: 'Transactions', children: <TransactionsSection propertyId={property.id} rpus={profile.rpus} taxDeclarations={profile.taxDeclarations} /> },
             { key: 'billing', label: 'Billing', children: <BillingSection propertyId={property.id} rpus={profile.rpus} /> },
           ]}
         />

@@ -10,11 +10,14 @@ export function AddTaxDeclarationModal({
   rpuId,
   open,
   onClose,
+  transactionId,
 }: {
   propertyId: string;
   rpuId: string;
   open: boolean;
   onClose: () => void;
+  /** Draft the TD under this property transaction; it is then approved with the transaction. */
+  transactionId?: string;
 }) {
   const [form] = Form.useForm();
   const { data: classifications } = useClassifications();
@@ -31,7 +34,7 @@ export function AddTaxDeclarationModal({
   }
 
   return (
-    <Modal title="Add Tax Declaration" open={open} onCancel={handleClose} footer={null} destroyOnHidden width={600}>
+    <Modal title={transactionId ? 'Add Tax Declaration to transaction' : 'Add Tax Declaration'} open={open} onCancel={handleClose} footer={null} destroyOnHidden width={600}>
       {createTaxDeclaration.isError && (
         <Alert
           type="error"
@@ -62,6 +65,7 @@ export function AddTaxDeclarationModal({
             assessmentYear: values.assessmentYear,
             remarks: values.remarks,
             previousTaxDeclarationId: values.previousTaxDeclarationId,
+            propertyTransactionId: transactionId,
           };
           createTaxDeclaration.mutate(request, { onSuccess: handleClose });
         }}

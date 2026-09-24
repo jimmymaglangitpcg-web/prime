@@ -325,6 +325,8 @@ export interface CreateTaxDeclarationRequest {
   assessmentYear: number;
   previousTaxDeclarationId?: string | null;
   remarks?: string | null;
+  /** Draft the TD under this property transaction (approved with it). */
+  propertyTransactionId?: string;
 }
 
 export interface TaxDeclarationDto {
@@ -352,6 +354,8 @@ export interface TaxDeclarationDto {
   cancellationReason: string | null;
   supersededByTaxDeclarationId: string | null;
   activeAnnotationCount: number;
+  /** Set when the TD was drafted under a property transaction; it is approved with the transaction. */
+  propertyTransactionId: string | null;
 }
 
 export interface TaxDeclarationAnnotationDto {
@@ -608,10 +612,11 @@ export type NumberedDocumentKind =
   | 'TaxBill'
   | 'Faas'
   | 'NoticeOfAssessment'
-  | 'OfficialReceipt';
+  | 'OfficialReceipt'
+  | 'PropertyTransaction';
 export type FormAuthority = 'PrimeProvisional' | 'Lam' | 'Blgf' | 'LguOrdinance' | 'Other';
 export type FormSubjectType = 'TaxBill' | 'TaxDeclaration';
-export type ApprovalSubjectType = 'Assessment';
+export type ApprovalSubjectType = 'Assessment' | 'TaxDeclaration' | 'PropertyTransaction';
 
 interface ConfigurationHeader {
   id: string;
@@ -715,4 +720,111 @@ export interface IssuedFormDto {
   cancellationReason: string | null;
   renderedHtmlSha256: string;
   html: string | null;
+}
+
+// --- Property transactions (CLAUDE.md §34–§37; docs/FORMS-REVISION-PLAN.md A5) ---
+
+export type PropertyTransactionKind =
+  | 'NewDiscovery' | 'NewAssessment' | 'Transfer' | 'Subdivision' | 'Consolidation' | 'Reclassification'
+  | 'Reassessment' | 'GeneralRevision' | 'Cancellation' | 'Correction' | 'AdditionOfImprovement' | 'RemovalOfImprovement';
+
+export const transactionKinds: PropertyTransactionKind[] = [
+  'NewDiscovery', 'NewAssessment', 'Transfer', 'Subdivision', 'Consolidation', 'Reclassification',
+  'Reassessment', 'GeneralRevision', 'Cancellation', 'Correction', 'AdditionOfImprovement', 'RemovalOfImprovement',
+];
+
+export interface TransactionRequirementDto {
+  sequence: number;
+  code: string;
+  label: string;
+  isMandatory: boolean;
+  legalBasis: string | null;
+}
+
+export interface TransactionTypeDto {
+  id: string;
+  code: string;
+  name: string;
+  kind: PropertyTransactionKind;
+  rank: number | null;
+  description: string | null;
+  requirements: TransactionRequirementDto[];
+  legalBasis: string;
+  effectiveDate: string;
+  endDate: string | null;
+  status: WorkflowStatus;
+  createdBy: string | null;
+  createdAt: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  remarks: string | null;
+}
+
+export interface CreateTransactionTypeRequest {
+  legalBasis: string;
+  effectiveDate: string;
+  remarks?: string;
+  code: string;
+  name: string;
+  kind: PropertyTransactionKind;
+  rank?: number;
+  description?: string;
+  requirements: { sequence: number; code: string; label: string; isMandatory: boolean; legalBasis?: string }[];
+}
+
+export interface NewPartyRequest {
+  role: PropertyPartyRole;
+  taxpayerId?: string;
+  ownershipTypeId?: string;
+  ownershipPercentage: number;
+}
+
+export interface OpenTransactionRequest {
+  transactionTypeId: string;
+  propertyId: string;
+  effectiveDate: string;
+  description: string;
+  newParties?: NewPartyRequest[];
+  cancelTaxDeclarationIds?: string[];
+}
+
+export interface TransactionRequirementStatusDto extends TransactionRequirementDto {
+  id: string;
+  satisfiedAt: string | null;
+  satisfiedBy: string | null;
+  evidenceReference: string | null;
+  note: string | null;
+}
+
+export interface TransactionTdDto {
+  taxDeclarationId: string;
+  taxDeclarationNumber: string;
+  propertyId: string;
+  status: WorkflowStatus;
+}
+
+export interface PropertyTransactionDto {
+  id: string;
+  transactionNumber: string | null;
+  transactionTypeId: string;
+  typeCode: string;
+  typeName: string;
+  kind: PropertyTransactionKind;
+  propertyId: string;
+  propertyIdentificationNumber: string;
+  effectiveDate: string;
+  description: string;
+  status: WorkflowStatus;
+  createdAt: string;
+  createdBy: string | null;
+  submittedAt: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  closedAt: string | null;
+  closeReason: string | null;
+  requirements: TransactionRequirementStatusDto[];
+  newParties: { id: string; role: PropertyPartyRole; taxpayerId: string | null; name: string; ownershipTypeId: string | null; ownershipPercentage: number }[];
+  issuedTaxDeclarations: TransactionTdDto[];
+  cancelledTaxDeclarations: TransactionTdDto[];
+  relatedProperties: { propertyId: string; propertyIdentificationNumber: string; role: 'Source' | 'Result' }[];
 }

@@ -12,6 +12,7 @@ public enum NumberedDocumentKind
     Faas = 3,
     NoticeOfAssessment = 4,
     OfficialReceipt = 5,
+    PropertyTransaction = 6,
 }
 
 /// <summary>Who prescribes a form version (docs/FORMS-REVISION-PLAN.md §4.1).</summary>
@@ -38,4 +39,5 @@ public enum ApprovalSubjectType
 {
     Assessment = 0,
     TaxDeclaration = 1,
+    PropertyTransaction = 2,
 }

@@ -34,7 +34,8 @@ export function BillingSection({ propertyId, rpus }: { propertyId: string; rpus:
       title: `Post the ${bill.taxYear} bill for ${bill.rpuNumber}?`,
       content: `Total ${formatMoney(bill.total)}. Any bill already posted for this RPU and tax year will be cancelled as superseded.`,
       okText: 'Post bill',
-      onOk: () => postBill.mutateAsync(bill.id),
+      // A failure shows in the alert above the table; let the dialog close rather than stay open over it.
+      onOk: () => postBill.mutateAsync(bill.id).catch(() => undefined),
     });
   }
 

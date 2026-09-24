@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Prime.Domain.Entities;
 using Prime.Domain.Entities.Billing;
 using Prime.Domain.Entities.Forms;
+using Prime.Domain.Entities.Transactions;
 using Prime.Domain.Entities.Workflow;
 using Prime.Domain.Entities.Gis;
 using Prime.Domain.Entities.Identity;
@@ -44,6 +45,13 @@ public interface IApplicationDbContext
     DbSet<ApprovalChain> ApprovalChains { get; }
     DbSet<ApprovalChainStep> ApprovalChainSteps { get; }
     DbSet<ApprovalRecord> ApprovalRecords { get; }
+    DbSet<TransactionType> TransactionTypes { get; }
+    DbSet<TransactionTypeRequirement> TransactionTypeRequirements { get; }
+    DbSet<PropertyTransaction> PropertyTransactions { get; }
+    DbSet<PropertyTransactionRequirement> PropertyTransactionRequirements { get; }
+    DbSet<PropertyTransactionParty> PropertyTransactionParties { get; }
+    DbSet<PropertyTransactionTdCancellation> PropertyTransactionTdCancellations { get; }
+    DbSet<PropertyTransactionProperty> PropertyTransactionProperties { get; }
     /// <summary>Read by forms and approvals for signatory names.</summary>
     DbSet<AppUser> AppUsers { get; }
     DbSet<BarangayBoundary> BarangayBoundaries { get; }
