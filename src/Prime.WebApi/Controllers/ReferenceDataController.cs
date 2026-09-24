@@ -41,4 +41,24 @@ public class ReferenceDataController(IReferenceDataService referenceDataService)
     [HttpGet("property-types")]
     public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetPropertyTypes(CancellationToken cancellationToken) =>
         Ok(await referenceDataService.GetPropertyTypesAsync(cancellationToken));
+
+    [HttpGet("road-types")]
+    public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetRoadTypes(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetRoadTypesAsync(cancellationToken));
+
+    [HttpGet("conditions")]
+    public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetConditions(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetConditionsAsync(cancellationToken));
+
+    [HttpGet("building-types")]
+    public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetBuildingTypes(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetBuildingTypesAsync(cancellationToken));
+
+    [HttpGet("structural-types")]
+    public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetStructuralTypes(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetStructuralTypesAsync(cancellationToken));
+
+    [HttpGet("machinery-types")]
+    public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetMachineryTypes(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetMachineryTypesAsync(cancellationToken));
 }

@@ -14,19 +14,32 @@ Assessment, Mapping, Billing and Collection Platform.
 
 ## Status
 
-**Phase 4 — Property Registry: backend and frontend UI complete** (see
+**Phases 0–6 complete and verified** (see
 [docs/DEVELOPMENT-ROADMAP.md](docs/DEVELOPMENT-ROADMAP.md) for full
-verification detail). Property/Taxpayer/Parcel/RPU/Tax Declaration
-registration, the Property Profile screen and read model, property
-search, ownership history, real `[Authorize]`-protected REST endpoints,
-and full `AuditLog` persistence (one row per create/update/delete,
-verified against a real database) all work end to end — proven by an
-automated backend test that drives the entire create-property →
-taxpayer → parcel → RPU → tax-declaration flow through real HTTP
-requests, and by a browser-driven (Playwright) run of the same flow
-through the actual UI with zero console errors. Update/Delete endpoints
-and cross-entity search (by TD number, RPU number, or TIN) are not built
-yet. Nothing in the repository has been committed to git yet.
+per-phase verification detail):
+
+- **Phase 4 — Property Registry** (backend + frontend UI): Property/
+  Taxpayer/Parcel/RPU/Tax Declaration registration, the Property Profile
+  screen, property search, ownership history, real
+  `[Authorize]`-protected REST endpoints, and full `AuditLog` persistence.
+- **Land/Building/Machinery registration** (backend + frontend UI,
+  follow-up to Phase 4): registration and display nested under each RPU
+  on the Property Profile, verified live in a browser end to end for all
+  three types.
+- **Phase 5 — Valuation** (backend only): `Smv`/`SmvSchedule`/
+  `AssessmentLevel` versioned reference data and a `ValuationService`
+  computing a reproducible `MarketValue` breakdown for Land/Building/
+  Machinery.
+- **Phase 6 — Assessment** (backend only): `Assessment` applies an
+  `AssessmentLevel` to a `Valuation` to produce `AssessedValue`, through a
+  full maker-checker workflow, plus `GeneralRevisionJob` running batch
+  revisions as a real Hangfire background job.
+
+Update/Delete endpoints and cross-entity search (by TD number, RPU
+number, or TIN) are not built yet, and Phase 5/6 have no frontend UI yet
+(SMV/AssessmentLevel administration, a "compute valuation"/"assess"
+action with breakdown display, a General Revision batch screen). The
+repository has been committed to git and pushed to GitHub.
 
 ## Project specification
 

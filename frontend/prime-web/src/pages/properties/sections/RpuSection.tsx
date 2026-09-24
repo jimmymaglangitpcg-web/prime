@@ -5,6 +5,7 @@ import type { RpuSummaryDto } from '../../../lib/types';
 import { useTaxDeclarationsByRpu } from '../../../api/taxDeclarations';
 import { AddRpuModal } from '../modals/AddRpuModal';
 import { AddTaxDeclarationModal } from '../modals/AddTaxDeclarationModal';
+import { PropertyDetailForRpu } from './PropertyDetailForRpu';
 
 const workflowStatusColor: Record<string, string> = {
   Draft: 'default',
@@ -70,7 +71,12 @@ export function RpuSection({ propertyId, rpus }: { propertyId: string; rpus: Rpu
         pagination={false}
         locale={{ emptyText: <Empty description="No RPUs registered yet" /> }}
         expandable={{
-          expandedRowRender: (rpu) => <TaxDeclarationsForRpu propertyId={propertyId} rpuId={rpu.id} />,
+          expandedRowRender: (rpu) => (
+            <>
+              <PropertyDetailForRpu propertyId={propertyId} rpu={rpu} />
+              <TaxDeclarationsForRpu propertyId={propertyId} rpuId={rpu.id} />
+            </>
+          ),
         }}
         columns={[
           { title: 'RPU Number', dataIndex: 'rpuNumber' },

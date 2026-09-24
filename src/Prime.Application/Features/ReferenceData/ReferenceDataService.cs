@@ -54,6 +54,21 @@ public sealed class ReferenceDataService(IApplicationDbContext db) : IReferenceD
     public Task<IReadOnlyList<LookupDto>> GetPropertyTypesAsync(CancellationToken cancellationToken = default) =>
         GetLookupAsync(db.PropertyTypes, cancellationToken);
 
+    public Task<IReadOnlyList<LookupDto>> GetRoadTypesAsync(CancellationToken cancellationToken = default) =>
+        GetLookupAsync(db.RoadTypes, cancellationToken);
+
+    public Task<IReadOnlyList<LookupDto>> GetConditionsAsync(CancellationToken cancellationToken = default) =>
+        GetLookupAsync(db.Conditions, cancellationToken);
+
+    public Task<IReadOnlyList<LookupDto>> GetBuildingTypesAsync(CancellationToken cancellationToken = default) =>
+        GetLookupAsync(db.BuildingTypes, cancellationToken);
+
+    public Task<IReadOnlyList<LookupDto>> GetStructuralTypesAsync(CancellationToken cancellationToken = default) =>
+        GetLookupAsync(db.StructuralTypes, cancellationToken);
+
+    public Task<IReadOnlyList<LookupDto>> GetMachineryTypesAsync(CancellationToken cancellationToken = default) =>
+        GetLookupAsync(db.MachineryTypes, cancellationToken);
+
     private static async Task<IReadOnlyList<LookupDto>> GetLookupAsync<T>(IQueryable<T> query, CancellationToken cancellationToken)
         where T : LookupEntity
     {

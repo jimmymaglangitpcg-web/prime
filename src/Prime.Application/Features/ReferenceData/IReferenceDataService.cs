@@ -17,4 +17,9 @@ public interface IReferenceDataService
     Task<IReadOnlyList<LookupDto>> GetSubClassificationsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LookupDto>> GetOwnershipTypesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LookupDto>> GetPropertyTypesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LookupDto>> GetRoadTypesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LookupDto>> GetConditionsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LookupDto>> GetBuildingTypesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LookupDto>> GetStructuralTypesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LookupDto>> GetMachineryTypesAsync(CancellationToken cancellationToken = default);
 }

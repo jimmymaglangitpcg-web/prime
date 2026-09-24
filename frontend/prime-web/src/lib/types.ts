@@ -268,3 +268,129 @@ export interface TaxDeclarationDto {
   remarks: string | null;
   createdAt: string;
 }
+
+// --- Land -----------------------------------------------------------
+
+export interface CreateLandRequest {
+  rpuId: string;
+  area: number;
+  areaUnit?: string | null;
+  classificationId: string;
+  actualUseId: string;
+  subClassificationId?: string | null;
+  zoneId?: string | null;
+  locationFactor?: number | null;
+  roadFrontage?: number | null;
+  roadTypeId?: string | null;
+  isCornerLot: boolean;
+  zoning?: string | null;
+}
+
+export interface LandDto {
+  id: string;
+  rpuId: string;
+  propertyId: string;
+  area: number;
+  areaUnit: string;
+  classificationId: string;
+  classificationName: string;
+  actualUseId: string;
+  actualUseName: string;
+  subClassificationId: string | null;
+  zoneId: string | null;
+  locationFactor: number | null;
+  roadFrontage: number | null;
+  roadTypeId: string | null;
+  isCornerLot: boolean;
+  zoning: string | null;
+  marketValue: number | null;
+  assessedValue: number | null;
+  status: RecordStatus;
+  createdAt: string;
+}
+
+// --- Building -----------------------------------------------------------
+
+export interface CreateBuildingRequest {
+  rpuId: string;
+  buildingTypeId: string;
+  structuralTypeId: string;
+  actualUseId: string;
+  numberOfStoreys?: number | null;
+  floorArea: number;
+  totalFloorArea: number;
+  yearConstructed?: number | null;
+  yearCompleted?: number | null;
+  conditionId: string;
+  completionPercentage?: number | null;
+}
+
+export interface BuildingDto {
+  id: string;
+  rpuId: string;
+  propertyId: string;
+  buildingTypeId: string;
+  buildingTypeName: string;
+  structuralTypeId: string;
+  structuralTypeName: string;
+  actualUseId: string;
+  actualUseName: string;
+  numberOfStoreys: number;
+  floorArea: number;
+  totalFloorArea: number;
+  yearConstructed: number | null;
+  yearCompleted: number | null;
+  conditionId: string;
+  conditionName: string;
+  completionPercentage: number;
+  marketValue: number | null;
+  depreciation: number | null;
+  depreciatedValue: number | null;
+  assessedValue: number | null;
+  status: RecordStatus;
+  createdAt: string;
+}
+
+// --- Machinery -----------------------------------------------------------
+
+export interface CreateMachineryRequest {
+  rpuId: string;
+  machineryTypeId: string;
+  description?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  capacity?: number | null;
+  capacityUnit?: string | null;
+  dateAcquired?: string | null;
+  acquisitionCost: number;
+  installationCost?: number | null;
+  otherCost?: number | null;
+  economicLifeYears?: number | null;
+  remainingLifeYears?: number | null;
+}
+
+export interface MachineryDto {
+  id: string;
+  rpuId: string;
+  propertyId: string;
+  machineryTypeId: string;
+  machineryTypeName: string;
+  description: string | null;
+  brand: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  capacity: number | null;
+  capacityUnit: string | null;
+  dateAcquired: string | null;
+  acquisitionCost: number;
+  installationCost: number | null;
+  otherCost: number | null;
+  economicLifeYears: number | null;
+  remainingLifeYears: number | null;
+  depreciation: number | null;
+  marketValue: number | null;
+  assessedValue: number | null;
+  status: RecordStatus;
+  createdAt: string;
+}

@@ -704,6 +704,44 @@ each is 1:1 with its RPU):
   `NumberOfStoreys` to 1, `CompletionPercentage` to 100) against the real
   local database.
 
+### Follow-up (2026-09-23): Land/Building/Machinery registration UI
+
+The frontend counterpart to the backend follow-up above — CLAUDE.md §50
+lists "Land, Buildings, Machinery" as required Property Profile sections,
+and there was still no way for a real user to register any of the three.
+
+- Registration + display nested under each RPU row on the Property
+  Profile (`PropertyDetailForRpu.tsx`, dispatching on `rpu.rpuType`),
+  following the exact `TaxDeclarationsForRpu` pattern Phase 4 already
+  established: an RPU-scoped fetch that shows an "Add {Type}" button when
+  nothing exists yet (a `*_NOT_FOUND` response, mapped to HTTP 404, is the
+  expected "not registered" signal here — not an error), or a compact
+  `Descriptions` view once it does.
+- **A second real gap found while building this**: `IReferenceDataService`/
+  `ReferenceDataController` never exposed `RoadType`/`Condition`/
+  `BuildingType`/`StructuralType`/`MachineryType` as read-only lookups —
+  needed to populate the new forms' dropdowns, closed with five one-line
+  additions following the existing `GetLookupAsync<T>` pattern exactly.
+- **Scope explicitly limited to registration + display** — no "compute
+  valuation"/"assess" action or breakdown view was added here, since that
+  would need SMV/AssessmentLevel data to exist and be `Approved` first,
+  and no admin UI for creating those exists yet either. Noted as the next
+  natural follow-up, not silently dropped.
+- Verified live in a real browser (Playwright), not just by build/lint:
+  registered a property, added a Land RPU, a Building RPU, and a
+  Machinery RPU, and successfully registered and displayed details for
+  all three, screenshotted at each step. `BuildingTypes`/`StructuralTypes`/
+  `Conditions`/`MachineryTypes` had zero rows in the local dev database
+  before this (no admin UI exists yet to create them) — one `DEMO_`-
+  labeled row per table was inserted directly via SQL to make this
+  verification possible (CLAUDE.md §81 — clearly-labeled demo data, not
+  an invented legal value), and left in place as reusable seed data for
+  future manual testing. The test property itself was deleted afterward
+  (real HTTP traffic, not a rolled-back test transaction).
+- `npm run build` (`tsc -b`, full typecheck) and `npm run lint` both
+  clean — per this project's own recorded lesson that a dev-server pass
+  alone does not catch type errors.
+
 ## Phase 7 — GIS
 
 **Goal**: the map is live and linked to the Property Profile.
@@ -846,27 +884,26 @@ per-phase tasks:
 
 ## Immediate next action
 
-Phases 0–6 are complete and verified (backend + frontend UI through Phase
-4; Phase 5's Valuation and Phase 6's Assessment/General Revision backend,
-see status above — no UI for either yet; the Land/Building/Machinery
-registration backend gap flagged after Phase 6 was closed as a follow-up,
-see above — still no UI for that either). The repository was committed
-for the first time on 2026-09-23 (root commit, all of Phases 0–5) and
-pushed to `origin` (GitHub) — Phase 6's work and the registration
-follow-up are normal commits from here. Candidates for what's next, in no
-particular priority order:
+Phases 0–6 are complete and verified, including the Land/Building/
+Machinery registration follow-up (backend **and** frontend UI — see
+status above). What's genuinely still missing UI: Phase 5 (SMV/
+AssessmentLevel administration) and Phase 6 (a "compute valuation"/
+"assess" action with breakdown display, a General Revision batch
+screen) — both backend-complete, no UI yet. The repository has been
+committed and pushed to `origin` (GitHub) through this work. Candidates
+for what's next, in no particular priority order:
 
 - **Phase 7 — GIS**: the natural next phase per the roadmap sequence —
   PostGIS-backed parcel geometry, map rendering, spatial search, parcel →
   Property Profile navigation. Needs the canonical SRID open question
   (docs/DATABASE.md §"Spatial reference system") resolved first.
-- **Phase 4/5/6 UI**: property-detail (Land/Building/Machinery)
-  registration forms, SMV/AssessmentLevel/Assessment administration, a
+- **Phase 5/6 UI**: SMV/AssessmentLevel administration screens, a
   "compute valuation" + "assess" action with breakdown view on the
-  Property Profile, a General Revision batch screen with progress — all
-  deferred backend-first, same precedent as Phase 4's own UI. The backend
-  is now fully in place for all of these (no more service/controller
-  gaps blocking it) — this is now purely a frontend task.
+  Property Profile (now that Land/Building/Machinery can actually be
+  registered, there's something real to value/assess), a General
+  Revision batch screen with progress — deferred backend-first, same
+  precedent as every other phase's UI. The backend has zero remaining
+  service/controller gaps for any of this.
 - Remaining Phase 4 items: **Update/Delete** endpoints (now that Phase 6
   established a second "versioned, never-overwritten" precedent beyond
   Phase 5's, a design pass here has more to generalize from — see Phase 6
