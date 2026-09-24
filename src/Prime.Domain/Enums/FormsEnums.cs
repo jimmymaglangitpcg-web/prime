@@ -37,4 +37,5 @@ public enum FormSubjectType
 public enum ApprovalSubjectType
 {
     Assessment = 0,
+    TaxDeclaration = 1,
 }

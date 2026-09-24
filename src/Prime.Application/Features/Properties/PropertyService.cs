@@ -87,31 +87,7 @@ public sealed class PropertyService(IApplicationDbContext db, IValidator<CreateP
             return Result.Failure<PropertyProfileDto>("PROPERTY_NOT_FOUND", "No property was found with the given id.");
         }
 
-        var ownerRows = await db.PropertyTaxpayers
-            .Where(pt => pt.PropertyId == propertyId)
-            .Select(pt => new
-            {
-                pt.Id,
-                pt.TaxpayerId,
-                Taxpayer = new { pt.Taxpayer!.TaxpayerType, pt.Taxpayer.LastName, pt.Taxpayer.FirstName, pt.Taxpayer.MiddleName, pt.Taxpayer.Suffix, pt.Taxpayer.CorporateName },
-                OwnershipTypeName = pt.OwnershipType!.Name,
-                pt.OwnershipPercentage,
-                pt.StartDate,
-                pt.EndDate,
-                pt.IsCurrent,
-            })
-            .OrderByDescending(x => x.IsCurrent).ThenByDescending(x => x.StartDate)
-            .ToListAsync(cancellationToken);
-
-        var owners = ownerRows.Select(o => new PropertyOwnerDto(
-            o.Id,
-            o.TaxpayerId,
-            TaxpayerNameFormatter.Format(o.Taxpayer.TaxpayerType, o.Taxpayer.LastName, o.Taxpayer.FirstName, o.Taxpayer.MiddleName, o.Taxpayer.Suffix, o.Taxpayer.CorporateName),
-            o.OwnershipTypeName,
-            o.OwnershipPercentage,
-            o.StartDate,
-            o.EndDate,
-            o.IsCurrent)).ToList();
+        var owners = await PropertyParties.ProjectAsync(db.PropertyTaxpayers.Where(pt => pt.PropertyId == propertyId), cancellationToken);
 
         var parcels = await db.Parcels
             .Where(p => p.PropertyId == propertyId)

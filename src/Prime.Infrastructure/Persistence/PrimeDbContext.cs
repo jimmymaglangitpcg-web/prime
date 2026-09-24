@@ -67,6 +67,8 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<RoadSegment> RoadSegments => Set<RoadSegment>();
     public DbSet<RealPropertyUnit> RealPropertyUnits => Set<RealPropertyUnit>();
     public DbSet<TaxDeclaration> TaxDeclarations => Set<TaxDeclaration>();
+    public DbSet<TaxDeclarationAnnotation> TaxDeclarationAnnotations => Set<TaxDeclarationAnnotation>();
+    public DbSet<AnnotationType> AnnotationTypes => Set<AnnotationType>();
     public DbSet<Land> Lands => Set<Land>();
     public DbSet<Building> Buildings => Set<Building>();
     public DbSet<BuildingComponent> BuildingComponents => Set<BuildingComponent>();

@@ -51,6 +51,8 @@ public interface IApplicationDbContext
     DbSet<RoadSegment> RoadSegments { get; }
     DbSet<RealPropertyUnit> RealPropertyUnits { get; }
     DbSet<TaxDeclaration> TaxDeclarations { get; }
+    DbSet<TaxDeclarationAnnotation> TaxDeclarationAnnotations { get; }
+    DbSet<AnnotationType> AnnotationTypes { get; }
     DbSet<Land> Lands { get; }
     DbSet<Building> Buildings { get; }
     DbSet<BuildingComponent> BuildingComponents { get; }

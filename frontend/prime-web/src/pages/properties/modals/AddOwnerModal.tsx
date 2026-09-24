@@ -4,11 +4,12 @@ import dayjs from 'dayjs';
 import { useTaxpayerSearch, useAddOwner } from '../../../api/taxpayers';
 import { useOwnershipTypes } from '../../../api/referenceData';
 import { TaxpayerForm } from '../../../components/TaxpayerForm';
-import type { AddOwnerRequest, TaxpayerDto } from '../../../lib/types';
+import { partyRoleLabel, type AddOwnerRequest, type PropertyPartyRole, type TaxpayerDto } from '../../../lib/types';
 import { ApiRequestError } from '../../../lib/apiClient';
 
 export function AddOwnerModal({ propertyId, open, onClose }: { propertyId: string; open: boolean; onClose: () => void }) {
-  const [form] = Form.useForm<{ taxpayerId: string; ownershipTypeId: string; ownershipPercentage: number; startDate: dayjs.Dayjs }>();
+  const [form] = Form.useForm<{ role: PropertyPartyRole; taxpayerId?: string; ownershipTypeId?: string; ownershipPercentage?: number; startDate: dayjs.Dayjs }>();
+  const role = Form.useWatch('role', form) ?? 'Owner';
   const [taxpayerSearchTerm, setTaxpayerSearchTerm] = useState('');
   const [showCreateTaxpayer, setShowCreateTaxpayer] = useState(false);
 
@@ -31,13 +32,13 @@ export function AddOwnerModal({ propertyId, open, onClose }: { propertyId: strin
   }
 
   return (
-    <Modal title="Add Property Owner" open={open} onCancel={handleClose} footer={null} destroyOnHidden>
+    <Modal title="Add Party to Property" open={open} onCancel={handleClose} footer={null} destroyOnHidden>
       {addOwner.isError && (
         <Alert
           type="error"
           showIcon
           style={{ marginBottom: 16 }}
-          title="Could not add owner"
+          title="Could not add party"
           description={addOwner.error instanceof ApiRequestError ? addOwner.error.apiError.message : (addOwner.error as Error).message}
         />
       )}
@@ -57,14 +58,21 @@ export function AddOwnerModal({ propertyId, open, onClose }: { propertyId: strin
           layout="vertical"
           onFinish={(values) => {
             const request: AddOwnerRequest = {
-              taxpayerId: values.taxpayerId,
-              ownershipTypeId: values.ownershipTypeId,
-              ownershipPercentage: values.ownershipPercentage,
+              role: values.role,
+              taxpayerId: values.role === 'UnknownOwner' ? undefined : values.taxpayerId,
+              ownershipTypeId: values.role === 'Owner' ? values.ownershipTypeId : undefined,
+              ownershipPercentage: values.role === 'UnknownOwner' ? 0 : values.ownershipPercentage ?? 0,
               startDate: values.startDate.format('YYYY-MM-DD'),
             };
             addOwner.mutate(request, { onSuccess: handleClose });
           }}
         >
+          <Form.Item name="role" label="Capacity (LGC §§204–205)" initialValue="Owner" rules={[{ required: true }]}
+            extra={role === 'UnknownOwner' ? 'Declared by the assessor against an unknown owner (§204). Ended automatically when an owner is added.' : undefined}>
+            <Select options={(Object.keys(partyRoleLabel) as PropertyPartyRole[]).map((r) => ({ value: r, label: partyRoleLabel[r] }))} />
+          </Form.Item>
+
+          {role !== 'UnknownOwner' && (<>
           <Form.Item name="taxpayerId" label="Taxpayer" rules={[{ required: true, message: 'Select a taxpayer' }]}>
             <Select
               showSearch
@@ -83,6 +91,9 @@ export function AddOwnerModal({ propertyId, open, onClose }: { propertyId: strin
             </Button>
           </Space>
 
+          </>)}
+
+          {role === 'Owner' && (<>
           <Form.Item name="ownershipTypeId" label="Ownership Type" rules={[{ required: true, message: 'Select an ownership type' }]}>
             <Select options={ownershipTypes?.map((o) => ({ value: o.id, label: o.name }))} />
           </Form.Item>
@@ -101,6 +112,7 @@ export function AddOwnerModal({ propertyId, open, onClose }: { propertyId: strin
               parser={(value) => (value ? Number(value.replace('%', '')) : 0)}
             />
           </Form.Item>
+          </>)}
 
           <Form.Item name="startDate" label="Effective Start Date" rules={[{ required: true, message: 'Select a start date' }]} initialValue={dayjs()}>
             <DatePicker style={{ width: '100%' }} />
@@ -108,7 +120,7 @@ export function AddOwnerModal({ propertyId, open, onClose }: { propertyId: strin
 
           <Form.Item>
             <Button type="primary" htmlType="submit" loading={addOwner.isPending}>
-              Add Owner
+              Add
             </Button>
           </Form.Item>
         </Form>

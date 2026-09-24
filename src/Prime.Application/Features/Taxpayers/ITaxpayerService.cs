@@ -18,5 +18,6 @@ public interface ITaxpayerService
     /// </summary>
     Task<Result<PropertyOwnerDto>> AddOwnerAsync(AddPropertyOwnerRequest request, CancellationToken cancellationToken = default);
 
+    Task<Result<PropertyOwnerDto>> EndPartyAsync(Guid propertyTaxpayerId, EndPropertyPartyRequest request, CancellationToken cancellationToken = default);
     Task<Result<IReadOnlyList<PropertyOwnerDto>>> GetOwnershipHistoryAsync(Guid propertyId, CancellationToken cancellationToken = default);
 }

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Prime.Application.Common.Interfaces;
 using Prime.Domain.Entities.Forms;
 using Prime.Domain.Enums;
 using Prime.Infrastructure.Persistence;
@@ -12,20 +13,25 @@ namespace Prime.Infrastructure.Documents;
 /// <summary>
 /// Installs PRIME's provisional form versions at startup
 /// (docs/FORMS-REVISION-PLAN.md §4.1, §5 A8) so forms can be issued before
-/// the LAM arrives. A form code is seeded only when it has no version at
-/// all, so a deployment's own (e.g. LAM) versions are never touched. The
-/// seeded rows are system-approved: they carry no legal content and always
-/// render watermarked. Templates are embedded resources
-/// (Documents/Templates/CODE.vN.liquid).
+/// the LAM arrives. Templates are embedded resources
+/// (Documents/Templates/CODE.vN.liquid). Per form code:
+/// <list type="bullet">
+/// <item>no version yet → the latest provisional version is installed, in force from 2020-01-01;</item>
+/// <item>only older provisional versions → the newer one is installed from today and ends its predecessor yesterday;</item>
+/// <item>any non-provisional (e.g. LAM) version exists → nothing is touched.</item>
+/// </list>
+/// Seeded rows are system-approved: they carry no legal content and always
+/// render watermarked. Issued forms keep the version they were issued under.
 /// </summary>
 public sealed class ProvisionalFormSeeder(IServiceScopeFactory scopes, ILogger<ProvisionalFormSeeder> logger) : IHostedService
 {
     public const string LegalBasis = "PRIME provisional layout — not an official form (docs/FORMS-REVISION-PLAN.md)";
 
+    /// <summary>The latest provisional version of each form.</summary>
     private static readonly (string Code, int Version, string Title, FormSubjectType Subject)[] Forms =
     [
         ("TAX_BILL", 1, "Real Property Tax Bill", FormSubjectType.TaxBill),
-        ("TAX_DECLARATION", 1, "Tax Declaration of Real Property", FormSubjectType.TaxDeclaration),
+        ("TAX_DECLARATION", 2, "Tax Declaration of Real Property", FormSubjectType.TaxDeclaration),
     ];
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -34,21 +40,37 @@ public sealed class ProvisionalFormSeeder(IServiceScopeFactory scopes, ILogger<P
         {
             using var scope = scopes.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<PrimeDbContext>();
+            var today = scope.ServiceProvider.GetRequiredService<IClock>().Today;
             foreach (var form in Forms)
             {
-                if (await db.FormDefinitions.AnyAsync(x => x.Code == form.Code, cancellationToken))
+                var existing = await db.FormDefinitions.Where(x => x.Code == form.Code).ToListAsync(cancellationToken);
+                if (existing.Any(x => x.Authority != FormAuthority.PrimeProvisional || x.Version >= form.Version))
                 {
                     continue;
+                }
+                var open = existing.SingleOrDefault(x => x.Status == WorkflowStatus.Approved && x.EndDate is null);
+                var effective = existing.Count == 0 ? new DateOnly(2020, 1, 1) : today;
+                if (open is not null && open.EffectiveDate >= effective)
+                {
+                    continue; // the predecessor started today; install tomorrow on the next start
+                }
+
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+                if (open is not null)
+                {
+                    open.EndDate = effective.AddDays(-1);
+                    await db.SaveChangesAsync(cancellationToken); // UX_FormDefinitions_OpenApproved is not deferrable
                 }
                 db.FormDefinitions.Add(new FormDefinition
                 {
                     Code = form.Code, Version = form.Version, Title = form.Title, SubjectType = form.Subject,
                     Authority = FormAuthority.PrimeProvisional, LegalBasis = LegalBasis,
                     SourceReference = "PRIME provisional template", TemplateBody = ReadTemplate($"{form.Code}.v{form.Version}.liquid"),
-                    EffectiveDate = new DateOnly(2020, 1, 1), Status = WorkflowStatus.Approved, ApprovedAt = DateTimeOffset.UtcNow,
+                    EffectiveDate = effective, Status = WorkflowStatus.Approved, ApprovedAt = DateTimeOffset.UtcNow,
                 });
                 await db.SaveChangesAsync(cancellationToken);
-                logger.LogInformation("Seeded provisional form {FormCode} v{Version}", form.Code, form.Version);
+                await transaction.CommitAsync(cancellationToken);
+                logger.LogInformation("Seeded provisional form {FormCode} v{Version} effective {Effective}", form.Code, form.Version, effective);
             }
         }
         catch (Exception ex) when (ex is DbUpdateException or Npgsql.NpgsqlException or InvalidOperationException)

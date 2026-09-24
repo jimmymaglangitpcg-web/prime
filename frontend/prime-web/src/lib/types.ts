@@ -85,15 +85,32 @@ export interface PropertyDto {
   createdAt: string;
 }
 
+/** Capacity in which property is declared (LGC §§204–205). */
+export type PropertyPartyRole = 'Owner' | 'Administrator' | 'LegalInterestHolder' | 'BeneficialUser' | 'Claimant' | 'UnknownOwner';
+
+export const partyRoleLabel: Record<PropertyPartyRole, string> = {
+  Owner: 'Owner',
+  Administrator: 'Administrator',
+  LegalInterestHolder: 'Person with legal interest',
+  BeneficialUser: 'Beneficial user',
+  Claimant: 'Claimant',
+  UnknownOwner: 'Unknown owner',
+};
+
 export interface PropertyOwnerDto {
   propertyTaxpayerId: string;
-  taxpayerId: string;
+  /** Null only for an unknown owner. */
+  taxpayerId: string | null;
   taxpayerDisplayName: string;
-  ownershipTypeName: string;
+  /** Owners only. */
+  ownershipTypeName: string | null;
   ownershipPercentage: number;
   startDate: string;
   endDate: string | null;
   isCurrent: boolean;
+  role: PropertyPartyRole;
+  endReason: string | null;
+  address: string | null;
 }
 
 export interface ParcelSummaryDto {
@@ -179,8 +196,11 @@ export interface TaxpayerSearchParams {
 }
 
 export interface AddOwnerRequest {
-  taxpayerId: string;
-  ownershipTypeId: string;
+  role: PropertyPartyRole;
+  /** Omitted for an unknown owner. */
+  taxpayerId?: string;
+  /** Owners only. */
+  ownershipTypeId?: string;
   ownershipPercentage: number;
   startDate: string;
 }
@@ -325,6 +345,39 @@ export interface TaxDeclarationDto {
   previousTaxDeclarationId: string | null;
   remarks: string | null;
   createdAt: string;
+  createdBy: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  supersededByTaxDeclarationId: string | null;
+  activeAnnotationCount: number;
+}
+
+export interface TaxDeclarationAnnotationDto {
+  id: string;
+  taxDeclarationId: string;
+  annotationTypeId: string;
+  annotationTypeCode: string;
+  annotationTypeName: string;
+  text: string;
+  referenceNumber: string | null;
+  referenceDate: string | null;
+  effectiveDate: string;
+  createdAt: string;
+  createdBy: string | null;
+  liftedAt: string | null;
+  liftedBy: string | null;
+  liftReason: string | null;
+  liftReference: string | null;
+}
+
+export interface AddTaxDeclarationAnnotationRequest {
+  annotationTypeId: string;
+  text: string;
+  referenceNumber?: string;
+  referenceDate?: string;
+  effectiveDate: string;
 }
 
 // --- Land -----------------------------------------------------------

@@ -41,6 +41,15 @@ export function useOwnershipHistory(propertyId: string | undefined) {
   });
 }
 
+export function useEndParty(propertyId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, endDate, reason }: { id: string; endDate: string; reason: string }) =>
+      apiPost<PropertyOwnerDto>(`/api/property-owners/${id}/end`, { endDate, reason }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['properties', propertyId] }),
+  });
+}
+
 export function useAddOwner(propertyId: string) {
   const queryClient = useQueryClient();
   return useMutation({

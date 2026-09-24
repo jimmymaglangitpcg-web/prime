@@ -1,0 +1,79 @@
+{% comment %}
+  PRIME provisional layout (docs/FORMS-REVISION-PLAN.md). Neutral design built
+  only from PRIME data — no LAM content, no 2004/2006 manual layout. The
+  official Tax Declaration form is prescribed under the LAM (PVS 106 §30.1).
+  v2: parties with their capacity (LGC §§204–205), annotations, cancellation.
+{% endcomment %}
+<style>
+  .hdr { text-align: center; margin-bottom: 10px; }
+  .hdr .lgu { font-weight: bold; font-size: 12pt; }
+  .hdr h1 { font-size: 15pt; margin: 6px 0 2px; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+  th, td { border: 1px solid #555; padding: 3px 5px; font-size: 10pt; vertical-align: top; }
+  th { background: #eee; text-align: left; width: 28%; }
+  .num { text-align: right; }
+  .sigs { display: flex; gap: 16px; margin-top: 28px; flex-wrap: wrap; }
+  .sig { flex: 1; min-width: 160px; text-align: center; }
+  .sig .line { border-top: 1px solid #000; margin-top: 30px; padding-top: 2px; font-weight: bold; }
+  .foot { font-size: 8pt; color: #333; margin-top: 14px; }
+  .cancelled { border: 2px solid #b00; color: #b00; font-weight: bold; text-align: center; padding: 4px; margin: 6px 0; }
+  .lifted { color: #666; text-decoration: line-through; }
+</style>
+<div class="hdr">
+  {% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% else %}<div class="lgu">[LGU name not configured]</div>{% endif %}
+  {% if lgu.office %}<div>{{ lgu.office }}</div>{% endif %}
+  <h1>{{ form.title }}</h1>
+  <div>TD No. {{ td.number }} · Revision {{ td.revisionNumber }}{% if td.status != "Approved" and td.status != "Posted" and td.status != "Cancelled" %} · <b>{{ td.status | upcase }} — NOT APPROVED</b>{% endif %}</div>
+</div>
+{% if td.status == "Cancelled" %}
+<div class="cancelled">CANCELLED{% if td.supersededByNumber %} BY TD No. {{ td.supersededByNumber }}{% endif %} on {{ td.cancelledAt | date_ph }}{% unless td.supersededByNumber %}{% if td.cancellationReason %} — {{ td.cancellationReason }}{% endif %}{% endunless %}</div>
+{% endif %}
+
+<table>
+  <tr><th>Property Identification No.</th><td>{{ property.pin }}</td></tr>
+  <tr><th>Declared in the name of</th><td>{% for o in owners %}{{ o.name }}{% unless o.isOwner or o.role == "UnknownOwner" %} ({{ o.roleLabel }}){% endunless %}{% if o.isOwner and o.sharePercent != 100 %} ({{ o.sharePercent | percent }}){% endif %}{% if o.address %} — {{ o.address }}{% endif %}{% unless forloop.last %}<br>{% endunless %}{% else %}—{% endfor %}</td></tr>
+  <tr><th>Location</th><td>{% if property.street %}{{ property.street }}, {% endif %}{% if property.sitio %}{{ property.sitio }}, {% endif %}{{ property.barangay }}, {{ property.municipality }}, {{ property.province }}</td></tr>
+  <tr><th>Lot / Block / Survey</th><td>{{ property.lotNumber | default: "—" }} / {{ property.blockNumber | default: "—" }} / {{ property.surveyNumber | default: "—" }}</td></tr>
+  <tr><th>Title No. / Tax Map No.</th><td>{{ property.titleNumber | default: "—" }} / {{ property.taxMapNumber | default: "—" }}</td></tr>
+  <tr><th>RPU</th><td>{{ rpu.number }} ({{ rpu.type }})</td></tr>
+  <tr><th>Classification / Actual use</th><td>{{ td.classification }} / {{ td.actualUse }}</td></tr>
+  <tr><th>Taxability</th><td>{{ td.taxability }}</td></tr>
+  <tr><th>Effectivity</th><td>{{ td.effectivityDate | date_ph }} (assessment year {{ td.assessmentYear }})</td></tr>
+  {% if td.previousNumber %}<tr><th>Cancels TD No.</th><td>{{ td.previousNumber }}</td></tr>{% endif %}
+</table>
+
+{% if assessment %}
+<table>
+  <tr><th>Market value</th><td class="num">{{ assessment.marketValue | money }}</td></tr>
+  <tr><th>Assessment level</th><td class="num">{{ assessment.assessmentLevelPercent | percent }}</td></tr>
+  <tr><th>Assessed value</th><td class="num"><b>{{ assessment.assessedValue | money }}</b></td></tr>
+  <tr><th>Assessment effective</th><td>{{ assessment.effectiveDate | date_ph }}</td></tr>
+</table>
+{% else %}
+<p><b>No posted assessment for this RPU yet.</b></p>
+{% endif %}
+
+{% if td.remarks %}<p><b>Remarks:</b> {{ td.remarks }}</p>{% endif %}
+
+{% if annotations.size > 0 %}
+<table>
+  <tr><th colspan="2">Annotations</th></tr>
+  {% for a in annotations %}
+  <tr{% if a.lifted %} class="lifted"{% endif %}><td style="width:28%">{{ a.type }} — {{ a.effectiveDate | date_ph }}</td>
+    <td>{{ a.text }}{% if a.referenceNumber %} (Ref. {{ a.referenceNumber }}{% if a.referenceDate %}, {{ a.referenceDate | date_ph }}{% endif %}){% endif %}{% if a.lifted %} — lifted {{ a.liftedAt | date_ph }}: {{ a.liftReason }}{% endif %}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<div class="sigs">
+  {% for s in signatories %}
+  <div class="sig"><div>{{ s.label }}</div><div class="line">{{ s.name }}</div>{% if s.position %}<div>{{ s.position }}</div>{% endif %}<div>{{ s.signedAt | date_ph }}</div></div>
+  {% else %}
+  <div class="sig"><div>Approved by</div><div class="line">&nbsp;</div></div>
+  {% endfor %}
+</div>
+
+<div class="foot">
+  Issued {{ issue.issuedAt | date_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}.
+  Form {{ form.code }} v{{ form.version }} — {{ form.legalBasis }}.
+</div>

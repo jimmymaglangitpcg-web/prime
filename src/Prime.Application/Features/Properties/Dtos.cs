@@ -50,15 +50,19 @@ public sealed record PropertyProfileDto(
     IReadOnlyList<RpuSummaryDto> Rpus,
     IReadOnlyList<TaxDeclarationSummaryDto> TaxDeclarations);
 
+/// <summary>A party to the property (LGC §§204–205). TaxpayerId is null only for an unknown owner.</summary>
 public sealed record PropertyOwnerDto(
     Guid PropertyTaxpayerId,
-    Guid TaxpayerId,
+    Guid? TaxpayerId,
     string TaxpayerDisplayName,
-    string OwnershipTypeName,
+    string? OwnershipTypeName,
     decimal OwnershipPercentage,
     DateOnly StartDate,
     DateOnly? EndDate,
-    bool IsCurrent);
+    bool IsCurrent,
+    PropertyPartyRole Role,
+    string? EndReason,
+    string? Address);
 
 public sealed record ParcelSummaryDto(
     Guid Id,

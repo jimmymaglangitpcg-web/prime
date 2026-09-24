@@ -23,4 +23,5 @@ public interface IReferenceDataService
     Task<IReadOnlyList<LookupDto>> GetStructuralTypesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LookupDto>> GetMachineryTypesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LookupDto>> GetTaxTypesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LookupDto>> GetAnnotationTypesAsync(CancellationToken cancellationToken = default);
 }

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common.Interfaces;
 using Prime.Domain.Entities;
+using Prime.Domain.Enums;
 
 namespace Prime.Application.Common;
 
@@ -17,7 +18,8 @@ public static class TaxDeclarationLookup
 {
     public static Task<TaxDeclaration?> GetCurrentAsync(IApplicationDbContext db, Guid rpuId, CancellationToken cancellationToken = default) =>
         db.TaxDeclarations
-            .Where(x => x.RpuId == rpuId)
-            .OrderByDescending(x => x.RevisionNumber)
+            .Where(x => x.RpuId == rpuId && x.Status != WorkflowStatus.Cancelled && x.Status != WorkflowStatus.Voided && x.Status != WorkflowStatus.Rejected)
+            .OrderByDescending(x => x.Status == WorkflowStatus.Approved)
+            .ThenByDescending(x => x.RevisionNumber)
             .FirstOrDefaultAsync(cancellationToken);
 }

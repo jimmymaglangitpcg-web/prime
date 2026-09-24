@@ -1009,12 +1009,23 @@ per-phase tasks:
 
 ---
 
+**Supabase brought up to date again (2026-09-25):** read-only check first
+showed 10 of 14 migrations applied and no business data. `BillingRules`,
+`MachineryReplacementCost`, `TaxBills` and `FormsFoundation` were applied
+through the session pooler (port 5432). Verified afterwards:
+- 14/14 in `__EFMigrationsHistory`, and `btree_gist` 1.7 installed;
+- all 18 new tables present, with **RLS enabled and zero policies**
+  (deny-by-default REST, as before);
+- the exclusion, check and filtered-unique constraints present.
+
+`FormDefinitions` is empty there. The provisional forms are seeded when the
+API first starts against Supabase, which still has not been exercised.
+
 ## Immediate next action
 
 Phases 0–8 are complete with DEMO values (Phase 8 — Billing finished
 2026-09-25; see its status block and docs/BILLING.md §6.1 for the defaults
-awaiting LGU/legal confirmation). Commits `0b9c987` (billing rules) and
-`6b3d1f4` (machinery §224/§225) are local and not pushed. Billing steps 2–3
+awaiting LGU/legal confirmation). Commits through `e8034d2` are pushed to `origin`. Billing steps 2–3
 are **uncommitted**. The three newest migrations are applied to the local
 dev DB only, not Supabase. The local dev DB also holds a DEMO billing
 scenario (property `DEMO-BILL-AE94B8`, DEMO tax types and approved DEMO
@@ -1026,9 +1037,11 @@ form definitions with frozen issued snapshots, provisional TAX_BILL and
 TAX_DECLARATION forms, and N-step approval chains for assessments. Also an
 `IClock` on the LGU time zone, which fixes UTC "today" throughout.
 Migration `FormsFoundation` (additive) is applied to the local dev DB only.
-Remaining plan items A4–A10 (owner roles, TD annotations,
-PropertyTransaction, Notice of Assessment, FAAS aggregate, building
-depreciation hook, LAM intake checklist) are not started.
+**A4 done (2026-09-25, uncommitted):** statutory party capacities including
+unknown owner, the TD lifecycle with "cancels / cancelled by" and one
+approved TD per RPU, and TD annotations (plan §12). Migration
+`PartiesAndTdLifecycle` is applied locally only. Next in the plan: **A5
+PropertyTransaction** and the transaction catalogue, then A6–A10.
 
 Candidates, in roadmap order:
 

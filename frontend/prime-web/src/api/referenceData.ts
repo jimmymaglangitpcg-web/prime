@@ -41,6 +41,7 @@ export const useClassifications = () => useLookup('classifications');
 export const useActualUses = () => useLookup('actual-uses');
 export const useSubClassifications = () => useLookup('sub-classifications');
 export const useOwnershipTypes = () => useLookup('ownership-types');
+export const useAnnotationTypes = () => useLookup('annotation-types');
 export const useRoadTypes = () => useLookup('road-types');
 export const useConditions = () => useLookup('conditions');
 export const useBuildingTypes = () => useLookup('building-types');

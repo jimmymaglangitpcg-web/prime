@@ -169,6 +169,11 @@ public class FormsFoundationFlowTests(WebApplicationFactory<Program> factory) : 
         var seed = await BillingFlowTests.SeedPostedAssessmentAsync(s.Services, s.Db, new DateOnly(2026, 1, 1));
         var forms = s.Services.GetRequiredService<IFormService>();
         var request = new IssueFormRequest("TAX_DECLARATION", seed.TaxDeclaration.Id);
+        // A new version must start after the one in force. If the startup seeder installed the
+        // provisional version today, simulate it having been installed earlier (rolled back).
+        // Done before anything loads the row: ExecuteUpdate bypasses EF's change tracker.
+        await s.Db.FormDefinitions.Where(x => x.Code == "TAX_DECLARATION" && x.Status == WorkflowStatus.Approved && x.EndDate == null && x.EffectiveDate >= Today)
+            .ExecuteUpdateAsync(u => u.SetProperty(x => x.EffectiveDate, Today.AddDays(-1)));
         var provisional = (await forms.IssueAsync(request)).Value;
 
         s.User.AppUserId = s.A.Id;
@@ -177,7 +182,8 @@ public class FormsFoundationFlowTests(WebApplicationFactory<Program> factory) : 
             FormSubjectType.TaxDeclaration, FormAuthority.Lam, "DEMO — not a LAM reference",
             "<p>DEMO FIXTURE TD {{ td.number }} AV {{ assessment.assessedValue | money }}</p>"))).Value;
         s.User.AppUserId = s.B.Id;
-        (await forms.ApproveDefinitionAsync(v2.Id)).IsSuccess.ShouldBeTrue();
+        var approvedV2 = await forms.ApproveDefinitionAsync(v2.Id);
+        approvedV2.IsSuccess.ShouldBeTrue(approvedV2.IsSuccess ? null : $"{approvedV2.Code}: {approvedV2.Message}");
 
         var issued = (await forms.IssueAsync(request)).Value;
         issued.FormVersion.ShouldBe(v2.Version);

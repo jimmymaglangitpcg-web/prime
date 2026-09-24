@@ -8,9 +8,16 @@ public sealed class TaxDeclarationConfiguration : IEntityTypeConfiguration<TaxDe
 {
     public void Configure(EntityTypeBuilder<TaxDeclaration> builder)
     {
+        builder.ToTable(t =>
+            t.HasCheckConstraint("CK_TaxDeclarations_Cancelled", "(\"Status\" = 'Cancelled') = (\"CancelledAt\" IS NOT NULL)"));
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.TaxDeclarationNumber).HasMaxLength(50).IsRequired();
+        builder.Property(x => x.CancellationReason).HasMaxLength(1000);
+        builder.HasOne<TaxDeclaration>().WithMany().HasForeignKey(x => x.SupersededByTaxDeclarationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(x => x.Annotations).WithOne().HasForeignKey(x => x.TaxDeclarationId).OnDelete(DeleteBehavior.Restrict);
+        // One current (Approved) Tax Declaration per RPU — docs/FORMS-REVISION-PLAN.md A4.
+        builder.HasIndex(x => x.RpuId).IsUnique().HasFilter("\"Status\" = 'Approved'").HasDatabaseName("UX_TaxDeclarations_Rpu_Approved");
         builder.HasIndex(x => x.TaxDeclarationNumber).IsUnique();
 
         builder.Property(x => x.Taxability).HasConversion<string>().HasMaxLength(20);

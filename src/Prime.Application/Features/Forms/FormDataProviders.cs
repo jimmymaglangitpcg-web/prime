@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Features.Properties;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
 
@@ -33,16 +34,18 @@ internal static class FormData
 
     public static JsonObject ToJson(object value) => (JsonObject)JsonSerializer.SerializeToNode(value, Options)!;
 
-    public static string OwnerName(Taxpayer t) =>
-        t.TaxpayerType == TaxpayerType.Individual
-            ? string.Join(" ", new[] { $"{t.LastName},", t.FirstName, t.MiddleName, t.Suffix }.Where(s => !string.IsNullOrWhiteSpace(s)))
-            : t.CorporateName ?? "(no name)";
-
+    /// <summary>Current parties in whose name the property is declared (LGC §§204–205), named as everywhere else in PRIME.</summary>
     public static async Task<List<object>> CurrentOwnersAsync(IApplicationDbContext db, Guid propertyId, CancellationToken ct) =>
-        (await db.PropertyTaxpayers.Include(x => x.Taxpayer)
-            .Where(x => x.PropertyId == propertyId && x.IsCurrent)
-            .OrderByDescending(x => x.OwnershipPercentage).ToListAsync(ct))
-        .Select(x => (object)new { name = OwnerName(x.Taxpayer!), sharePercent = x.OwnershipPercentage, address = x.Taxpayer!.Address })
+        (await PropertyParties.ProjectAsync(db.PropertyTaxpayers.Where(x => x.PropertyId == propertyId && x.IsCurrent), ct))
+        .Select(o => (object)new
+        {
+            name = o.TaxpayerDisplayName,
+            role = o.Role.ToString(),
+            roleLabel = PropertyParties.RoleLabel(o.Role),
+            isOwner = o.Role == PropertyPartyRole.Owner,
+            sharePercent = o.OwnershipPercentage,
+            address = o.Address,
+        })
         .ToList();
 
     public static async Task<object?> PropertyAsync(IApplicationDbContext db, Guid propertyId, CancellationToken ct) =>
@@ -123,6 +126,7 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
     {
         var td = await db.TaxDeclarations.Include(x => x.Rpu).Include(x => x.Classification).Include(x => x.ActualUse)
             .Include(x => x.PreviousTaxDeclaration)
+            .Include(x => x.Annotations).ThenInclude(a => a.AnnotationType)
             .AsNoTracking().FirstOrDefaultAsync(x => x.Id == subjectId, cancellationToken);
         if (td is null)
         {
@@ -161,7 +165,17 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
                 actualUse = td.ActualUse!.Name,
                 previousNumber = td.PreviousTaxDeclaration?.TaxDeclarationNumber,
                 remarks = td.Remarks,
+                cancelledAt = td.CancelledAt,
+                cancellationReason = td.CancellationReason,
+                supersededByNumber = td.SupersededByTaxDeclarationId is { } supersededBy
+                    ? await db.TaxDeclarations.Where(x => x.Id == supersededBy).Select(x => x.TaxDeclarationNumber).FirstOrDefaultAsync(cancellationToken)
+                    : null,
             },
+            annotations = td.Annotations.OrderBy(a => a.EffectiveDate).ThenBy(a => a.CreatedAt).Select(a => new
+            {
+                type = a.AnnotationType!.Name, text = a.Text, referenceNumber = a.ReferenceNumber, referenceDate = a.ReferenceDate,
+                effectiveDate = a.EffectiveDate, lifted = a.LiftedAt != null, liftedAt = a.LiftedAt, liftReason = a.LiftReason,
+            }),
             rpu = new { number = td.Rpu!.RpuNumber, type = td.Rpu.RpuType.ToString() },
             property = await FormData.PropertyAsync(db, td.PropertyId, cancellationToken),
             owners = await FormData.CurrentOwnersAsync(db, td.PropertyId, cancellationToken),
@@ -175,7 +189,9 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
             },
             signatories,
         });
-        var blocker = td.Status is WorkflowStatus.Cancelled or WorkflowStatus.Voided
+        // A cancelled TD stays printable — certified copies of historical records (LGC §472(b)(9));
+        // the form marks it CANCELLED. A rejected or voided one never became a declaration.
+        var blocker = td.Status is WorkflowStatus.Rejected or WorkflowStatus.Voided
             ? $"A {td.Status} Tax Declaration cannot be issued."
             : null;
         return new FormSubjectData(td.TaxDeclarationNumber, data, blocker);

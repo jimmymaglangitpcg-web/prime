@@ -31,4 +31,24 @@ public sealed record TaxDeclarationDto(
     WorkflowStatus Status,
     Guid? PreviousTaxDeclarationId,
     string? Remarks,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    Guid? CreatedBy,
+    Guid? ApprovedBy,
+    DateTimeOffset? ApprovedAt,
+    DateTimeOffset? CancelledAt,
+    string? CancellationReason,
+    Guid? SupersededByTaxDeclarationId,
+    int ActiveAnnotationCount);
+
+public sealed record TaxDeclarationReasonRequest(string Reason);
+
+public sealed record AddTaxDeclarationAnnotationRequest(
+    Guid AnnotationTypeId, string Text, string? ReferenceNumber, DateOnly? ReferenceDate, DateOnly EffectiveDate);
+
+public sealed record LiftTaxDeclarationAnnotationRequest(string Reason, string? Reference);
+
+public sealed record TaxDeclarationAnnotationDto(
+    Guid Id, Guid TaxDeclarationId, Guid AnnotationTypeId, string AnnotationTypeCode, string AnnotationTypeName,
+    string Text, string? ReferenceNumber, DateOnly? ReferenceDate, DateOnly EffectiveDate,
+    DateTimeOffset CreatedAt, Guid? CreatedBy,
+    DateTimeOffset? LiftedAt, Guid? LiftedBy, string? LiftReason, string? LiftReference);

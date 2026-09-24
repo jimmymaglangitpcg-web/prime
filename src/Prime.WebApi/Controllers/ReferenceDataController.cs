@@ -65,4 +65,8 @@ public class ReferenceDataController(IReferenceDataService referenceDataService)
     [HttpGet("tax-types")]
     public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetTaxTypes(CancellationToken cancellationToken) =>
         Ok(await referenceDataService.GetTaxTypesAsync(cancellationToken));
+
+    [HttpGet("annotation-types")]
+    public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetAnnotationTypes(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetAnnotationTypesAsync(cancellationToken));
 }

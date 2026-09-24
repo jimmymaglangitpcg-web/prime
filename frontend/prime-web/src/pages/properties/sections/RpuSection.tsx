@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Button, Empty, Table, Tag, Typography } from 'antd';
+import { Alert, Badge, Button, Empty, Input, Modal, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
-import type { RpuSummaryDto } from '../../../lib/types';
-import { useTaxDeclarationsByRpu } from '../../../api/taxDeclarations';
+import type { RpuSummaryDto, TaxDeclarationDto } from '../../../lib/types';
+import { useTaxDeclarationsByRpu, useTdAction, type TdAction } from '../../../api/taxDeclarations';
+import { ApiRequestError } from '../../../lib/apiClient';
+import { TdAnnotationsModal } from '../modals/TdAnnotationsModal';
 import { AddRpuModal } from '../modals/AddRpuModal';
 import { AddTaxDeclarationModal } from '../modals/AddTaxDeclarationModal';
 import { PrintFormButton } from '../../../components/PrintFormButton';
@@ -19,42 +21,106 @@ const workflowStatusColor: Record<string, string> = {
   Voided: 'red',
 };
 
+/** TDs of one RPU with their lifecycle (docs/FORMS-REVISION-PLAN.md A4): submit → approve/reject → cancel; annotations; print. */
 function TaxDeclarationsForRpu({ propertyId, rpuId }: { propertyId: string; rpuId: string }) {
   const { data, isLoading } = useTaxDeclarationsByRpu(rpuId);
   const [addOpen, setAddOpen] = useState(false);
+  const [annotating, setAnnotating] = useState<TaxDeclarationDto | null>(null);
+  const [asking, setAsking] = useState<{ td: TaxDeclarationDto; action: 'reject' | 'cancel' } | null>(null);
+  const [reason, setReason] = useState('');
+  const action = useTdAction(propertyId, rpuId);
+  const [modal, modalContext] = Modal.useModal();
+  const numberOf = (id: string | null) => data?.find((td) => td.id === id)?.taxDeclarationNumber;
+
+  function run(td: TaxDeclarationDto, kind: TdAction) {
+    if (kind === 'reject' || kind === 'cancel') {
+      setReason('');
+      action.reset();
+      setAsking({ td, action: kind });
+      return;
+    }
+    const replaces = numberOf(td.previousTaxDeclarationId);
+    modal.confirm({
+      title: kind === 'approve' ? `Approve TD ${td.taxDeclarationNumber}?` : `Submit TD ${td.taxDeclarationNumber} for review?`,
+      content: kind === 'approve' && replaces ? `Approval cancels TD ${replaces}, which this declaration replaces.` : undefined,
+      onOk: () => action.mutateAsync({ id: td.id, action: kind }),
+    });
+  }
 
   return (
     <div style={{ padding: '8px 24px' }}>
+      {modalContext}
       <Button size="small" icon={<PlusOutlined />} onClick={() => setAddOpen(true)} style={{ marginBottom: 8 }}>
         Add Tax Declaration
       </Button>
-      <Table
+      {action.isError && !asking && (
+        <Alert type="error" showIcon closable style={{ marginBottom: 8 }} title="Action failed"
+          description={action.error instanceof ApiRequestError ? action.error.apiError.message : (action.error as Error).message} />
+      )}
+      <Table<TaxDeclarationDto>
         size="small"
         rowKey="id"
         loading={isLoading}
         dataSource={data ?? []}
         pagination={false}
+        scroll={{ x: 'max-content' }}
         locale={{ emptyText: <Empty description="No Tax Declarations yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
         columns={[
           { title: 'TD Number', dataIndex: 'taxDeclarationNumber' },
           { title: 'Revision', dataIndex: 'revisionNumber', width: 90 },
           { title: 'Assessment Year', dataIndex: 'assessmentYear', width: 130 },
           { title: 'Effectivity', dataIndex: 'effectivityDate' },
+          { title: 'Replaces', render: (_, td) => numberOf(td.previousTaxDeclarationId) ?? '—' },
           {
             title: 'Status',
-            dataIndex: 'status',
-            render: (status: string) => <Tag color={workflowStatusColor[status] ?? 'default'}>{status}</Tag>,
+            render: (_, td) => {
+              const tag = <Tag color={workflowStatusColor[td.status] ?? 'default'}>{td.status}</Tag>;
+              const note = td.supersededByTaxDeclarationId
+                ? `Cancelled by TD ${numberOf(td.supersededByTaxDeclarationId) ?? ''}`
+                : td.cancellationReason;
+              return note ? <Tooltip title={note}>{tag}</Tooltip> : tag;
+            },
           },
           {
-            title: 'Form',
-            key: 'form',
-            render: (_: unknown, td: { id: string; status: string }) => (
-              <PrintFormButton formCode="TAX_DECLARATION" subjectId={td.id} issuable={td.status !== 'Cancelled' && td.status !== 'Voided'} />
+            title: 'Actions',
+            render: (_, td) => (
+              <Space size={4} wrap>
+                {td.status === 'Draft' && <Button size="small" onClick={() => run(td, 'submit-for-review')}>Submit</Button>}
+                {td.status === 'PendingReview' && <Button size="small" type="primary" onClick={() => run(td, 'approve')}>Approve</Button>}
+                {td.status === 'PendingReview' && <Button size="small" danger onClick={() => run(td, 'reject')}>Reject</Button>}
+                {td.status === 'Approved' && <Button size="small" danger onClick={() => run(td, 'cancel')}>Cancel TD</Button>}
+                <Badge count={td.activeAnnotationCount} size="small">
+                  <Button size="small" onClick={() => setAnnotating(td)}>Annotations</Button>
+                </Badge>
+                <PrintFormButton formCode="TAX_DECLARATION" subjectId={td.id} issuable={td.status !== 'Rejected' && td.status !== 'Voided'} />
+              </Space>
             ),
           },
         ]}
       />
       <AddTaxDeclarationModal propertyId={propertyId} rpuId={rpuId} open={addOpen} onClose={() => setAddOpen(false)} />
+      <TdAnnotationsModal td={annotating} propertyId={propertyId} onClose={() => setAnnotating(null)} />
+      <Modal
+        title={asking ? `${asking.action === 'reject' ? 'Reject' : 'Cancel'} TD ${asking.td.taxDeclarationNumber}` : ''}
+        open={asking !== null}
+        okText={asking?.action === 'reject' ? 'Reject' : 'Cancel TD'}
+        cancelText="Back"
+        okButtonProps={{ danger: true, disabled: reason.trim() === '', loading: action.isPending }}
+        onCancel={() => setAsking(null)}
+        onOk={() => asking && action.mutate({ id: asking.td.id, action: asking.action, reason: reason.trim() }, { onSuccess: () => setAsking(null) })}
+        destroyOnHidden
+      >
+        {action.isError && (
+          <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Action failed"
+            description={action.error instanceof ApiRequestError ? action.error.apiError.message : (action.error as Error).message} />
+        )}
+        <Typography.Paragraph>
+          {asking?.action === 'cancel'
+            ? 'Cancels this declaration outright, with no successor (e.g. a duplicate). It stays on record, marked cancelled.'
+            : 'The TD stays on record as rejected.'}
+        </Typography.Paragraph>
+        <Input.TextArea aria-label="Reason" placeholder="Reason (required)" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+      </Modal>
     </div>
   );
 }

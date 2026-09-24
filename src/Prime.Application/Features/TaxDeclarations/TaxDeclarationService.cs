@@ -2,13 +2,15 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Features.Approvals;
 using Prime.Application.Features.Numbering;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.TaxDeclarations;
 
-public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<CreateTaxDeclarationRequest> validator, INumberingService numbering, IClock clock) : ITaxDeclarationService
+public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<CreateTaxDeclarationRequest> validator, INumberingService numbering, IClock clock,
+    ICurrentUserService currentUser, IApprovalChainService approvals) : ITaxDeclarationService
 {
     public async Task<Result<TaxDeclarationDto>> CreateAsync(CreateTaxDeclarationRequest request, CancellationToken cancellationToken = default)
     {
@@ -39,6 +41,15 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
             if (previous is null)
             {
                 return Result.Failure<TaxDeclarationDto>("PREVIOUS_TAX_DECLARATION_NOT_FOUND", "The specified previous Tax Declaration does not exist.");
+            }
+            if (previous.RpuId != request.RpuId)
+            {
+                return Result.Failure<TaxDeclarationDto>("PREVIOUS_TAX_DECLARATION_OTHER_RPU", "The previous Tax Declaration belongs to a different RPU.");
+            }
+            if (previous.Status is WorkflowStatus.Cancelled or WorkflowStatus.Voided)
+            {
+                return Result.Failure<TaxDeclarationDto>("PREVIOUS_TAX_DECLARATION_CANCELLED",
+                    $"TD {previous.TaxDeclarationNumber} is already cancelled; name the current TD instead.");
             }
             revisionNumber = previous.RevisionNumber + 1;
         }
@@ -112,9 +123,236 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         return entity is null ? null : ProjectToDto(entity);
     }
 
+    public async Task<Result<TaxDeclarationDto>> SubmitForReviewAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var td = await db.TaxDeclarations.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (td is null)
+        {
+            return NotFound();
+        }
+        if (td.Status != WorkflowStatus.Draft)
+        {
+            return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NOT_DRAFT", "Only a Draft Tax Declaration can be submitted for review.");
+        }
+        td.Status = WorkflowStatus.PendingReview;
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success((await MapToDto(id, cancellationToken))!);
+    }
+
+    public async Task<Result<TaxDeclarationDto>> ApproveAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var td = await db.TaxDeclarations.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (td is null)
+        {
+            return NotFound();
+        }
+        if (td.Status != WorkflowStatus.PendingReview)
+        {
+            return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NOT_PENDING_REVIEW", "Only a Tax Declaration pending review can be approved.");
+        }
+
+        var step = await approvals.SignNextStepAsync(ApprovalSubjectType.TaxDeclaration, td.Id, td.CreatedBy, clock.Today, null, cancellationToken);
+        if (step.IsFailure)
+        {
+            return Result.Failure<TaxDeclarationDto>(step.Code!, step.Message!);
+        }
+        if (!step.Value.ChainInForce && currentUser.AppUserId is not null && td.CreatedBy == currentUser.AppUserId)
+        {
+            return Result.Failure<TaxDeclarationDto>("CANNOT_APPROVE_OWN_TAX_DECLARATION", "The Tax Declaration's creator cannot also approve it (CLAUDE.md §46).");
+        }
+        var completes = !step.Value.ChainInForce || step.Value.Completed;
+
+        TaxDeclaration? previous = null;
+        if (completes)
+        {
+            // One current (Approved) TD per RPU: the new one must replace the current one explicitly.
+            var current = await db.TaxDeclarations.FirstOrDefaultAsync(
+                x => x.RpuId == td.RpuId && x.Id != td.Id && x.Status == WorkflowStatus.Approved, cancellationToken);
+            if (current is not null && current.Id != td.PreviousTaxDeclarationId)
+            {
+                return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_CURRENT_EXISTS",
+                    $"TD {current.TaxDeclarationNumber} is the current declaration for this RPU; a new TD must name it as the previous TD, which it then cancels.");
+            }
+            previous = td.PreviousTaxDeclarationId is { } previousId
+                ? await db.TaxDeclarations.FirstOrDefaultAsync(x => x.Id == previousId, cancellationToken)
+                : null;
+            if (previous is { Status: WorkflowStatus.Cancelled or WorkflowStatus.Voided })
+            {
+                return Result.Failure<TaxDeclarationDto>("PREVIOUS_TAX_DECLARATION_CANCELLED",
+                    $"TD {previous.TaxDeclarationNumber} was cancelled after this TD was drafted; this TD can no longer replace it.");
+            }
+        }
+
+        // Cancel the replaced TD before approving: the one-approved-TD-per-RPU index is not deferrable.
+        var now = clock.UtcNow;
+        var ownsTransaction = db.Database.CurrentTransaction is null;
+        var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
+        try
+        {
+            if (previous is not null)
+            {
+                previous.Status = WorkflowStatus.Cancelled;
+                previous.CancelledAt = now;
+                previous.CancelledBy = currentUser.AppUserId;
+                previous.CancellationReason = $"Cancelled by TD No. {td.TaxDeclarationNumber}.";
+                previous.SupersededByTaxDeclarationId = td.Id;
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            if (completes)
+            {
+                td.Status = WorkflowStatus.Approved;
+                td.ApprovedBy = currentUser.AppUserId;
+                td.ApprovedAt = now;
+            }
+            await db.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+        }
+        catch (DbUpdateException)
+        {
+            return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_APPROVAL_CONFLICT",
+                "Another approval for this RPU happened at the same time. Nothing was changed; reload and try again.");
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync();
+            }
+        }
+        return Result.Success((await MapToDto(id, cancellationToken))!);
+    }
+
+    public async Task<Result<TaxDeclarationDto>> RejectAsync(Guid id, string reason, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(reason) || reason.Length > 1000)
+        {
+            return Result.Failure<TaxDeclarationDto>("VALIDATION_FAILED", "A reason is required (max 1000).");
+        }
+        var td = await db.TaxDeclarations.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (td is null)
+        {
+            return NotFound();
+        }
+        if (td.Status != WorkflowStatus.PendingReview)
+        {
+            return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NOT_PENDING_REVIEW", "Only a Tax Declaration pending review can be rejected.");
+        }
+        td.Status = WorkflowStatus.Rejected;
+        td.CancellationReason = reason;
+        currentUser.Reason = reason;
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success((await MapToDto(id, cancellationToken))!);
+    }
+
+    public async Task<Result<TaxDeclarationDto>> CancelAsync(Guid id, string reason, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(reason) || reason.Length > 1000)
+        {
+            return Result.Failure<TaxDeclarationDto>("VALIDATION_FAILED", "A reason is required (max 1000).");
+        }
+        var td = await db.TaxDeclarations.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (td is null)
+        {
+            return NotFound();
+        }
+        if (td.Status != WorkflowStatus.Approved)
+        {
+            return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NOT_APPROVED",
+                "Only an approved Tax Declaration can be cancelled; a draft or pending one can be rejected instead.");
+        }
+        td.Status = WorkflowStatus.Cancelled;
+        td.CancelledAt = clock.UtcNow;
+        td.CancelledBy = currentUser.AppUserId;
+        td.CancellationReason = reason;
+        currentUser.Reason = reason;
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success((await MapToDto(id, cancellationToken))!);
+    }
+
+    public async Task<Result<IReadOnlyList<TaxDeclarationAnnotationDto>>> ListAnnotationsAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        if (!await db.TaxDeclarations.AnyAsync(x => x.Id == id, cancellationToken))
+        {
+            return Result.Failure<IReadOnlyList<TaxDeclarationAnnotationDto>>("TAX_DECLARATION_NOT_FOUND", "No Tax Declaration was found with the given id.");
+        }
+        var rows = await db.TaxDeclarationAnnotations.Include(x => x.AnnotationType)
+            .Where(x => x.TaxDeclarationId == id)
+            .OrderBy(x => x.LiftedAt != null).ThenByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+        return Result.Success<IReadOnlyList<TaxDeclarationAnnotationDto>>(rows.Select(ToDto).ToList());
+    }
+
+    public async Task<Result<TaxDeclarationAnnotationDto>> AddAnnotationAsync(Guid id, AddTaxDeclarationAnnotationRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Text) || request.Text.Length > 2000
+            || request.ReferenceNumber?.Length > 100 || request.EffectiveDate == default)
+        {
+            return Result.Failure<TaxDeclarationAnnotationDto>("VALIDATION_FAILED",
+                "text is required (max 2000), referenceNumber max 100, effectiveDate is required.");
+        }
+        var td = await db.TaxDeclarations.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (td is null)
+        {
+            return Result.Failure<TaxDeclarationAnnotationDto>("TAX_DECLARATION_NOT_FOUND", "No Tax Declaration was found with the given id.");
+        }
+        if (td.Status is WorkflowStatus.Cancelled or WorkflowStatus.Voided or WorkflowStatus.Rejected)
+        {
+            return Result.Failure<TaxDeclarationAnnotationDto>("TAX_DECLARATION_NOT_ANNOTATABLE", $"A {td.Status} Tax Declaration cannot be annotated.");
+        }
+        if (!await db.AnnotationTypes.AnyAsync(x => x.Id == request.AnnotationTypeId && x.IsActive, cancellationToken))
+        {
+            return Result.Failure<TaxDeclarationAnnotationDto>("ANNOTATION_TYPE_NOT_FOUND", "The specified annotation type does not exist or is inactive.");
+        }
+        var annotation = new TaxDeclarationAnnotation
+        {
+            TaxDeclarationId = id, AnnotationTypeId = request.AnnotationTypeId, Text = request.Text.Trim(),
+            ReferenceNumber = string.IsNullOrWhiteSpace(request.ReferenceNumber) ? null : request.ReferenceNumber.Trim(),
+            ReferenceDate = request.ReferenceDate, EffectiveDate = request.EffectiveDate,
+        };
+        db.TaxDeclarationAnnotations.Add(annotation);
+        await db.SaveChangesAsync(cancellationToken);
+        await db.TaxDeclarationAnnotations.Entry(annotation).Reference(x => x.AnnotationType).LoadAsync(cancellationToken);
+        return Result.Success(ToDto(annotation));
+    }
+
+    public async Task<Result<TaxDeclarationAnnotationDto>> LiftAnnotationAsync(Guid annotationId, LiftTaxDeclarationAnnotationRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 1000 || request.Reference?.Length > 100)
+        {
+            return Result.Failure<TaxDeclarationAnnotationDto>("VALIDATION_FAILED", "A reason is required (max 1000); reference max 100.");
+        }
+        var annotation = await db.TaxDeclarationAnnotations.Include(x => x.AnnotationType).FirstOrDefaultAsync(x => x.Id == annotationId, cancellationToken);
+        if (annotation is null)
+        {
+            return Result.Failure<TaxDeclarationAnnotationDto>("ANNOTATION_NOT_FOUND", "No annotation was found with the given id.");
+        }
+        if (annotation.LiftedAt is not null)
+        {
+            return Result.Failure<TaxDeclarationAnnotationDto>("ANNOTATION_ALREADY_LIFTED", "This annotation has already been lifted.");
+        }
+        annotation.LiftedAt = clock.UtcNow;
+        annotation.LiftedBy = currentUser.AppUserId;
+        annotation.LiftReason = request.Reason;
+        annotation.LiftReference = string.IsNullOrWhiteSpace(request.Reference) ? null : request.Reference.Trim();
+        currentUser.Reason = request.Reason;
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success(ToDto(annotation));
+    }
+
+    private static Result<TaxDeclarationDto> NotFound() =>
+        Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NOT_FOUND", "No Tax Declaration was found with the given id.");
+
+    private static TaxDeclarationAnnotationDto ToDto(TaxDeclarationAnnotation a) => new(
+        a.Id, a.TaxDeclarationId, a.AnnotationTypeId, a.AnnotationType!.Code, a.AnnotationType.Name, a.Text, a.ReferenceNumber,
+        a.ReferenceDate, a.EffectiveDate, a.CreatedAt, a.CreatedBy, a.LiftedAt, a.LiftedBy, a.LiftReason, a.LiftReference);
+
     private static IQueryable<TaxDeclaration> IncludeReferences(IQueryable<TaxDeclaration> query) => query
         .Include(td => td.Classification)
-        .Include(td => td.ActualUse);
+        .Include(td => td.ActualUse)
+        .Include(td => td.Annotations);
 
     private static TaxDeclarationDto ProjectToDto(TaxDeclaration td) => new(
         td.Id,
@@ -133,5 +371,12 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         td.Status,
         td.PreviousTaxDeclarationId,
         td.Remarks,
-        td.CreatedAt);
+        td.CreatedAt,
+        td.CreatedBy,
+        td.ApprovedBy,
+        td.ApprovedAt,
+        td.CancelledAt,
+        td.CancellationReason,
+        td.SupersededByTaxDeclarationId,
+        td.Annotations.Count(a => a.LiftedAt == null));
 }

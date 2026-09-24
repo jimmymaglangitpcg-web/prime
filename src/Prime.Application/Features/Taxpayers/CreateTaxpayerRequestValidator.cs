@@ -29,8 +29,19 @@ public sealed class AddPropertyOwnerRequestValidator : AbstractValidator<AddProp
     public AddPropertyOwnerRequestValidator()
     {
         RuleFor(x => x.PropertyId).NotEmpty();
-        RuleFor(x => x.TaxpayerId).NotEmpty();
-        RuleFor(x => x.OwnershipTypeId).NotEmpty();
-        RuleFor(x => x.OwnershipPercentage).GreaterThan(0).LessThanOrEqualTo(100);
+        RuleFor(x => x.Role).IsInEnum();
+        RuleFor(x => x.StartDate).NotEqual(default(DateOnly)).WithMessage("startDate is required.");
+        // LGC §§204–205: an unknown owner has no taxpayer; every other capacity names one.
+        RuleFor(x => x.TaxpayerId).Null().When(x => x.Role == PropertyPartyRole.UnknownOwner)
+            .WithMessage("An unknown-owner declaration has no taxpayer.");
+        RuleFor(x => x.TaxpayerId).NotEmpty().When(x => x.Role != PropertyPartyRole.UnknownOwner)
+            .WithMessage("taxpayerId is required.");
+        // Only owners hold an ownership share of a type.
+        RuleFor(x => x.OwnershipTypeId).NotEmpty().When(x => x.Role == PropertyPartyRole.Owner)
+            .WithMessage("ownershipTypeId is required for an owner.");
+        RuleFor(x => x.OwnershipPercentage).GreaterThan(0).LessThanOrEqualTo(100).When(x => x.Role == PropertyPartyRole.Owner);
+        RuleFor(x => x.OwnershipPercentage).InclusiveBetween(0, 100).When(x => x.Role != PropertyPartyRole.Owner);
+        RuleFor(x => x.OwnershipPercentage).Equal(0).When(x => x.Role == PropertyPartyRole.UnknownOwner)
+            .WithMessage("An unknown-owner declaration has no share.");
     }
 }

@@ -10,6 +10,13 @@ namespace Prime.Domain.Entities;
 /// overwritten. <see cref="Status"/> is the maker-checker
 /// <see cref="WorkflowStatus"/> (CLAUDE.md §45), not an LGU-configurable
 /// classification.
+///
+/// Lifecycle (docs/FORMS-REVISION-PLAN.md §5 A4): Draft → PendingReview →
+/// Approved (maker-checker, or the configured approval chain) → Cancelled.
+/// Approving a TD that names a <see cref="PreviousTaxDeclarationId"/>
+/// cancels that one ("this declaration cancels TD No. …"), recording
+/// <see cref="SupersededByTaxDeclarationId"/> on it. At most one Approved TD
+/// per RPU.
 /// </summary>
 public sealed class TaxDeclaration : AuditableEntity
 {
@@ -39,4 +46,38 @@ public sealed class TaxDeclaration : AuditableEntity
     public string? Remarks { get; set; }
     public Guid? ApprovedBy { get; set; }
     public DateTimeOffset? ApprovedAt { get; set; }
+
+    public DateTimeOffset? CancelledAt { get; set; }
+    public Guid? CancelledBy { get; set; }
+    public string? CancellationReason { get; set; }
+    /// <summary>The TD that cancelled this one, when it was superseded rather than cancelled outright.</summary>
+    public Guid? SupersededByTaxDeclarationId { get; set; }
+
+    public List<TaxDeclarationAnnotation> Annotations { get; set; } = [];
+}
+
+/// <summary>
+/// A note recorded on a Tax Declaration — e.g. a levy (LTOM §150: the levy
+/// is annotated on the TD). Kinds are an LGU-configurable lookup
+/// (<see cref="AnnotationType"/>), since their list and wording come from the
+/// LAM. Annotations are never deleted: lifting one records who, when and why
+/// (CLAUDE.md §76).
+/// DOMAIN VERIFICATION REQUIRED: whether annotations carry over to a TD that
+/// supersedes this one; they are not copied automatically.
+/// </summary>
+public sealed class TaxDeclarationAnnotation : AuditableEntity
+{
+    public Guid TaxDeclarationId { get; set; }
+    public Guid AnnotationTypeId { get; set; }
+    public AnnotationType? AnnotationType { get; set; }
+    public string Text { get; set; } = string.Empty;
+    /// <summary>E.g. the warrant of levy number.</summary>
+    public string? ReferenceNumber { get; set; }
+    public DateOnly? ReferenceDate { get; set; }
+    public DateOnly EffectiveDate { get; set; }
+
+    public DateTimeOffset? LiftedAt { get; set; }
+    public Guid? LiftedBy { get; set; }
+    public string? LiftReason { get; set; }
+    public string? LiftReference { get; set; }
 }

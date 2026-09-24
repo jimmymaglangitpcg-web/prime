@@ -19,4 +19,33 @@ public class TaxDeclarationsController(ITaxDeclarationService taxDeclarationServ
     [HttpGet("~/api/rpus/{rpuId:guid}/tax-declarations")]
     public async Task<ActionResult<IReadOnlyList<TaxDeclarationDto>>> ListByRpu(Guid rpuId, CancellationToken cancellationToken) =>
         HandleResult(await taxDeclarationService.ListByRpuAsync(rpuId, cancellationToken));
+
+    // Lifecycle — docs/FORMS-REVISION-PLAN.md §5 A4.
+    [HttpPost("{id:guid}/submit-for-review")]
+    public async Task<ActionResult<TaxDeclarationDto>> SubmitForReview(Guid id, CancellationToken ct) =>
+        HandleResult(await taxDeclarationService.SubmitForReviewAsync(id, ct));
+
+    [HttpPost("{id:guid}/approve")]
+    public async Task<ActionResult<TaxDeclarationDto>> Approve(Guid id, CancellationToken ct) =>
+        HandleResult(await taxDeclarationService.ApproveAsync(id, ct));
+
+    [HttpPost("{id:guid}/reject")]
+    public async Task<ActionResult<TaxDeclarationDto>> Reject(Guid id, [FromBody] TaxDeclarationReasonRequest request, CancellationToken ct) =>
+        HandleResult(await taxDeclarationService.RejectAsync(id, request.Reason, ct));
+
+    [HttpPost("{id:guid}/cancel")]
+    public async Task<ActionResult<TaxDeclarationDto>> Cancel(Guid id, [FromBody] TaxDeclarationReasonRequest request, CancellationToken ct) =>
+        HandleResult(await taxDeclarationService.CancelAsync(id, request.Reason, ct));
+
+    [HttpGet("{id:guid}/annotations")]
+    public async Task<ActionResult<IReadOnlyList<TaxDeclarationAnnotationDto>>> ListAnnotations(Guid id, CancellationToken ct) =>
+        HandleResult(await taxDeclarationService.ListAnnotationsAsync(id, ct));
+
+    [HttpPost("{id:guid}/annotations")]
+    public async Task<ActionResult<TaxDeclarationAnnotationDto>> AddAnnotation(Guid id, AddTaxDeclarationAnnotationRequest request, CancellationToken ct) =>
+        HandleResult(await taxDeclarationService.AddAnnotationAsync(id, request, ct));
+
+    [HttpPost("~/api/tax-declaration-annotations/{annotationId:guid}/lift")]
+    public async Task<ActionResult<TaxDeclarationAnnotationDto>> LiftAnnotation(Guid annotationId, LiftTaxDeclarationAnnotationRequest request, CancellationToken ct) =>
+        HandleResult(await taxDeclarationService.LiftAnnotationAsync(annotationId, request, ct));
 }

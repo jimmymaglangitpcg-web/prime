@@ -11,7 +11,8 @@ namespace Prime.Application.Features.Taxpayers;
 public sealed class TaxpayerService(
     IApplicationDbContext db,
     IValidator<CreateTaxpayerRequest> createValidator,
-    IValidator<AddPropertyOwnerRequest> addOwnerValidator) : ITaxpayerService
+    IValidator<AddPropertyOwnerRequest> addOwnerValidator,
+    ICurrentUserService currentUser) : ITaxpayerService
 {
     public async Task<Result<TaxpayerDto>> CreateAsync(CreateTaxpayerRequest request, CancellationToken cancellationToken = default)
     {
@@ -86,6 +87,12 @@ public sealed class TaxpayerService(
         });
     }
 
+    /// <summary>
+    /// Adds a party in a statutory capacity (LGC §§204–205). Only owners carry
+    /// an ownership type and count toward 100%. An unknown-owner declaration
+    /// cannot coexist with current owners; it is ended automatically ("owner
+    /// identified") when the first owner is added.
+    /// </summary>
     public async Task<Result<PropertyOwnerDto>> AddOwnerAsync(AddPropertyOwnerRequest request, CancellationToken cancellationToken = default)
     {
         var validation = await addOwnerValidator.ValidateAsync(request, cancellationToken);
@@ -98,29 +105,59 @@ public sealed class TaxpayerService(
         {
             return Result.Failure<PropertyOwnerDto>("PROPERTY_NOT_FOUND", "No property was found with the given id.");
         }
-        if (!await db.Taxpayers.AnyAsync(t => t.Id == request.TaxpayerId, cancellationToken))
+        if (request.TaxpayerId is { } taxpayerId && !await db.Taxpayers.AnyAsync(t => t.Id == taxpayerId, cancellationToken))
         {
             return Result.Failure<PropertyOwnerDto>("TAXPAYER_NOT_FOUND", "No taxpayer was found with the given id.");
         }
-        if (!await db.OwnershipTypes.AnyAsync(o => o.Id == request.OwnershipTypeId, cancellationToken))
+        if (request.OwnershipTypeId is { } typeId && !await db.OwnershipTypes.AnyAsync(o => o.Id == typeId, cancellationToken))
         {
             return Result.Failure<PropertyOwnerDto>("OWNERSHIP_TYPE_NOT_FOUND", "The specified ownership type does not exist.");
         }
 
-        var currentTotal = await db.PropertyTaxpayers
+        var current = await db.PropertyTaxpayers
             .Where(pt => pt.PropertyId == request.PropertyId && pt.IsCurrent)
-            .SumAsync(pt => pt.OwnershipPercentage, cancellationToken);
+            .ToListAsync(cancellationToken);
 
-        if (currentTotal + request.OwnershipPercentage > 100m)
+        if (request.Role == PropertyPartyRole.UnknownOwner && current.Any(pt => pt.Role == PropertyPartyRole.Owner))
         {
-            return Result.Failure<PropertyOwnerDto>(
-                "OWNERSHIP_PERCENTAGE_EXCEEDS_100",
-                $"Current owners already hold {currentTotal}%; adding {request.OwnershipPercentage}% would exceed 100%.");
+            return Result.Failure<PropertyOwnerDto>("PROPERTY_HAS_KNOWN_OWNER",
+                "The property has current owners; it cannot also be declared against an unknown owner (LGC §204).");
+        }
+        if (request.Role == PropertyPartyRole.UnknownOwner && current.Any(pt => pt.Role == PropertyPartyRole.UnknownOwner))
+        {
+            return Result.Failure<PropertyOwnerDto>("UNKNOWN_OWNER_ALREADY_DECLARED", "The property is already declared against an unknown owner.");
+        }
+        if (request.TaxpayerId is { } tp && current.Any(pt => pt.TaxpayerId == tp && pt.Role == request.Role))
+        {
+            return Result.Failure<PropertyOwnerDto>("PROPERTY_PARTY_DUPLICATE", "This taxpayer is already a current party in that capacity.");
+        }
+
+        if (request.Role == PropertyPartyRole.Owner)
+        {
+            var currentTotal = current.Where(pt => pt.Role == PropertyPartyRole.Owner).Sum(pt => pt.OwnershipPercentage);
+            if (currentTotal + request.OwnershipPercentage > 100m)
+            {
+                return Result.Failure<PropertyOwnerDto>(
+                    "OWNERSHIP_PERCENTAGE_EXCEEDS_100",
+                    $"Current owners already hold {currentTotal}%; adding {request.OwnershipPercentage}% would exceed 100%.");
+            }
+            foreach (var unknown in current.Where(pt => pt.Role == PropertyPartyRole.UnknownOwner))
+            {
+                if (request.StartDate <= unknown.StartDate)
+                {
+                    return Result.Failure<PropertyOwnerDto>("OWNER_START_DATE_CONFLICT",
+                        $"The unknown-owner declaration starts {unknown.StartDate:yyyy-MM-dd}; the identified owner must start after it.");
+                }
+                unknown.IsCurrent = false;
+                unknown.EndDate = request.StartDate.AddDays(-1);
+                unknown.EndReason = "Owner identified";
+            }
         }
 
         var propertyTaxpayer = new PropertyTaxpayer
         {
             PropertyId = request.PropertyId,
+            Role = request.Role,
             TaxpayerId = request.TaxpayerId,
             OwnershipTypeId = request.OwnershipTypeId,
             OwnershipPercentage = request.OwnershipPercentage,
@@ -131,30 +168,37 @@ public sealed class TaxpayerService(
         db.PropertyTaxpayers.Add(propertyTaxpayer);
         await db.SaveChangesAsync(cancellationToken);
 
-        var dto = await db.PropertyTaxpayers
-            .Where(pt => pt.Id == propertyTaxpayer.Id)
-            .Select(pt => new
-            {
-                pt.Id,
-                pt.TaxpayerId,
-                Taxpayer = new { pt.Taxpayer!.TaxpayerType, pt.Taxpayer.LastName, pt.Taxpayer.FirstName, pt.Taxpayer.MiddleName, pt.Taxpayer.Suffix, pt.Taxpayer.CorporateName },
-                OwnershipTypeName = pt.OwnershipType!.Name,
-                pt.OwnershipPercentage,
-                pt.StartDate,
-                pt.EndDate,
-                pt.IsCurrent,
-            })
-            .SingleAsync(cancellationToken);
+        return Result.Success((await PropertyParties.ProjectAsync(db.PropertyTaxpayers.Where(pt => pt.Id == propertyTaxpayer.Id), cancellationToken)).Single());
+    }
 
-        return Result.Success(new PropertyOwnerDto(
-            dto.Id,
-            dto.TaxpayerId,
-            TaxpayerNameFormatter.Format(dto.Taxpayer.TaxpayerType, dto.Taxpayer.LastName, dto.Taxpayer.FirstName, dto.Taxpayer.MiddleName, dto.Taxpayer.Suffix, dto.Taxpayer.CorporateName),
-            dto.OwnershipTypeName,
-            dto.OwnershipPercentage,
-            dto.StartDate,
-            dto.EndDate,
-            dto.IsCurrent));
+    /// <summary>Ends a party's current link (history is kept). Transfers that replace owners come with PropertyTransaction (plan A5).</summary>
+    public async Task<Result<PropertyOwnerDto>> EndPartyAsync(Guid propertyTaxpayerId, EndPropertyPartyRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 500)
+        {
+            return Result.Failure<PropertyOwnerDto>("VALIDATION_FAILED", "A reason is required (max 500).");
+        }
+        var row = await db.PropertyTaxpayers.FirstOrDefaultAsync(pt => pt.Id == propertyTaxpayerId, cancellationToken);
+        if (row is null)
+        {
+            return Result.Failure<PropertyOwnerDto>("PROPERTY_PARTY_NOT_FOUND", "No property party link was found with the given id.");
+        }
+        if (!row.IsCurrent)
+        {
+            return Result.Failure<PropertyOwnerDto>("PROPERTY_PARTY_ALREADY_ENDED", "This party link has already ended.");
+        }
+        if (request.EndDate < row.StartDate)
+        {
+            return Result.Failure<PropertyOwnerDto>("VALIDATION_FAILED", $"endDate cannot be before the start date {row.StartDate:yyyy-MM-dd}.");
+        }
+
+        row.IsCurrent = false;
+        row.EndDate = request.EndDate;
+        row.EndReason = request.Reason;
+        currentUser.Reason = request.Reason;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Result.Success((await PropertyParties.ProjectAsync(db.PropertyTaxpayers.Where(pt => pt.Id == row.Id), cancellationToken)).Single());
     }
 
     public async Task<Result<IReadOnlyList<PropertyOwnerDto>>> GetOwnershipHistoryAsync(Guid propertyId, CancellationToken cancellationToken = default)
@@ -163,34 +207,8 @@ public sealed class TaxpayerService(
         {
             return Result.Failure<IReadOnlyList<PropertyOwnerDto>>("PROPERTY_NOT_FOUND", "No property was found with the given id.");
         }
-
-        var rows = await db.PropertyTaxpayers
-            .Where(pt => pt.PropertyId == propertyId)
-            .OrderByDescending(pt => pt.IsCurrent).ThenByDescending(pt => pt.StartDate)
-            .Select(pt => new
-            {
-                pt.Id,
-                pt.TaxpayerId,
-                Taxpayer = new { pt.Taxpayer!.TaxpayerType, pt.Taxpayer.LastName, pt.Taxpayer.FirstName, pt.Taxpayer.MiddleName, pt.Taxpayer.Suffix, pt.Taxpayer.CorporateName },
-                OwnershipTypeName = pt.OwnershipType!.Name,
-                pt.OwnershipPercentage,
-                pt.StartDate,
-                pt.EndDate,
-                pt.IsCurrent,
-            })
-            .ToListAsync(cancellationToken);
-
-        IReadOnlyList<PropertyOwnerDto> history = rows.Select(r => new PropertyOwnerDto(
-            r.Id,
-            r.TaxpayerId,
-            TaxpayerNameFormatter.Format(r.Taxpayer.TaxpayerType, r.Taxpayer.LastName, r.Taxpayer.FirstName, r.Taxpayer.MiddleName, r.Taxpayer.Suffix, r.Taxpayer.CorporateName),
-            r.OwnershipTypeName,
-            r.OwnershipPercentage,
-            r.StartDate,
-            r.EndDate,
-            r.IsCurrent)).ToList();
-
-        return Result.Success(history);
+        return Result.Success<IReadOnlyList<PropertyOwnerDto>>(
+            await PropertyParties.ProjectAsync(db.PropertyTaxpayers.Where(pt => pt.PropertyId == propertyId), cancellationToken));
     }
 
     private static TaxpayerDto ProjectToDto(Taxpayer t) => new(

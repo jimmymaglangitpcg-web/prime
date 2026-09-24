@@ -3,8 +3,9 @@
 **FAAS, Tax Declaration and related assessment forms: from the initial
 system to the forms prescribed under the Local Assessment Manual (LAM)**
 
-Status: **Forms Foundation (A1–A3) implemented 2026-09-25**; A4–A10 not
-started. See §11 for what was built and where it deviates from this plan.
+Status: **A1–A4 implemented 2026-09-25**; A5–A10 not started. See §11
+(A1–A3) and §12 (A4) for what was built and where it deviates from this
+plan.
 
 ---
 
@@ -430,4 +431,88 @@ well.
 numbering scheme that forbids typed numbers makes the HTTP registration
 test fail (correctly). The DEMO TD scheme used for verification was
 end-dated afterwards.
+
+---
+
+## 12. Implementation status — A4 statutory data gaps, 2026-09-25
+
+**Parties (LGC §§204–205).** `PropertyTaxpayer.Role` =
+Owner | Administrator | LegalInterestHolder | BeneficialUser | Claimant |
+UnknownOwner.
+- The capacities are statutory, so they are a code enum; printed labels
+  can later come from the LAM.
+- Existing links became Owner.
+- Only an unknown owner has no taxpayer, only owners carry an ownership type
+  and count toward 100%, and an unknown owner holds no share. The database
+  enforces these rules with check constraints, plus one current
+  unknown-owner declaration per property.
+- Declaring an unknown owner is refused while owners are current. Adding
+  the first owner ends the declaration automatically ("Owner identified",
+  ending the day before the owner's start).
+- Any party can be ended with a date and a reason (`POST
+  /api/property-owners/{id}/end`); history is kept.
+- One projection (`PropertyParties`) now serves the profile, the ownership
+  history and the forms; it replaces three copies.
+
+**Tax Declaration lifecycle.**
+- Draft → PendingReview → Approved (two-person check, or the configured
+  approval chain, which now also covers `TaxDeclaration`) → Cancelled, plus
+  Rejected.
+- At most one Approved TD per RPU (`UX_TaxDeclarations_Rpu_Approved`). A
+  new TD must name the current one as its previous TD, and approving it
+  cancels that one in the same transaction ("Cancelled by TD No. …",
+  `SupersededByTaxDeclarationId`).
+- An approved TD can be cancelled outright with a reason (e.g. a
+  duplicate).
+- "The current TD" (`TaxDeclarationLookup`) now prefers the approved one
+  and never returns a cancelled or rejected TD.
+- Cancelled TDs stay printable (certified copies, LGC §472(b)(9)), with a
+  CANCELLED banner.
+
+**Annotations.**
+- `TaxDeclarationAnnotation`: kind from the `AnnotationTypes` lookup
+  (LGU-configurable, since the kinds come from the LAM), text, reference
+  number and date, and effective date.
+- Annotations are never deleted: lifting records who, when, why and a
+  reference. Cancelled, rejected and voided TDs cannot be annotated.
+
+**Forms.**
+- Provisional `TAX_DECLARATION` v2 shows each party's capacity, the
+  annotations (lifted ones struck through) and the cancellation banner.
+- The seeder now installs newer provisional versions: effective today, and
+  the predecessor ends yesterday. A deployment with any non-provisional
+  version is never touched.
+
+**UI.**
+- Owners tab: a capacity column, "Add Party" with a capacity selector
+  (unknown owner hides the taxpayer field), and End with a reason.
+- TD list: "Replaces" column; Submit, Approve, Reject and Cancel TD with
+  confirmation or a required reason; an annotations dialog (add and lift)
+  with an active-count badge.
+- New-TD form: a "Replaces TD" field that defaults to the current TD.
+
+**Open (DOMAIN VERIFICATION REQUIRED):**
+- How liability is shared among non-owner parties.
+- The claimant and untitled-land rules.
+- Whether annotations carry over to a superseding TD (they are not copied).
+- A resubmission path for rejected TDs.
+
+**Known gap:** there is no reference-data admin UI or API (CLAUDE.md §78),
+so annotation types, like the other lookups, are inserted directly into
+the database. The DEMO type `DEMO-LEVY` was added to the local dev DB.
+
+**Verified:**
+- 8 integration tests: the unknown-owner lifecycle, capacity validation,
+  administrator and ending a party, replacement TD cancelling its
+  predecessor with both forms marked, reject and outright cancel, a
+  two-step TD approval chain, and annotation add, lift and print.
+- Live in the browser against the dev DB: unknown owner declared; TD
+  submitted, self-approval refused, approved by a second user; a
+  replacement TD entered with "Replaces" defaulted, then approved, with
+  the old one cancelled; annotation added (badge shows 1); both forms
+  printed.
+
+Migration `PartiesAndTdLifecycle`: additive. The only change to existing
+columns is making `PropertyTaxpayers.TaxpayerId` and `OwnershipTypeId`
+nullable. Applied to the local dev DB only.
 

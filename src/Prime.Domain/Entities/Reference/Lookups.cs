@@ -49,6 +49,13 @@ public sealed class MachineryType : LookupEntity;
 public sealed class OwnershipType : LookupEntity;
 
 /// <summary>
+/// Kinds of Tax Declaration annotation (e.g. levy, adverse claim).
+/// LGU-configurable: the list and wording come from the LAM
+/// (docs/FORMS-REVISION-PLAN.md §5 A4).
+/// </summary>
+public sealed class AnnotationType : LookupEntity;
+
+/// <summary>
 /// Supports Document (§59, DOMAIN-MODEL.md §3.19a) — Title, Deed, Tax
 /// Declaration scan, Assessment document, Exemption document, Valuation
 /// document, Other. Reference table, not an enum, since the set of

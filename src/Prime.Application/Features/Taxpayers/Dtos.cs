@@ -39,9 +39,16 @@ public sealed class TaxpayerSearchRequest : Common.PagedRequest
     public string? SearchTerm { get; set; }
 }
 
+/// <summary>
+/// Role defaults to Owner (existing callers). TaxpayerId is omitted only for
+/// an unknown owner; OwnershipTypeId is required for owners only.
+/// </summary>
 public sealed record AddPropertyOwnerRequest(
     Guid PropertyId,
-    Guid TaxpayerId,
-    Guid OwnershipTypeId,
+    Guid? TaxpayerId,
+    Guid? OwnershipTypeId,
     decimal OwnershipPercentage,
-    DateOnly StartDate);
+    DateOnly StartDate,
+    PropertyPartyRole Role = PropertyPartyRole.Owner);
+
+public sealed record EndPropertyPartyRequest(DateOnly EndDate, string Reason);
