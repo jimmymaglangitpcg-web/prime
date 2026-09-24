@@ -28,6 +28,18 @@ public sealed class Machinery : AuditableEntity
     public decimal? InstallationCost { get; set; }
     public decimal? OtherCost { get; set; }
 
+    /// <summary>
+    /// LGC §224(a): a brand-new machine's fair market value is its acquisition
+    /// cost; "in all other cases" it is valued from <see cref="ReplacementCost"/>.
+    /// </summary>
+    public bool IsBrandNew { get; set; }
+
+    /// <summary>
+    /// Current replacement or reproduction cost, as appraised (LGC §224(a)).
+    /// Required to value machinery that is not brand-new; not used otherwise.
+    /// </summary>
+    public decimal? ReplacementCost { get; set; }
+
     public int? EconomicLifeYears { get; set; }
     public int? RemainingLifeYears { get; set; }
 

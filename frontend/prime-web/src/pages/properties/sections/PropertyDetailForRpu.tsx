@@ -135,6 +135,8 @@ function MachineryDetail({ propertyId, rpuId }: { propertyId: string; rpuId: str
       <Descriptions.Item label="Serial Number">{data.serialNumber ?? '—'}</Descriptions.Item>
       <Descriptions.Item label="Date Acquired">{data.dateAcquired ?? '—'}</Descriptions.Item>
       <Descriptions.Item label="Acquisition Cost">{data.acquisitionCost}</Descriptions.Item>
+      <Descriptions.Item label="Brand-new">{data.isBrandNew ? 'Yes' : 'No'}</Descriptions.Item>
+      <Descriptions.Item label="Replacement Cost">{data.isBrandNew ? 'n/a' : (data.replacementCost ?? '—')}</Descriptions.Item>
       <Descriptions.Item label="Economic Life">{data.economicLifeYears ?? '—'} yrs</Descriptions.Item>
       <Descriptions.Item label="Remaining Life">{data.remainingLifeYears ?? '—'} yrs</Descriptions.Item>
       <Descriptions.Item label="Market Value">{data.marketValue ?? 'Not yet valued'}</Descriptions.Item>

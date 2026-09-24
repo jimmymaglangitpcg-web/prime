@@ -86,45 +86,95 @@ public static class ValuationCalculator
     }
 
     /// <summary>
-    /// Replacement-cost method: MarketValue = (AcquisitionCost +
-    /// InstallationCost + OtherCost) × (RemainingLifeYears / EconomicLifeYears),
-    /// straight-line, using only figures already entered on the entity
-    /// (§26 — an appraiser's own acquisition/life-span data, not a code-level
-    /// assumption). When either life-span field is missing, no depreciation
-    /// is applied — the full cost stands, rather than guessing a life span.
-    /// Fully-depreciated machinery (RemainingLifeYears = 0) floors at 0, not negative.
+    /// Why <paramref name="machinery"/> cannot be valued under LGC §224, or
+    /// null when it can. Brand-new machinery needs nothing more; any other
+    /// machinery needs its replacement/reproduction cost and both life spans,
+    /// because §224(a) prescribes that formula "in all other cases" — the
+    /// calculator never substitutes acquisition cost or assumes a life span.
     /// </summary>
-    public static ValuationCalculationResult CalculateMachinery(Machinery machinery)
+    public static string? MissingMachineryInputs(Machinery machinery)
     {
-        var totalCost = machinery.AcquisitionCost + (machinery.InstallationCost ?? 0m) + (machinery.OtherCost ?? 0m);
-
-        decimal remainingFraction = 1m;
-        var hasLifeSpanData = machinery.EconomicLifeYears is > 0 && machinery.RemainingLifeYears is not null;
-        if (hasLifeSpanData)
+        if (machinery.IsBrandNew)
         {
-            var economicLife = machinery.EconomicLifeYears!.Value;
-            var remainingLife = Math.Clamp(machinery.RemainingLifeYears!.Value, 0, economicLife);
-            remainingFraction = (decimal)remainingLife / economicLife;
+            return null;
+        }
+        var missing = new List<string>();
+        if (machinery.ReplacementCost is null)
+        {
+            missing.Add("replacement or reproduction cost");
+        }
+        if (machinery.EconomicLifeYears is not > 0)
+        {
+            missing.Add("estimated economic life (years, > 0)");
+        }
+        if (machinery.RemainingLifeYears is null)
+        {
+            missing.Add("remaining economic life (years)");
+        }
+        return missing.Count == 0 ? null : string.Join(", ", missing);
+    }
+
+    /// <summary>
+    /// LGC §224(a) and §225, using only figures entered by the appraiser plus
+    /// the configured §225 floor (<paramref name="parameters"/>):
+    /// <list type="bullet">
+    /// <item>Brand-new: MarketValue = acquisition cost (AcquisitionCost +
+    /// InstallationCost + OtherCost; §224(b) counts freight, duties,
+    /// installation and similar charges as part of acquisition cost).</item>
+    /// <item>All other machinery: MarketValue = ReplacementCost ×
+    /// (RemainingLifeYears / EconomicLifeYears), but never below
+    /// MinimumRemainingValuePercent of ReplacementCost (§225 proviso). The
+    /// remaining life is clamped to 0…EconomicLifeYears.</item>
+    /// </list>
+    /// Throws when <see cref="MissingMachineryInputs"/> is not null — callers
+    /// check first and report the gap to the user.
+    /// DOMAIN VERIFICATION REQUIRED: whether §225's "not exceeding 5% … for
+    /// each year of use" limits the §224 life ratio, and how machinery that
+    /// is no longer "useful and in operation" is treated; neither is applied.
+    /// </summary>
+    public static ValuationCalculationResult CalculateMachinery(Machinery machinery, MachineryValuationParameters parameters)
+    {
+        if (MissingMachineryInputs(machinery) is { } missing)
+        {
+            throw new InvalidOperationException($"Machinery cannot be valued under LGC §224 without: {missing}.");
         }
 
-        var marketValue = totalCost * remainingFraction;
-
-        var breakdown = new Dictionary<string, decimal>
+        if (machinery.IsBrandNew)
         {
-            ["AcquisitionCost"] = machinery.AcquisitionCost,
-            ["InstallationCost"] = machinery.InstallationCost ?? 0m,
-            ["OtherCost"] = machinery.OtherCost ?? 0m,
-            ["TotalCost"] = totalCost,
+            var acquisitionCost = machinery.AcquisitionCost + (machinery.InstallationCost ?? 0m) + (machinery.OtherCost ?? 0m);
+            return new ValuationCalculationResult(ValuationMethod.AcquisitionCost, acquisitionCost, new Dictionary<string, decimal>
+            {
+                ["IsBrandNew"] = 1m,
+                ["AcquisitionCost"] = machinery.AcquisitionCost,
+                ["InstallationCost"] = machinery.InstallationCost ?? 0m,
+                ["OtherCost"] = machinery.OtherCost ?? 0m,
+                ["TotalAcquisitionCost"] = acquisitionCost,
+                ["MarketValue"] = acquisitionCost,
+            });
+        }
+
+        var replacementCost = machinery.ReplacementCost!.Value;
+        var economicLife = machinery.EconomicLifeYears!.Value;
+        var remainingLife = Math.Clamp(machinery.RemainingLifeYears!.Value, 0, economicLife);
+        var remainingFraction = (decimal)remainingLife / economicLife;
+        var depreciatedValue = replacementCost * remainingFraction;
+        var minimumRemainingValue = replacementCost * parameters.MinimumRemainingValuePercent / 100m;
+        var floorApplied = depreciatedValue < minimumRemainingValue;
+        var marketValue = floorApplied ? minimumRemainingValue : depreciatedValue;
+
+        return new ValuationCalculationResult(ValuationMethod.ReplacementCost, marketValue, new Dictionary<string, decimal>
+        {
+            ["IsBrandNew"] = 0m,
+            ["ReplacementCost"] = replacementCost,
+            ["EconomicLifeYears"] = economicLife,
+            ["RemainingLifeYears"] = machinery.RemainingLifeYears!.Value,
             ["RemainingFraction"] = remainingFraction,
+            ["DepreciatedValue"] = depreciatedValue,
+            ["MinimumRemainingValuePercent"] = parameters.MinimumRemainingValuePercent,
+            ["MinimumRemainingValue"] = minimumRemainingValue,
+            ["MinimumApplied"] = floorApplied ? 1m : 0m,
             ["MarketValue"] = marketValue,
-        };
-        if (hasLifeSpanData)
-        {
-            breakdown["EconomicLifeYears"] = machinery.EconomicLifeYears!.Value;
-            breakdown["RemainingLifeYears"] = machinery.RemainingLifeYears!.Value;
-        }
-
-        return new ValuationCalculationResult(ValuationMethod.ReplacementCost, marketValue, breakdown);
+        });
     }
 
     private static decimal ClampToRange(decimal value, decimal? min, decimal? max)

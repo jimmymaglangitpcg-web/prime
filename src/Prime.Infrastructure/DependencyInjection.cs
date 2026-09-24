@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Features.Valuation;
 using Prime.Infrastructure.GIS;
 using Prime.Infrastructure.Identity;
 using Prime.Infrastructure.Jobs;
@@ -45,6 +46,16 @@ public static class DependencyInjection
             .Validate(o => o.MeasurementSrid is null or > 0, "Gis:MeasurementSrid must be a positive EPSG code when set.")
             .ValidateOnStart();
         services.AddScoped<IGeometryMeasurementService, GeometryMeasurementService>();
+
+        // Legal parameters of the valuation engine (docs/DOMAIN-MODEL.md §3.9). Required,
+        // with their citation, so a deployment cannot silently run without them.
+        services.AddOptions<ValuationOptions>()
+            .Bind(configuration.GetSection(ValuationOptions.SectionName))
+            .Validate(o => o.MachineryMinimumRemainingValuePercent is >= 0m and <= 100m,
+                "Valuation:MachineryMinimumRemainingValuePercent is required (0-100).")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.MachineryMinimumRemainingValueLegalBasis),
+                "Valuation:MachineryMinimumRemainingValueLegalBasis is required.")
+            .ValidateOnStart();
 
         services.AddHealthChecks()
             .AddNpgSql(connectionString, name: "postgresql", tags: ["ready"])

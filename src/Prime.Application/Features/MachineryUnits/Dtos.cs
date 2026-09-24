@@ -16,7 +16,9 @@ public sealed record CreateMachineryRequest(
     decimal? InstallationCost,
     decimal? OtherCost,
     int? EconomicLifeYears,
-    int? RemainingLifeYears);
+    int? RemainingLifeYears,
+    bool IsBrandNew = false,
+    decimal? ReplacementCost = null);
 
 public sealed record MachineryDto(
     Guid Id,
@@ -34,6 +36,8 @@ public sealed record MachineryDto(
     decimal AcquisitionCost,
     decimal? InstallationCost,
     decimal? OtherCost,
+    bool IsBrandNew,
+    decimal? ReplacementCost,
     int? EconomicLifeYears,
     int? RemainingLifeYears,
     decimal? Depreciation,

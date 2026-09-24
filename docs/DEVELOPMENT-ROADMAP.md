@@ -490,6 +490,14 @@ applying it to produce `AssessedValue` is Phase 6's `AssessmentService`.
    figures an appraiser already enters per record (§26), not a code-level
    assumption. When either is missing, no depreciation is applied (full
    cost stands) rather than guessing a life span.
+   **Superseded 2026-09-24** (regulatory alignment step 2): this used
+   *acquisition* cost and let value fall to 0, contrary to LGC §224(a)
+   (replacement/reproduction cost for non-new machinery) and §225 (minimum
+   remaining value). Now: brand-new → acquisition cost; otherwise
+   replacement cost × life ratio, floored at the configured §225 minimum;
+   missing inputs refuse valuation instead of defaulting. See
+   docs/DOMAIN-MODEL.md §3.9. Migration `MachineryReplacementCost`
+   (additive).
 7. **Maker-checker is Draft→Approved only** — `ValuationService` only
    resolves `Approved` schedules/never resolves a `Draft` one, but
    "creator cannot approve their own record" enforcement is Phase 12's

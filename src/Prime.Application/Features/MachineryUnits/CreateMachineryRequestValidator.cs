@@ -17,6 +17,9 @@ public sealed class CreateMachineryRequestValidator : AbstractValidator<CreateMa
         RuleFor(x => x.AcquisitionCost).GreaterThanOrEqualTo(0);
         RuleFor(x => x.InstallationCost).GreaterThanOrEqualTo(0).When(x => x.InstallationCost is not null);
         RuleFor(x => x.OtherCost).GreaterThanOrEqualTo(0).When(x => x.OtherCost is not null);
+        RuleFor(x => x.ReplacementCost).GreaterThanOrEqualTo(0).When(x => x.ReplacementCost is not null);
+        RuleFor(x => x.ReplacementCost).Null().When(x => x.IsBrandNew)
+            .WithMessage("replacementCost applies only to machinery that is not brand-new; brand-new machinery is valued at acquisition cost (LGC §224(a)).");
         RuleFor(x => x.EconomicLifeYears).GreaterThanOrEqualTo(0).When(x => x.EconomicLifeYears is not null);
         RuleFor(x => x.RemainingLifeYears).GreaterThanOrEqualTo(0).When(x => x.RemainingLifeYears is not null);
     }

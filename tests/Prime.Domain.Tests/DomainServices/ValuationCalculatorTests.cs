@@ -139,80 +139,140 @@ public class ValuationCalculatorTests
         result.MarketValue.ShouldBe(1_000_000m);
     }
 
-    // --- Machinery ---
+    // --- Machinery (LGC §224(a) / §225) ---
+
+    // The §225 floor comes from configuration; 20 here mirrors the cited
+    // statutory text and is passed in, never read from a code constant.
+    private static readonly MachineryValuationParameters Section225 = new(20m);
 
     [Fact]
-    public void CalculateMachinery_WithinEconomicLife_AppliesStraightLineDepreciation()
+    public void CalculateMachinery_BrandNew_IsAcquisitionCostIncludingCharges()
     {
         var machinery = new Machinery
         {
-            AcquisitionCost = 1_000_000m,
-            EconomicLifeYears = 10,
-            RemainingLifeYears = 5,
-        };
-
-        var result = ValuationCalculator.CalculateMachinery(machinery);
-
-        result.Method.ShouldBe(ValuationMethod.ReplacementCost);
-        result.MarketValue.ShouldBe(500_000m);
-    }
-
-    [Fact]
-    public void CalculateMachinery_IncludesInstallationAndOtherCost()
-    {
-        var machinery = new Machinery
-        {
+            IsBrandNew = true,
             AcquisitionCost = 100_000m,
             InstallationCost = 20_000m,
             OtherCost = 5_000m,
-            EconomicLifeYears = 10,
-            RemainingLifeYears = 10,
         };
 
-        var result = ValuationCalculator.CalculateMachinery(machinery);
+        var result = ValuationCalculator.CalculateMachinery(machinery, Section225);
 
+        result.Method.ShouldBe(ValuationMethod.AcquisitionCost);
         result.MarketValue.ShouldBe(125_000m);
     }
 
     [Fact]
-    public void CalculateMachinery_NoLifeSpanData_ReturnsFullCost()
+    public void CalculateMachinery_BrandNew_IgnoresLifeSpans()
     {
-        // Never invent an assumed economic life (CLAUDE.md §7) — missing
-        // life-span data means no depreciation is applied, not a guess.
-        var machinery = new Machinery { AcquisitionCost = 100_000m };
+        var machinery = new Machinery { IsBrandNew = true, AcquisitionCost = 100_000m, EconomicLifeYears = 10, RemainingLifeYears = 2 };
 
-        var result = ValuationCalculator.CalculateMachinery(machinery);
-
-        result.MarketValue.ShouldBe(100_000m);
+        ValuationCalculator.CalculateMachinery(machinery, Section225).MarketValue.ShouldBe(100_000m);
     }
 
     [Fact]
-    public void CalculateMachinery_PastEconomicLife_FloorsAtZeroNotNegative()
+    public void CalculateMachinery_Used_UsesReplacementCostNotAcquisitionCost()
     {
         var machinery = new Machinery
         {
-            AcquisitionCost = 100_000m,
+            AcquisitionCost = 400_000m,
+            ReplacementCost = 1_000_000m,
+            EconomicLifeYears = 10,
+            RemainingLifeYears = 5,
+        };
+
+        var result = ValuationCalculator.CalculateMachinery(machinery, Section225);
+
+        result.Method.ShouldBe(ValuationMethod.ReplacementCost);
+        result.MarketValue.ShouldBe(500_000m);
+        result.Breakdown["MinimumApplied"].ShouldBe(0m);
+    }
+
+    [Fact]
+    public void CalculateMachinery_Used_NeverBelowSection225Floor()
+    {
+        var machinery = new Machinery { ReplacementCost = 1_000_000m, EconomicLifeYears = 10, RemainingLifeYears = 1 };
+
+        var result = ValuationCalculator.CalculateMachinery(machinery, Section225);
+
+        result.Breakdown["DepreciatedValue"].ShouldBe(100_000m);
+        result.MarketValue.ShouldBe(200_000m);
+        result.Breakdown["MinimumApplied"].ShouldBe(1m);
+        result.Breakdown["MinimumRemainingValuePercent"].ShouldBe(20m);
+    }
+
+    [Fact]
+    public void CalculateMachinery_Used_ExactlyAtFloor_IsNotMarkedAsFloored()
+    {
+        var machinery = new Machinery { ReplacementCost = 1_000_000m, EconomicLifeYears = 10, RemainingLifeYears = 2 };
+
+        var result = ValuationCalculator.CalculateMachinery(machinery, Section225);
+
+        result.MarketValue.ShouldBe(200_000m);
+        result.Breakdown["MinimumApplied"].ShouldBe(0m);
+    }
+
+    [Fact]
+    public void CalculateMachinery_Used_PastEconomicLife_HoldsAtFloorNotZero()
+    {
+        var machinery = new Machinery
+        {
+            ReplacementCost = 100_000m,
             EconomicLifeYears = 10,
             RemainingLifeYears = -3, // clock never reset after full depreciation
         };
 
-        var result = ValuationCalculator.CalculateMachinery(machinery);
-
-        result.MarketValue.ShouldBe(0m);
+        ValuationCalculator.CalculateMachinery(machinery, Section225).MarketValue.ShouldBe(20_000m);
     }
 
     [Fact]
-    public void CalculateMachinery_ZeroEconomicLifeYears_DoesNotDivideByZero()
+    public void CalculateMachinery_Used_RemainingLifeAboveEconomicLife_IsClamped()
     {
+        var machinery = new Machinery { ReplacementCost = 100_000m, EconomicLifeYears = 10, RemainingLifeYears = 15 };
+
+        ValuationCalculator.CalculateMachinery(machinery, Section225).MarketValue.ShouldBe(100_000m);
+    }
+
+    [Fact]
+    public void CalculateMachinery_FloorPercentIsTakenFromParameters()
+    {
+        var machinery = new Machinery { ReplacementCost = 100_000m, EconomicLifeYears = 10, RemainingLifeYears = 0 };
+
+        ValuationCalculator.CalculateMachinery(machinery, new MachineryValuationParameters(0m)).MarketValue.ShouldBe(0m);
+    }
+
+    [Fact]
+    public void CalculateMachinery_Used_KeepsDecimalPrecision()
+    {
+        var machinery = new Machinery { ReplacementCost = 1_000_000m, EconomicLifeYears = 3, RemainingLifeYears = 2 };
+
+        var result = ValuationCalculator.CalculateMachinery(machinery, Section225);
+
+        // Unrounded here; rounding to centavos happens where values are stored.
+        decimal.Round(result.MarketValue, 2).ShouldBe(666_666.67m);
+    }
+
+    [Theory]
+    [InlineData(null, 10, 5, "replacement or reproduction cost")]
+    [InlineData(100_000, null, 5, "estimated economic life")]
+    [InlineData(100_000, 0, 0, "estimated economic life")]
+    [InlineData(100_000, 10, null, "remaining economic life")]
+    public void MissingMachineryInputs_Used_ReportsEachGap(int? replacementCost, int? economicLife, int? remainingLife, string expected)
+    {
+        // Never substitute acquisition cost or assume a life span (CLAUDE.md §5, §7).
         var machinery = new Machinery
         {
             AcquisitionCost = 100_000m,
-            EconomicLifeYears = 0,
-            RemainingLifeYears = 0,
+            ReplacementCost = replacementCost,
+            EconomicLifeYears = economicLife,
+            RemainingLifeYears = remainingLife,
         };
 
-        var result = ValuationCalculator.CalculateMachinery(machinery);
-
-        result.MarketValue.ShouldBe(100_000m);
+        ValuationCalculator.MissingMachineryInputs(machinery)!.ShouldContain(expected);
+        Should.Throw<InvalidOperationException>(() => ValuationCalculator.CalculateMachinery(machinery, Section225));
     }
+
+    [Fact]
+    public void MissingMachineryInputs_BrandNew_NeedsNothingMore() =>
+        ValuationCalculator.MissingMachineryInputs(new Machinery { IsBrandNew = true, AcquisitionCost = 1m }).ShouldBeNull();
 }

@@ -1,4 +1,4 @@
-import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd';
+import { Alert, Button, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd';
 import { useCreateMachinery } from '../../../api/machinery';
 import { useMachineryTypes } from '../../../api/referenceData';
 import type { CreateMachineryRequest } from '../../../lib/types';
@@ -18,6 +18,7 @@ export function AddMachineryModal({
   const [form] = Form.useForm();
   const { data: machineryTypes } = useMachineryTypes();
   const createMachinery = useCreateMachinery(propertyId);
+  const isBrandNew: boolean = Form.useWatch('isBrandNew', form) ?? false;
 
   function handleClose() {
     form.resetFields();
@@ -55,6 +56,8 @@ export function AddMachineryModal({
             acquisitionCost: values.acquisitionCost,
             installationCost: values.installationCost,
             otherCost: values.otherCost,
+            isBrandNew: values.isBrandNew ?? false,
+            replacementCost: values.isBrandNew ? null : values.replacementCost,
             economicLifeYears: values.economicLifeYears,
             remainingLifeYears: values.remainingLifeYears,
           };
@@ -105,13 +108,33 @@ export function AddMachineryModal({
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
 
-        <Form.Item name="economicLifeYears" label="Economic Life (years, optional)">
-          <InputNumber min={0} style={{ width: '100%' }} />
+        <Form.Item
+          name="isBrandNew"
+          valuePropName="checked"
+          extra="Brand-new machinery is valued at acquisition cost; all other machinery from its replacement cost and remaining life (LGC §224)."
+        >
+          <Checkbox>Brand-new</Checkbox>
         </Form.Item>
 
-        <Form.Item name="remainingLifeYears" label="Remaining Life (years, optional)">
-          <InputNumber min={0} style={{ width: '100%' }} />
-        </Form.Item>
+        {!isBrandNew && (
+          <>
+            <Form.Item
+              name="replacementCost"
+              label="Replacement / Reproduction Cost"
+              extra="Needed before this machinery can be valued."
+            >
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+
+            <Form.Item name="economicLifeYears" label="Estimated Economic Life (years)" extra="Needed before this machinery can be valued.">
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+
+            <Form.Item name="remainingLifeYears" label="Remaining Economic Life (years)" extra="Needed before this machinery can be valued.">
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+          </>
+        )}
 
         <Form.Item>
           <Button type="primary" htmlType="submit" loading={createMachinery.isPending}>

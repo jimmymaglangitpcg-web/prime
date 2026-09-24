@@ -422,6 +422,8 @@ export interface CreateMachineryRequest {
   acquisitionCost: number;
   installationCost?: number | null;
   otherCost?: number | null;
+  isBrandNew?: boolean;
+  replacementCost?: number | null;
   economicLifeYears?: number | null;
   remainingLifeYears?: number | null;
 }
@@ -442,6 +444,8 @@ export interface MachineryDto {
   acquisitionCost: number;
   installationCost: number | null;
   otherCost: number | null;
+  isBrandNew: boolean;
+  replacementCost: number | null;
   economicLifeYears: number | null;
   remainingLifeYears: number | null;
   depreciation: number | null;

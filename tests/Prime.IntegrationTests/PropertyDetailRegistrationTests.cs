@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Prime.Application.Features.Buildings;
 using Prime.Application.Features.Lands;
 using Prime.Application.Features.MachineryUnits;
+using Prime.Application.Features.Valuation;
 using Prime.Domain.Entities;
 using Prime.Domain.Entities.Reference;
 using Prime.Domain.Enums;
@@ -178,5 +179,79 @@ public class PropertyDetailRegistrationTests(WebApplicationFactory<Program> fact
         var fetched = await machineryService.GetByRpuAsync(rpuId);
         fetched.IsSuccess.ShouldBeTrue();
         fetched.Value.SerialNumber.ShouldBe("SN-001");
+    }
+
+    private static async Task<(IMachineryService Machinery, IValuationService Valuation, Guid RpuId, Guid MachineryTypeId)> SeedMachineryRpuAsync(
+        PrimeDbContext db, IServiceProvider services)
+    {
+        var machineryType = new MachineryType { Code = $"MT{Guid.NewGuid():N}"[..8], Name = "DEMO_Generator" };
+        db.MachineryTypes.Add(machineryType);
+        await db.SaveChangesAsync();
+        var rpuId = await SeedRpuAsync(db, RpuType.Machinery);
+        return (services.GetRequiredService<IMachineryService>(), services.GetRequiredService<IValuationService>(), rpuId, machineryType.Id);
+    }
+
+    [Fact]
+    public async Task ValueUsedMachinery_WithoutReplacementCost_FailsInsteadOfUsingAcquisitionCost()
+    {
+        var (db, services, transaction) = await BeginTestScopeAsync(factory);
+        await using var _ = transaction;
+        var (machinery, valuation, rpuId, typeId) = await SeedMachineryRpuAsync(db, services);
+
+        var created = await machinery.CreateAsync(new CreateMachineryRequest(
+            rpuId, typeId, null, null, null, null, null, null, null, 500_000m, null, null, 10, 6));
+        created.IsSuccess.ShouldBeTrue(created.IsSuccess ? null : created.Message);
+
+        var result = await valuation.ComputeForMachineryAsync(created.Value.Id);
+
+        result.IsSuccess.ShouldBeFalse();
+        result.Code.ShouldBe("MACHINERY_VALUATION_INPUTS_MISSING");
+        result.Message.ShouldContain("replacement or reproduction cost");
+    }
+
+    [Fact]
+    public async Task ValueUsedMachinery_AppliesSection225FloorFromConfiguration_AndStoresBreakdown()
+    {
+        var (db, services, transaction) = await BeginTestScopeAsync(factory);
+        await using var _ = transaction;
+        var (machinery, valuation, rpuId, typeId) = await SeedMachineryRpuAsync(db, services);
+
+        var created = await machinery.CreateAsync(new CreateMachineryRequest(
+            rpuId, typeId, null, null, null, null, null, null, null, 500_000m, null, null, 10, 1,
+            IsBrandNew: false, ReplacementCost: 800_000m));
+        created.IsSuccess.ShouldBeTrue(created.IsSuccess ? null : created.Message);
+
+        var result = await valuation.ComputeForMachineryAsync(created.Value.Id);
+
+        result.IsSuccess.ShouldBeTrue(result.IsSuccess ? null : result.Message);
+        // 800,000 × 1/10 = 80,000, below the configured 20% floor (160,000).
+        result.Value.ComputedMarketValue.ShouldBe(160_000m);
+        result.Value.ValuationMethod.ShouldBe(ValuationMethod.ReplacementCost);
+        result.Value.Breakdown["MinimumApplied"].ShouldBe(1m);
+        (await db.MachineryUnits.SingleAsync(x => x.Id == created.Value.Id)).MarketValue.ShouldBe(160_000m);
+    }
+
+    [Fact]
+    public async Task ValueBrandNewMachinery_IsAcquisitionCost_AndRejectsReplacementCost()
+    {
+        var (db, services, transaction) = await BeginTestScopeAsync(factory);
+        await using var _ = transaction;
+        var (machinery, valuation, rpuId, typeId) = await SeedMachineryRpuAsync(db, services);
+
+        var rejected = await machinery.CreateAsync(new CreateMachineryRequest(
+            rpuId, typeId, null, null, null, null, null, null, null, 500_000m, 20_000m, null, null, null,
+            IsBrandNew: true, ReplacementCost: 1m));
+        rejected.IsSuccess.ShouldBeFalse();
+
+        var created = await machinery.CreateAsync(new CreateMachineryRequest(
+            rpuId, typeId, null, null, null, null, null, null, null, 500_000m, 20_000m, null, null, null,
+            IsBrandNew: true));
+        created.IsSuccess.ShouldBeTrue(created.IsSuccess ? null : created.Message);
+
+        var result = await valuation.ComputeForMachineryAsync(created.Value.Id);
+
+        result.IsSuccess.ShouldBeTrue(result.IsSuccess ? null : result.Message);
+        result.Value.ComputedMarketValue.ShouldBe(520_000m);
+        result.Value.ValuationMethod.ShouldBe(ValuationMethod.AcquisitionCost);
     }
 }

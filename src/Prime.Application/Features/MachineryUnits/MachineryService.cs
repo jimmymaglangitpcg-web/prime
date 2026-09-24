@@ -50,6 +50,8 @@ public sealed class MachineryService(IApplicationDbContext db, IValidator<Create
             AcquisitionCost = request.AcquisitionCost,
             InstallationCost = request.InstallationCost,
             OtherCost = request.OtherCost,
+            IsBrandNew = request.IsBrandNew,
+            ReplacementCost = request.ReplacementCost,
             EconomicLifeYears = request.EconomicLifeYears,
             RemainingLifeYears = request.RemainingLifeYears,
         };
@@ -102,6 +104,8 @@ public sealed class MachineryService(IApplicationDbContext db, IValidator<Create
         x.AcquisitionCost,
         x.InstallationCost,
         x.OtherCost,
+        x.IsBrandNew,
+        x.ReplacementCost,
         x.EconomicLifeYears,
         x.RemainingLifeYears,
         x.Depreciation,

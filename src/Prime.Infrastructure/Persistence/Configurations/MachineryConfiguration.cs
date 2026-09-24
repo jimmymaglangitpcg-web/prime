@@ -8,6 +8,12 @@ public sealed class MachineryConfiguration : IEntityTypeConfiguration<Machinery>
 {
     public void Configure(EntityTypeBuilder<Machinery> builder)
     {
+        builder.ToTable(t =>
+        {
+            t.HasCheckConstraint("CK_MachineryUnits_ReplacementCost", "\"ReplacementCost\" IS NULL OR \"ReplacementCost\" >= 0");
+            // LGC §224(a): replacement cost is the basis only for machinery that is not brand-new.
+            t.HasCheckConstraint("CK_MachineryUnits_BrandNewNoReplacementCost", "NOT \"IsBrandNew\" OR \"ReplacementCost\" IS NULL");
+        });
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.Description).HasMaxLength(500);
@@ -20,6 +26,7 @@ public sealed class MachineryConfiguration : IEntityTypeConfiguration<Machinery>
         builder.Property(x => x.AcquisitionCost).HasPrecision(18, 2);
         builder.Property(x => x.InstallationCost).HasPrecision(18, 2);
         builder.Property(x => x.OtherCost).HasPrecision(18, 2);
+        builder.Property(x => x.ReplacementCost).HasPrecision(18, 2);
         builder.Property(x => x.Depreciation).HasPrecision(9, 6);
         builder.Property(x => x.MarketValue).HasPrecision(18, 2);
         builder.Property(x => x.AssessedValue).HasPrecision(18, 2);

@@ -2,7 +2,7 @@ namespace Prime.Domain.Enums;
 
 /// <summary>
 /// Which calculation algorithm <see cref="DomainServices.ValuationCalculator"/>
-/// used. Fixed by code capability (only these two are implemented), not an
+/// used. Fixed by code capability (only these are implemented), not an
 /// LGU-configurable reference table — the same "fixed-by-code vs.
 /// LGU-configurable" split already applied to <see cref="WorkflowStatus"/>
 /// vs. the <c>Reference/</c> lookup tables (docs/DOMAIN-MODEL.md §3.10).
@@ -15,4 +15,7 @@ public enum ValuationMethod
 {
     SmvBased = 0,
     ReplacementCost = 1,
+
+    /// <summary>Brand-new machinery valued at acquisition cost (LGC §224(a)).</summary>
+    AcquisitionCost = 2,
 }

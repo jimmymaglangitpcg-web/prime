@@ -274,11 +274,28 @@ MachineryTypeId
 Description, Brand, Model, SerialNumber
 Capacity, CapacityUnit
 DateAcquired, AcquisitionCost, InstallationCost, OtherCost
+IsBrandNew, ReplacementCost                (LGC §224(a))
 EconomicLife, RemainingLife
 Depreciation, MarketValue, AssessedValue   (computed)
 Status
 + AuditFields
 ```
+
+Valuation (LGC §224(a), §225 — verified against the official text, see
+docs/analysis/current-real-property-regulatory-baseline.md):
+
+- **Brand-new** → market value = acquisition cost (AcquisitionCost +
+  InstallationCost + OtherCost; §224(b) counts such charges as part of it).
+- **All other machinery** → ReplacementCost × RemainingLife / EconomicLife,
+  never below the §225 minimum remaining value (configured as
+  `Valuation:MachineryMinimumRemainingValuePercent` with its legal basis;
+  the percent used is stored in each valuation's breakdown). Without a
+  replacement cost and both life spans the valuation is refused
+  (`MACHINERY_VALUATION_INPUTS_MISSING`) — acquisition cost is never
+  substituted and no life span is assumed.
+- DOMAIN VERIFICATION REQUIRED: whether §225's "not exceeding 5% … for
+  each year of use" limits the life ratio, and the treatment of machinery
+  no longer "useful and in operation".
 
 ### 3.10 Reference tables (§27)
 

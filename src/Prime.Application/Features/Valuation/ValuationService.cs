@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
 using Prime.Domain.DomainServices;
@@ -25,7 +26,7 @@ namespace Prime.Application.Features.Valuation;
 /// convention that <c>Code</c>, not the display <c>Name</c>, is a lookup
 /// row's stable identifier (docs/DOMAIN-MODEL.md §3.10).
 /// </summary>
-public sealed class ValuationService(IApplicationDbContext db) : IValuationService
+public sealed class ValuationService(IApplicationDbContext db, IOptions<ValuationOptions> options) : IValuationService
 {
 
     public async Task<Result<ValuationDto>> ComputeForLandAsync(Guid landId, CancellationToken cancellationToken = default)
@@ -105,8 +106,15 @@ public sealed class ValuationService(IApplicationDbContext db) : IValuationServi
             return Result.Failure<ValuationDto>("MACHINERY_NOT_FOUND", "No Machinery record was found with the given id.");
         }
 
+        if (ValuationCalculator.MissingMachineryInputs(machinery) is { } missing)
+        {
+            return Result.Failure<ValuationDto>("MACHINERY_VALUATION_INPUTS_MISSING",
+                $"Machinery that is not brand-new is valued from its replacement or reproduction cost and its remaining vs. estimated economic life (LGC §224(a)). Missing: {missing}.");
+        }
+
         var asOf = DateOnly.FromDateTime(DateTime.UtcNow);
-        var calc = ValuationCalculator.CalculateMachinery(machinery);
+        var parameters = new MachineryValuationParameters(options.Value.MachineryMinimumRemainingValuePercent!.Value);
+        var calc = ValuationCalculator.CalculateMachinery(machinery, parameters);
         var valuation = Persist(machinery.RpuId, machinery.PropertyId, ValuationSourceType.Machinery, machinery.Id, null, calc, asOf);
         machinery.MarketValue = calc.MarketValue;
         await db.SaveChangesAsync(cancellationToken);
