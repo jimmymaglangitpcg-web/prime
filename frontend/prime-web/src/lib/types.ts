@@ -248,6 +248,26 @@ export interface ParcelFeatureCollection {
   limit: number;
 }
 
+export type ReferenceLayerName = 'barangays' | 'zones' | 'roads';
+
+export interface ReferenceLayerFeatureProperties {
+  /** PSGC code, zone code, or road code. */
+  key: string;
+  name: string | null;
+  effectiveDate: string;
+  endDate: string | null;
+  source: string;
+  sourceReference: string | null;
+}
+
+export interface ReferenceLayerFeatureCollection {
+  type: 'FeatureCollection';
+  asOf: string;
+  features: { type: 'Feature'; id: string; geometry: unknown; properties: ReferenceLayerFeatureProperties }[];
+  truncated: boolean;
+  limit: number;
+}
+
 // --- RPU -----------------------------------------------------------
 
 export interface CreateRpuRequest {

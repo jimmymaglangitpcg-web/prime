@@ -1,63 +1,65 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Descriptions, Empty, Input, Spin, Tag, Typography } from 'antd';
-import { EnvironmentOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Checkbox, DatePicker, Descriptions, Empty, Input, Spin, Tag, Typography } from 'antd';
+import { EnvironmentOutlined, PrinterOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import 'ol/ol.css';
 import OlMap from 'ol/Map';
 import View from 'ol/View';
 import type Feature from 'ol/Feature';
-import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
-import XYZ from 'ol/source/XYZ';
 import GeoJSON from 'ol/format/GeoJSON';
 import WKT from 'ol/format/WKT';
-import { bbox as bboxStrategy } from 'ol/loadingstrategy';
-import { fromLonLat, toLonLat, transformExtent } from 'ol/proj';
+import { fromLonLat, toLonLat } from 'ol/proj';
 import { createEmpty, extend } from 'ol/extent';
-import { Fill, Stroke, Style } from 'ol/style';
 import { apiGet } from '../../lib/apiClient';
 import { mapConfig } from '../../lib/mapConfig';
-import { fetchParcelsAtPoint, fetchParcelsInExtent, fetchPropertyParcels, fetchPropertyProfile } from '../../api/gis';
+import {
+  DATA_PROJECTION,
+  LAYER_ORDER,
+  LAYERS,
+  MAP_PROJECTION,
+  createBaseLayer,
+  createDataLayers,
+  highlightStyle,
+  todayIso,
+  type LayerStatus,
+  type MapLayerName,
+} from '../../lib/mapLayers';
+import { fetchParcelsAtPoint, fetchPropertyParcels, fetchPropertyProfile } from '../../api/gis';
 import type { PagedResult, ParcelFeatureProperties, PropertyDto } from '../../lib/types';
+import { LegendSwatch } from './LegendSwatch';
 
-const MAP_PROJECTION = 'EPSG:3857';
-const DATA_PROJECTION = 'EPSG:4326';
-
-const parcelStyle = new Style({
-  stroke: new Stroke({ color: '#1d4ed8', width: 1.5 }),
-  fill: new Fill({ color: 'rgba(29, 78, 216, 0.08)' }),
-});
-
-const highlightStyle = new Style({
-  stroke: new Stroke({ color: '#ea580c', width: 3 }),
-  fill: new Fill({ color: 'rgba(234, 88, 12, 0.18)' }),
-});
+const ALL_VISIBLE: Record<MapLayerName, boolean> = { parcels: true, zones: true, barangays: true, roads: true };
+const REFERENCE_LAYERS = ['zones', 'barangays', 'roads'] as const;
 
 type Selection =
   | { origin: 'click'; parcels: ParcelFeatureProperties[] }
   | { origin: 'property'; pin: string; parcels: ParcelFeatureProperties[] };
 
-const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
-
 /**
- * CLAUDE.md §38/§54 GIS workspace: parcel map, search, parcel selection →
- * Property Profile. Parcels load per visible extent from /api/gis/parcels
- * (never the whole inventory — §71) and only at street-level zoom.
- * `?propertyId=` opens the map zoomed to that property's parcels (used by
- * the Property Profile's "View on map").
+ * CLAUDE.md §38/§54 GIS workspace: parcel map with reference layers,
+ * search, parcel selection → Property Profile, and a printable tax map.
+ * Every layer loads per visible extent (never the whole inventory — §71)
+ * and only from its own minimum zoom. `?propertyId=` opens the map zoomed
+ * to that property's parcels (the Property Profile's "View on map").
  */
 export function GisWorkspacePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const mapElement = useRef<HTMLDivElement>(null);
   const mapRef = useRef<OlMap | null>(null);
+  const layersRef = useRef<Record<MapLayerName, VectorLayer> | null>(null);
   const [highlightSource] = useState(() => new VectorSource());
 
   const [zoom, setZoom] = useState(mapConfig.initialZoom);
-  const [truncated, setTruncated] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [layerStatus, setLayerStatus] = useState<Partial<Record<MapLayerName, LayerStatus>>>({});
+  const [visible, setVisible] = useState(ALL_VISIBLE);
+  // Reference layers show the boundary versions valid on this date (docs/GIS.md §3).
+  const [asOf, setAsOf] = useState(todayIso);
+  const asOfRef = useRef(asOf);
   const [notice, setNotice] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -68,53 +70,17 @@ export function GisWorkspacePage() {
     }
 
     const geojson = new GeoJSON();
-    const parcelSource = new VectorSource({
-      strategy: bboxStrategy,
-      loader: (extent, _resolution, projection, success, failure) => {
-        const [minLon, minLat, maxLon, maxLat] = transformExtent(extent, projection, DATA_PROJECTION);
-        const bbox: [number, number, number, number] = [
-          clamp(minLon, -180, 180),
-          clamp(minLat, -90, 90),
-          clamp(maxLon, -180, 180),
-          clamp(maxLat, -90, 90),
-        ];
-        if (bbox[0] >= bbox[2] || bbox[1] >= bbox[3]) {
-          success?.([]);
-          return;
-        }
-
-        fetchParcelsInExtent(bbox)
-          .then((collection) => {
-            const features = geojson.readFeatures(collection, {
-              dataProjection: DATA_PROJECTION,
-              featureProjection: projection,
-            }) as Feature[];
-            parcelSource.addFeatures(features);
-            // An incomplete extent must not be remembered as loaded, or
-            // zooming into it would never fetch the missing parcels.
-            if (collection.truncated) {
-              parcelSource.removeLoadedExtent(extent);
-            }
-            setTruncated(collection.truncated);
-            setLoadError(null);
-            success?.(features);
-          })
-          .catch((error: Error) => {
-            parcelSource.removeLoadedExtent(extent);
-            setLoadError(error.message);
-            failure?.();
-          });
-      },
-    });
+    const dataLayers = createDataLayers(
+      () => asOfRef.current,
+      (name, status) => setLayerStatus((previous) => ({ ...previous, [name]: status })),
+    );
+    layersRef.current = dataLayers;
 
     const map = new OlMap({
       target: mapElement.current,
       layers: [
-        new TileLayer({
-          source: new XYZ({ url: mapConfig.tileUrl, attributions: mapConfig.tileAttribution, maxZoom: 19 }),
-        }),
-        // OpenLayers' layer minZoom is exclusive, hence the small offset.
-        new VectorLayer({ source: parcelSource, style: parcelStyle, minZoom: mapConfig.parcelMinZoom - 0.001 }),
+        createBaseLayer(),
+        ...LAYER_ORDER.map((name) => dataLayers[name]),
         new VectorLayer({ source: highlightSource, style: highlightStyle, zIndex: 10 }),
       ],
       view: new View({
@@ -154,8 +120,25 @@ export function GisWorkspacePage() {
       resizeObserver.disconnect();
       map.setTarget(undefined);
       mapRef.current = null;
+      layersRef.current = null;
     };
   }, [highlightSource]);
+
+  useEffect(() => {
+    for (const name of LAYER_ORDER) {
+      layersRef.current?.[name].setVisible(visible[name]);
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    if (asOfRef.current === asOf) {
+      return;
+    }
+    asOfRef.current = asOf;
+    for (const name of REFERENCE_LAYERS) {
+      layersRef.current?.[name].getSource()?.refresh();
+    }
+  }, [asOf]);
 
   const zoomToProperty = useCallback(
     async (propertyId: string, pin: string) => {
@@ -215,7 +198,31 @@ export function GisWorkspacePage() {
     enabled: searchTerm.length > 0,
   });
 
+  const openPrintView = () => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+    // Centre + zoom rather than extent: the sheet keeps the on-screen scale,
+    // so a layer visible now is never dropped by a zoom-out to fit the sheet.
+    const view = map.getView();
+    const [lon, lat] = toLonLat(view.getCenter()!);
+    const layers = LAYER_ORDER.filter((name) => visible[name]).join(',');
+    navigate(`/gis/print?center=${lon.toFixed(6)},${lat.toFixed(6)}&zoom=${(view.getZoom() ?? 0).toFixed(2)}&layers=${layers}&asOf=${asOf}`);
+  };
+
   const zoomedOut = zoom < mapConfig.parcelMinZoom;
+  const statusTags = LAYER_ORDER.filter((name) => visible[name] && zoom >= LAYERS[name].minZoom).flatMap((name) => {
+    const status = layerStatus[name];
+    const title = LAYERS[name].title.toLowerCase();
+    if (status?.error) {
+      return [<Tag key={name} color="error">Could not load {title}: {status.error}</Tag>];
+    }
+    if (status?.truncated) {
+      return [<Tag key={name} color="warning">Too many {title} in view — zoom in to see all</Tag>];
+    }
+    return [];
+  });
 
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
@@ -223,6 +230,40 @@ export function GisWorkspacePage() {
         <Typography.Title level={3} style={{ marginTop: 0 }}>
           Tax Map
         </Typography.Title>
+
+        <Card
+          size="small"
+          title="Layers"
+          style={{ marginBottom: 12 }}
+          extra={
+            <Button size="small" icon={<PrinterOutlined />} onClick={openPrintView}>
+              Print
+            </Button>
+          }
+        >
+          {[...LAYER_ORDER].reverse().map((name) => (
+            <div key={name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <Checkbox checked={visible[name]} onChange={(e) => setVisible((v) => ({ ...v, [name]: e.target.checked }))}>
+                <LegendSwatch name={name} /> {LAYERS[name].title}
+              </Checkbox>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                zoom ≥ {LAYERS[name].minZoom}
+              </Typography.Text>
+            </div>
+          ))}
+          <div style={{ marginTop: 8 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
+              Boundaries as of
+            </Typography.Text>
+            <DatePicker
+              size="small"
+              allowClear={false}
+              aria-label="Show boundary versions valid on this date"
+              value={dayjs(asOf)}
+              onChange={(value) => value && setAsOf(value.format('YYYY-MM-DD'))}
+            />
+          </div>
+        </Card>
 
         <Input.Search
           placeholder="PIN, lot, title or survey no."
@@ -267,9 +308,7 @@ export function GisWorkspacePage() {
           </Spin>
         )}
 
-        {search.isError && (
-          <Alert style={{ marginTop: 8 }} type="error" showIcon title={(search.error as Error).message} />
-        )}
+        {search.isError && <Alert style={{ marginTop: 8 }} type="error" showIcon title={(search.error as Error).message} />}
 
         {notice && <Alert style={{ marginTop: 12 }} type="info" showIcon closable onClose={() => setNotice(null)} title={notice} />}
 
@@ -284,10 +323,21 @@ export function GisWorkspacePage() {
           tabIndex={0}
           style={{ position: 'absolute', inset: 0, border: '1px solid #d9d9d9', borderRadius: 8, overflow: 'hidden' }}
         />
-        <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', pointerEvents: 'none' }}>
-          {zoomedOut && <Tag color="blue">Zoom in to street level to show parcels</Tag>}
-          {!zoomedOut && truncated && <Tag color="warning">Too many parcels in view — zoom in to see all of them</Tag>}
-          {loadError && <Tag color="error">Could not load parcels: {loadError}</Tag>}
+        <div
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            alignItems: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          {zoomedOut && visible.parcels && <Tag color="blue">Zoom in to street level to show parcels</Tag>}
+          {statusTags}
         </div>
       </div>
     </div>

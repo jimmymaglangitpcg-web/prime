@@ -793,8 +793,21 @@ Executed in checkpointed steps (user asked to stop at each):
    commit (422 + full per-feature error report), as-of-date layer queries
    (GiST verified). 93 tests pass (+12). **No real boundary data loaded** —
    must come from an official source. Details: docs/GIS.md §3.
-4b. ⏳ Map layer toggles (barangay/zone/road) in the Tax Map workspace and a
-   printable tax map.
+4b. ✅ **Layers UI + printable tax map.** Layer toggles with per-layer
+   zoom thresholds and a "Boundaries as of" date (as-of queries end to
+   end), a shared layer module for the workspace and print view, and
+   `/gis/print`: an A4-landscape sheet at on-screen scale with scale bar,
+   north arrow, legend, and the data sources actually on the sheet.
+   Verified in a real browser, including a real PDF render. Details:
+   docs/GIS.md §5.
+
+**Phase 7 — GIS is complete.** Both exit criteria are met and verified:
+clicking a parcel opens the correct Property Profile (real browser), and
+spatial queries use the GiST index (`EXPLAIN`, asserted by tests). 93
+backend tests pass; frontend `npm run build` + lint are clean. Open items
+carried forward (Supabase migrations, real boundary data, per-LGU PRS92
+zone, production basemap, role gating, import UI) are listed in
+docs/GIS.md §7.
 
 ## Phase 8 — Billing
 
@@ -925,19 +938,20 @@ per-phase tasks:
 
 ## Immediate next action
 
-Phases 0–6 are complete and verified, including the Land/Building/
-Machinery registration follow-up (backend **and** frontend UI — see
-status above). What's genuinely still missing UI: Phase 5 (SMV/
-AssessmentLevel administration) and Phase 6 (a "compute valuation"/
-"assess" action with breakdown display, a General Revision batch
-screen) — both backend-complete, no UI yet. The repository has been
-committed and pushed to `origin` (GitHub) through this work. Candidates
-for what's next, in no particular priority order:
+Phases 0–7 are complete and verified (Phase 7 — GIS finished 2026-09-24;
+see its status block and docs/GIS.md §7 for carried-forward items).
+Phase 7 commits are local on `master` and **not yet pushed**. Still
+missing UI from earlier phases: Phase 5 (SMV/AssessmentLevel
+administration) and Phase 6 (a "compute valuation"/"assess" action with
+breakdown display, a General Revision batch screen). Candidates for
+what's next, in no particular priority order:
 
-- **Phase 7 — GIS**: the natural next phase per the roadmap sequence —
-  PostGIS-backed parcel geometry, map rendering, spatial search, parcel →
-  Property Profile navigation. Needs the canonical SRID open question
-  (docs/DATABASE.md §"Spatial reference system") resolved first.
+- **Phase 8 — Billing**: next in the roadmap sequence. Needs demo/test
+  rates only (never invented real ones), and depends on posted
+  assessments — which currently can only be produced via the API, since
+  the Phase 6 UI doesn't exist yet.
+- **Apply pending migrations to Supabase** (Phases 5–7), after confirming
+  which ones it actually has.
 - **Phase 5/6 UI**: SMV/AssessmentLevel administration screens, a
   "compute valuation" + "assess" action with breakdown view on the
   Property Profile (now that Land/Building/Machinery can actually be

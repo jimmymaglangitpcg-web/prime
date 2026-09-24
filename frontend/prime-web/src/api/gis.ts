@@ -1,5 +1,11 @@
 import { apiFetch, apiGet } from '../lib/apiClient';
-import type { ParcelDto, ParcelFeatureCollection, PropertyProfileDto } from '../lib/types';
+import type {
+  ParcelDto,
+  ParcelFeatureCollection,
+  PropertyProfileDto,
+  ReferenceLayerFeatureCollection,
+  ReferenceLayerName,
+} from '../lib/types';
 
 /** Formats a WGS84 coordinate for a query string (7 dp ≈ 1 cm). */
 const coord = (n: number) => n.toFixed(7);
@@ -19,4 +25,15 @@ export function fetchPropertyParcels(propertyId: string): Promise<ParcelDto[]> {
 
 export function fetchPropertyProfile(propertyId: string): Promise<PropertyProfileDto> {
   return apiGet<PropertyProfileDto>(`/api/properties/${propertyId}`);
+}
+
+/** Reference-layer versions valid on `asOf` (YYYY-MM-DD) within a WGS84 bbox. */
+export function fetchReferenceLayer(
+  layer: ReferenceLayerName,
+  bbox: [number, number, number, number],
+  asOf: string,
+): Promise<ReferenceLayerFeatureCollection> {
+  return apiFetch<ReferenceLayerFeatureCollection>(
+    `/api/gis/layers/${layer}?bbox=${bbox.map(coord).join(',')}&asOf=${encodeURIComponent(asOf)}`,
+  );
 }

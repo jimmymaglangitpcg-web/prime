@@ -1,6 +1,6 @@
 # PRIME — GIS & Tax Mapping
 
-Status: Phase 7 in progress (steps 1–3 and 4a done; 4b — map layers UI + printable tax map — remaining). Sections marked **(planned)** describe work not
+Status: Phase 7 complete (2026-09-24). Open items are listed in §7. Sections marked **(planned)** describe work not
 yet implemented; everything else reflects code that exists and is tested.
 
 ## 1. Scope
@@ -188,9 +188,31 @@ Re-check with real data volumes in Phase 14.
 - Accessibility: the map container is focusable (arrow-key pan, +/- zoom),
   labelled as an application region; search results are a labelled list
   with per-row "Locate {PIN}" button names.
-- Not in this step: drawing/editing boundaries in the browser (the PUT
-  endpoint exists; an editing UI needs its own design pass), reference
-  layers, printable tax map.
+- **Layers panel** — toggles for parcels (zoom ≥ 14), roads (≥ 13),
+  barangay boundaries (≥ 11) and valuation zones (≥ 12), each loaded per
+  extent through the same loader (`src/lib/mapLayers.ts`, shared with the
+  print view). **"Boundaries as of"** date picker reloads the reference
+  layers with `asOf` — the map shows the boundary versions valid on that
+  date (parcels are always current). Labels (barangay name, zone code,
+  road name) appear from ~zoom 14 and are decluttered.
+- **Printable tax map** (`/gis/print?center=&zoom=&layers=&asOf=`, the
+  Layers panel's Print button) — an A4-landscape sheet (`@page` in
+  `index.css`; the app shell is hidden in print) at the **same centre and
+  zoom as the screen**, so the printed scale matches what was on screen
+  and no visible layer drops out. It has the title, optional
+  LGU name/office, the boundaries-as-of date, the print time, a scale bar
+  with ratio, a north arrow, the basemap attribution, a legend (a layer
+  too zoomed out is marked "not shown at this scale"), and **Data
+  sources**: the source/reference of every reference shape actually on the
+  sheet, plus a note that it doesn't replace survey plans. The Print
+  button enables only after OpenLayers' `rendercomplete`.
+
+  | Env var | Purpose |
+  |---|---|
+  | `VITE_LGU_NAME`, `VITE_LGU_OFFICE` | Optional print header lines. Unset → nothing shown (no invented LGU). Interim until LGU branding administration (CLAUDE.md §78/§85). |
+- Not built: drawing/editing boundaries in the browser (the PUT endpoint
+  exists; an editing UI needs its own design pass), and a server-side PDF
+  export (printing uses the browser's print-to-PDF).
 
 ## 6. Verification so far
 
@@ -225,3 +247,30 @@ Re-check with real data volumes in Phase 14.
   on the right property; View on map deep-links back; an unmapped property
   is reported; no horizontal overflow at 390 px; zero console errors.
   DEMO-labelled test rows were deleted afterwards.
+- **Browser, layers + print (Playwright, 2026-09-24):** DEMO parcels plus
+  DEMO barangay (two versions: 2024-01-01 and 2025-01-01), zone and road
+  layers imported **through the import API**. Today's view loaded
+  barangay v2, both zones and the road; as of 2024-06-01 it loaded
+  barangay v1 and no zones or roads (they start in 2025). Unticking a
+  layer removed it; Print carried centre/zoom/layers/as-of across; the
+  sheet listed only the sources actually on it; a Chromium PDF render
+  confirmed the A4 landscape layout; a malformed print URL showed an
+  error. Zero console errors. DEMO rows deleted afterwards.
+
+## 7. Open items after Phase 7
+
+- **Supabase** has not had this phase's migrations applied
+  (`TypedParcelGeometry`, `ParcelConcurrencyToken`, `GisReferenceLayers`)
+  — earlier docs only confirm Supabase was migrated through Phase 3.
+- **Real boundary data** (barangays, valuation zones, roads) must come
+  from official sources; none is loaded.
+- **Per-LGU PRS92 zone** for `Gis:MeasurementSrid` — DOMAIN VERIFICATION
+  REQUIRED.
+- **Production basemap** — OSM tiles are development-only.
+- **Role gating** of geometry edits and layer imports (GIS_OFFICER) —
+  Phase 12. **Import UI** (upload/preview/error review) and **parcel
+  geometry bulk import / PRS92 reprojection** — Phase 13.
+- **Browser boundary editing** — not designed yet.
+- **"Today" is the UTC date** in both API and UI (matching
+  `ValuationService`); between 00:00 and 08:00 Philippine time that is
+  still yesterday. Project-wide decision pending.

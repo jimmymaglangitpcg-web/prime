@@ -10,6 +10,9 @@ interface ImportMetaEnv {
   /** Optional initial map center "lon,lat" (WGS84) and zoom. */
   readonly VITE_MAP_INITIAL_CENTER?: string;
   readonly VITE_MAP_INITIAL_ZOOM?: string;
+  /** Optional print-header branding until LGU settings administration exists (CLAUDE.md §78/§85). */
+  readonly VITE_LGU_NAME?: string;
+  readonly VITE_LGU_OFFICE?: string;
 }
 
 interface ImportMeta {
