@@ -786,7 +786,15 @@ Executed in checkpointed steps (user asked to stop at each):
    fixed a pre-existing app-shell issue found while testing at phone width
    (sidebar never collapsed; header title overlapped content) — sidebar
    now collapses fully below `md` (CLAUDE.md §84). Details: docs/GIS.md §5.
-4. ⏳ Reference layers (barangay/zone/road) and printable tax map.
+4a. ✅ **Reference layers backend.** Effective-dated `BarangayBoundaries`/
+   `ZoneBoundaries`/`RoadSegments` (migration `GisReferenceLayers`, additive;
+   first check constraints + filtered unique "one current version" indexes
+   in PRIME), GeoJSON import API with dry-run-by-default and all-or-nothing
+   commit (422 + full per-feature error report), as-of-date layer queries
+   (GiST verified). 93 tests pass (+12). **No real boundary data loaded** —
+   must come from an official source. Details: docs/GIS.md §3.
+4b. ⏳ Map layer toggles (barangay/zone/road) in the Tax Map workspace and a
+   printable tax map.
 
 ## Phase 8 — Billing
 

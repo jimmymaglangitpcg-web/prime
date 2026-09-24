@@ -1,6 +1,6 @@
 # PRIME — GIS & Tax Mapping
 
-Status: Phase 7 in progress (steps 1–3 of 4 done). Sections marked **(planned)** describe work not
+Status: Phase 7 in progress (steps 1–3 and 4a done; 4b — map layers UI + printable tax map — remaining). Sections marked **(planned)** describe work not
 yet implemented; everything else reflects code that exists and is tested.
 
 ## 1. Scope
@@ -56,8 +56,65 @@ rather than silently producing wrong areas.
 
 - `Parcels.Geometry` — `geometry(MultiPolygon,4326)`, nullable (a parcel
   can be registered before it is mapped), GiST index `IX_Parcels_Geometry`.
-- Reference layers (barangay boundaries, zones, roads) — **(planned)**; no
-  geometry columns exist for them yet.
+- **Reference layers** — `BarangayBoundaries`, `ZoneBoundaries` (valuation
+  zones), `RoadSegments` (migration `GisReferenceLayers`). Deliberately
+  **not** a geometry column on `Barangay`/`Zone`: boundaries change
+  (barangays are created/merged; valuation zones are redrawn with SMV
+  revisions), and overwriting a shape would destroy history (CLAUDE.md
+  §76). Each row is one **effective-dated version**:
+
+  | Column | Meaning |
+  |---|---|
+  | `EffectiveDate` / `EndDate` | Half-open validity `[EffectiveDate, EndDate)`; `EndDate` null = current. Check constraint `EndDate > EffectiveDate`. |
+  | `Source` (required) / `SourceReference` | Provenance of official map data, e.g. dataset + version, ordinance no. |
+  | `ImportBatchId` | Every row written by one import; the audit log reason names the batch. |
+  | key | `BarangayId` (matched by PSGC code), `ZoneId` (by zone code), or road `Code` (the source dataset's id). |
+
+  A filtered unique index (`UX_*_Current`, `WHERE "EndDate" IS NULL`)
+  makes "one current version per key" a database guarantee. Geometry:
+  `MultiPolygon` for barangays/zones, `MultiLineString` for roads, SRID
+  4326, GiST-indexed.
+
+> **No real boundary data is loaded.** Barangay boundaries must come from
+> an official source (e.g. PSA/NAMRIA, or the LGU's own cadastral/GIS
+> office) and valuation-zone shapes from the LGU's approved SMV — PRIME
+> does not invent them (CLAUDE.md §5/§81). Tests use DEMO shapes only.
+
+### Import (`POST /api/gis/layers/{barangays|zones|roads}/import`)
+
+Body: `{ effectiveDate, source, sourceReference?, featureCollection }`,
+where `featureCollection` is RFC 7946 GeoJSON (WGS84). Feature properties:
+barangays `psgcCode`; zones `zoneCode`; roads `code`, optional `name`,
+`roadTypeCode`. The referenced barangay/zone/road type must already exist
+in reference data.
+
+- **`dryRun=true` is the default** — validates and reports counts
+  (`newFeatures`, `supersededVersions`) without writing (CLAUDE.md §60
+  VALIDATE → PREVIEW). `dryRun=false` commits **all or nothing**: any error
+  → HTTP 422 with the full report and nothing written.
+- Every problem is reported in one pass, per feature index: missing/
+  duplicate key, unknown barangay/zone/road type, wrong geometry type,
+  invalid (self-intersecting) geometry, coordinates outside WGS84 degree
+  ranges (catches projected PRS92 metres exported without a `crs`), a
+  non-WGS84 `crs` member, missing source/date, >10,000 features.
+- Versioning: a feature whose key already has a current version closes it
+  (`EndDate` = new `EffectiveDate`) and inserts the successor, in one
+  transaction (close first, then insert — the unique index is not
+  deferrable). A new version must be effective **after** every existing
+  version of that key (`VERSION_NOT_AFTER_EXISTING`) — history is
+  append-only; correcting a past version is not an import operation.
+- Role gating (GIS_OFFICER only) is Phase 12; today any authenticated user
+  can import. The full import workflow UI (upload, preview, error review)
+  is Phase 13 — this is the API it will call.
+
+### Query (`GET /api/gis/layers/{layer}?bbox=&asOf=&limit=`)
+
+Versions valid on `asOf` (default: today, UTC date — same convention as
+`ValuationService`) intersecting the bbox, as a GeoJSON FeatureCollection
+with `key`, `name`, `effectiveDate`, `endDate`, `source`,
+`sourceReference`. Same limit/`truncated` behaviour as parcels. Answers
+"what did the tax map look like on date X" (CLAUDE.md §76). `EXPLAIN`
+confirms the GiST index serves it (`IX_ZoneBoundaries_Geometry`).
 
 ## 4. API
 
@@ -151,6 +208,16 @@ Re-check with real data volumes in Phase 14.
   version rejected with nothing written; historical parcels refused; HTTP
   400 codes for bad input; FeatureCollection JSON shape; GiST index use;
   OpenAPI document still generates.
+- `ReferenceLayerTests` (integration): dry run writes nothing; commit →
+  query returns provenance and the audit reason names the batch; a new
+  version closes the old one and as-of queries return the right version
+  on each side of the change date (half-open); a version not after the
+  existing one is rejected with nothing changed; seven kinds of bad
+  feature reported together with nothing partially imported; collection-
+  level problems (non-WGS84 crs, empty, not a FeatureCollection); missing
+  source/date; roads with road-type resolution; the database itself
+  rejects two current versions and an inverted interval; HTTP 404 for an
+  unknown layer, 422 for a failed commit, dry run by default.
 - **Browser (Playwright, real API + real PostGIS, 2026-09-24):** 10-step
   flow — initial view makes no parcel requests; search → Locate fits and
   highlights; clicking parcel 1 / its east neighbour / empty ground selects

@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Prime.Domain.Entities;
+using Prime.Domain.Entities.Gis;
 using Prime.Domain.Entities.Reference;
 
 namespace Prime.Application.Common.Interfaces;
@@ -21,6 +23,9 @@ public interface IApplicationDbContext
     DbSet<Taxpayer> Taxpayers { get; }
     DbSet<PropertyTaxpayer> PropertyTaxpayers { get; }
     DbSet<Parcel> Parcels { get; }
+    DbSet<BarangayBoundary> BarangayBoundaries { get; }
+    DbSet<ZoneBoundary> ZoneBoundaries { get; }
+    DbSet<RoadSegment> RoadSegments { get; }
     DbSet<RealPropertyUnit> RealPropertyUnits { get; }
     DbSet<TaxDeclaration> TaxDeclarations { get; }
     DbSet<Land> Lands { get; }
@@ -57,4 +62,11 @@ public interface IApplicationDbContext
     /// token as the original value for optimistic concurrency (CLAUDE.md §66).
     /// </summary>
     EntityEntry<TEntity> Entry<TEntity>(TEntity entity) where TEntity : class;
+
+    /// <summary>
+    /// For operations that need several SaveChanges calls to be atomic
+    /// (e.g. close the current boundary version, then insert its successor —
+    /// the "one current version" unique index needs that order).
+    /// </summary>
+    DatabaseFacade Database { get; }
 }

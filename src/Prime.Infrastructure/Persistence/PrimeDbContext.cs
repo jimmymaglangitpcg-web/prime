@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common.Interfaces;
 using Prime.Domain.Entities;
+using Prime.Domain.Entities.Gis;
 using Prime.Domain.Entities.Audit;
 using Prime.Domain.Entities.Documents;
 using Prime.Domain.Entities.Identity;
@@ -41,6 +42,9 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<Taxpayer> Taxpayers => Set<Taxpayer>();
     public DbSet<PropertyTaxpayer> PropertyTaxpayers => Set<PropertyTaxpayer>();
     public DbSet<Parcel> Parcels => Set<Parcel>();
+    public DbSet<BarangayBoundary> BarangayBoundaries => Set<BarangayBoundary>();
+    public DbSet<ZoneBoundary> ZoneBoundaries => Set<ZoneBoundary>();
+    public DbSet<RoadSegment> RoadSegments => Set<RoadSegment>();
     public DbSet<RealPropertyUnit> RealPropertyUnits => Set<RealPropertyUnit>();
     public DbSet<TaxDeclaration> TaxDeclarations => Set<TaxDeclaration>();
     public DbSet<Land> Lands => Set<Land>();
