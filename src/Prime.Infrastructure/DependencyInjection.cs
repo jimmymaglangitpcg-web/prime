@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Prime.Application.Common.Interfaces;
+using Prime.Infrastructure.GIS;
 using Prime.Infrastructure.Identity;
 using Prime.Infrastructure.Jobs;
 using Prime.Infrastructure.Persistence;
@@ -34,6 +35,16 @@ public static class DependencyInjection
             options.AddInterceptors(serviceProvider.GetRequiredService<AuditSaveChangesInterceptor>());
         });
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<PrimeDbContext>());
+
+        // GIS measurement (docs/GIS.md §2). MeasurementSrid is optional —
+        // absent means geodesic area on WGS84 — but when set it must be a
+        // positive EPSG code; an unknown code fails loudly in PostGIS rather
+        // than silently producing degree-based areas.
+        services.AddOptions<GisOptions>()
+            .Bind(configuration.GetSection(GisOptions.SectionName))
+            .Validate(o => o.MeasurementSrid is null or > 0, "Gis:MeasurementSrid must be a positive EPSG code when set.")
+            .ValidateOnStart();
+        services.AddScoped<IGeometryMeasurementService, GeometryMeasurementService>();
 
         services.AddHealthChecks()
             .AddNpgSql(connectionString, name: "postgresql", tags: ["ready"])

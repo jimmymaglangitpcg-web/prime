@@ -6,10 +6,10 @@ using Prime.Domain.Enums;
 namespace Prime.Domain.Entities;
 
 /// <summary>
-/// CLAUDE.md §21. Geometry SRID is DOMAIN VERIFICATION REQUIRED — see
-/// docs/DATABASE.md §9. Stored as WGS84 (EPSG:4326) pending confirmation of
-/// the target LGU's actual survey/GIS data CRS; do not treat 4326 as a
-/// settled decision.
+/// CLAUDE.md §21. Geometry is a MultiPolygon in
+/// <see cref="SpatialReference.StorageSrid"/> (docs/GIS.md §2).
+/// <see cref="Area"/> is the declared area (e.g. from the title/technical
+/// description) and is never overwritten by the geometry's measured area.
 /// </summary>
 public sealed class Parcel : AuditableEntity
 {
@@ -29,4 +29,12 @@ public sealed class Parcel : AuditableEntity
     public Zone? Zone { get; set; }
 
     public RecordStatus Status { get; set; } = RecordStatus.Active;
+
+    /// <summary>
+    /// Optimistic-concurrency token (CLAUDE.md §66), mapped to PostgreSQL's
+    /// <c>xmin</c> system column — no physical column is added. Clients echo
+    /// it back on updates; a stale value is rejected rather than silently
+    /// overwriting someone else's edit.
+    /// </summary>
+    public uint Version { get; set; }
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Prime.Domain.Common;
 using Prime.Domain.Entities;
 
 namespace Prime.Infrastructure.Persistence.Configurations;
@@ -10,9 +11,10 @@ public sealed class ParcelConfiguration : IEntityTypeConfiguration<Parcel>
     {
         builder.HasKey(x => x.Id);
 
-        // SRID DOMAIN VERIFICATION REQUIRED — see Parcel.cs and
-        // docs/DATABASE.md §9. 4326 (WGS84) pending confirmation.
-        builder.Property(x => x.Geometry).HasColumnType("geometry");
+        // Typed column so PostGIS itself rejects wrong-SRID or non-areal
+        // geometry (docs/DATABASE.md §9, docs/GIS.md §2). Single polygons
+        // are normalized to MultiPolygon by ParcelService before saving.
+        builder.Property(x => x.Geometry).HasColumnType($"geometry(MultiPolygon,{SpatialReference.StorageSrid})");
         builder.HasIndex(x => x.Geometry).HasMethod("GIST");
 
         builder.Property(x => x.Area).HasPrecision(14, 4);
@@ -28,5 +30,8 @@ public sealed class ParcelConfiguration : IEntityTypeConfiguration<Parcel>
         builder.HasIndex(x => x.SurveyNumber);
 
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+
+        // Npgsql maps a uint row version to the xmin system column.
+        builder.Property(x => x.Version).IsRowVersion();
     }
 }

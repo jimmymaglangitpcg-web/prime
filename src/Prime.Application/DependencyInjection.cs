@@ -6,6 +6,7 @@ using Prime.Application.Features.Buildings;
 using Prime.Application.Features.GeneralRevision;
 using Prime.Application.Features.Lands;
 using Prime.Application.Features.MachineryUnits;
+using Prime.Application.Features.Gis;
 using Prime.Application.Features.Parcels;
 using Prime.Application.Features.Properties;
 using Prime.Application.Features.RealPropertyUnits;
@@ -26,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<IPropertyService, PropertyService>();
         services.AddScoped<ITaxpayerService, TaxpayerService>();
         services.AddScoped<IParcelService, ParcelService>();
+        services.AddScoped<IGisService, GisService>();
         services.AddScoped<IRealPropertyUnitService, RealPropertyUnitService>();
         services.AddScoped<ITaxDeclarationService, TaxDeclarationService>();
         services.AddScoped<ILandService, LandService>();

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Prime.Domain.Entities;
 using Prime.Domain.Entities.Reference;
 
@@ -50,4 +51,10 @@ public interface IApplicationDbContext
     DbSet<GeneralRevisionJob> GeneralRevisionJobs { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Change-tracking access, needed to set a client-supplied concurrency
+    /// token as the original value for optimistic concurrency (CLAUDE.md §66).
+    /// </summary>
+    EntityEntry<TEntity> Entry<TEntity>(TEntity entity) where TEntity : class;
 }

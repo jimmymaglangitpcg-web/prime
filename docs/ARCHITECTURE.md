@@ -254,12 +254,10 @@ object storage).
 - The frontend GIS workspace (OpenLayers) requests vector/tile layers from a
   dedicated `/api/gis` surface; selecting a parcel resolves to a
   `PropertyId` and navigates to the Property Profile (CLAUDE.md §38/§54).
-- **Coordinate reference system is a domain-verification item** (see
-  DATABASE.md §"Spatial reference system") — Philippine cadastral data is
-  commonly supplied in PRS92-based projections, while web mapping typically
-  operates in WGS84 (EPSG:4326) / Web Mercator (EPSG:3857) for display.
-  PRIME must decide a canonical storage SRID once real LGU survey data
-  formats are known; do not assume one silently.
+- **Coordinate reference system: stored in WGS84 (EPSG:4326)**, decided at
+  the start of Phase 7 — PRS92 survey data is reprojected on import, and
+  area is measured geodesically or in a per-LGU configured projected CRS
+  (`Gis:MeasurementSrid`), never in degrees. See docs/GIS.md §2.
 
 ### 3.7 Valuation & assessment architecture
 
@@ -419,8 +417,9 @@ object storage).
 3. API versioning scheme.
 4. Exact `numeric` precision/scale for monetary columns (depends on
    confirmed LGU rounding rules — see DATABASE.md).
-5. Canonical spatial reference system for stored geometry (depends on LGU
-   survey data format — domain verification required).
+5. ~~Canonical spatial reference system for stored geometry~~ — resolved
+   2026-09-24: EPSG:4326 storage + configurable measurement CRS (docs/GIS.md
+   §2). Still open per LGU: *which* PRS92 zone to configure.
 6. Whether local dev/CI integration tests run against a shared Supabase
    dev/staging project, or the team installs Docker + the Supabase CLI for
    a fully local Auth/Storage stack — affects Phase 2 setup instructions

@@ -223,15 +223,19 @@ defense-in-depth addition later.
   cadastral work is typically done in a projected CRS for accurate
   area/distance rather than the geographic calculations `geography` is
   optimized for.
-- **Canonical storage SRID is a domain-verification item.** Philippine
-  cadastral survey data is often supplied referenced to PRS92 (and its
-  associated UTM zones covering the Philippines), while web-mapping display
-  conventionally uses WGS84 (EPSG:4326) / Web Mercator (EPSG:3857).
-  PRIME must not silently assume one. Working assumption until confirmed:
-  store in **EPSG:4326** for interoperability and reproject to a suitable
-  projected CRS only for area/distance calculations that require it,
-  **pending confirmation of the actual SRID used by the target LGU's
-  survey/GIS data.**
+- **Canonical storage SRID: EPSG:4326 (WGS84) — decided 2026-09-24 at the
+  start of Phase 7.** Enforced by the column type itself
+  (`geometry(MultiPolygon,4326)` for `Parcels.Geometry`), so PostGIS
+  rejects wrong-SRID or non-areal geometry. Survey data supplied in PRS92
+  (EPSG:4683 / zones 3121–3125) is reprojected to 4326 on import, not
+  stored as-is. Area/distance is **never** computed in degrees: measured
+  area is either geodesic (`ST_Area(geom::geography)`) or, when
+  `Gis:MeasurementSrid` is configured, computed in that projected CRS
+  (typically the LGU's PRS92 zone — **DOMAIN VERIFICATION REQUIRED per
+  LGU**). See docs/GIS.md §2 for the full rationale.
+- `Parcels.Area` is the **declared** area and is never overwritten by the
+  measured area; the API returns both (plus the measurement basis) so
+  discrepancies are visible rather than silently reconciled.
 - Every geometry column gets a GiST spatial index (`SX_Parcel_Geometry`,
   etc.) per CLAUDE.md §64/§71.
 - Geometry validity: imported geometries are validated (`ST_IsValid`)
@@ -512,7 +516,8 @@ design (§48).
 
 ## 13. Open database questions (do not guess — verify before Phase 3)
 
-1. Canonical spatial reference system (SRID) for stored geometry — see §9.
+1. ~~Canonical storage SRID~~ — resolved 2026-09-24 (EPSG:4326, see §9).
+   Still open per LGU: the `Gis:MeasurementSrid` value (which PRS92 zone).
 2. Monetary column precision/scale — see §8.
 3. Whether `TIN` uniqueness is enforced globally or is allowed to repeat
    across distinct taxpayer records representing the same real-world

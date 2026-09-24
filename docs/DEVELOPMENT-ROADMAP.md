@@ -755,6 +755,32 @@ the start of this phase — it blocks correct geometry storage.
 Exit criteria: clicking a parcel on the map opens the correct Property
 Profile; spatial queries use the GiST index (verified via `EXPLAIN`).
 
+### Status — in progress (started 2026-09-24)
+
+Executed in checkpointed steps (user asked to stop at each):
+
+1. ✅ **SRID decided and enforced.** EPSG:4326 storage (user-approved
+   option: "WGS84 4326 + config"); `Parcels.Geometry` migrated to
+   `geometry(MultiPolygon,4326)` (migration `TypedParcelGeometry`,
+   hand-written `USING ST_Multi(...)` so existing single polygons convert
+   losslessly and anything else fails loudly); `IGeometryMeasurementService`
+   measures area geodesically or in a configured `Gis:MeasurementSrid`;
+   `ParcelDto` now returns `MeasuredArea` + `MeasuredAreaBasis` beside the
+   declared `Area`. Full rationale in docs/GIS.md §2. 53 tests pass (+9
+   unit, +5 integration). Migration applied to the **local** database
+   only — not yet to Supabase.
+2. ✅ **GIS API.** `GET /api/gis/parcels?bbox=` (GeoJSON, Active only,
+   capped with a `truncated` flag, no personal data in feature
+   properties), `GET /api/gis/parcels/at?lon=&lat=`, and
+   `PUT /api/parcels/{id}/geometry` (reason required to replace; old WKT
+   kept in the audit log; historical parcels refused; first optimistic-
+   concurrency token in PRIME via `xmin`, migration
+   `ParcelConcurrencyToken` is DDL-free). GiST index use verified via
+   `EXPLAIN` (exit criterion). 81 tests pass (+14 unit, +14 integration
+   this step). Details: docs/GIS.md §4.
+3. ⏳ OpenLayers GIS workspace + parcel → Property Profile navigation.
+4. ⏳ Reference layers (barangay/zone/road) and printable tax map.
+
 ## Phase 8 — Billing
 
 **Goal**: a tax bill can be generated from a posted assessment using

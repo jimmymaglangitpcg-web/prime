@@ -204,12 +204,19 @@ export interface ParcelDto {
   barangayName: string;
   zoneId: string | null;
   geometryWkt: string | null;
+  /** Declared area (sqm), as entered. */
   area: number | null;
+  /** Area (sqm) measured from the geometry by PostGIS; null without geometry. */
+  measuredArea: number | null;
+  /** How measuredArea was computed, e.g. "GEODESIC_WGS84" or "PROJECTED_EPSG_3123". */
+  measuredAreaBasis: string | null;
   surveyNumber: string | null;
   lotNumber: string | null;
   blockNumber: string | null;
   status: RecordStatus;
   createdAt: string;
+  /** Concurrency token (PostgreSQL xmin); send back unchanged on updates. */
+  version: number;
 }
 
 // --- RPU -----------------------------------------------------------

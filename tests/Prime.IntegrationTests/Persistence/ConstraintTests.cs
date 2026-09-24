@@ -187,13 +187,13 @@ public class ConstraintTests(WebApplicationFactory<Program> factory) : IClassFix
         db.Properties.Add(property);
 
         var geometryFactory = NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
-        var polygon = geometryFactory.CreatePolygon([
+        var polygon = geometryFactory.CreateMultiPolygon([geometryFactory.CreatePolygon([
             new Coordinate(121.0, 14.5),
             new Coordinate(121.001, 14.5),
             new Coordinate(121.001, 14.501),
             new Coordinate(121.0, 14.501),
             new Coordinate(121.0, 14.5),
-        ]);
+        ])]);
 
         var parcel = new Parcel
         {

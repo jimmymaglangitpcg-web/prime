@@ -190,7 +190,7 @@ overwriting it (§20, §35).
 ```text
 ParcelId       (PK)
 PropertyId      (FK → Property)
-Geometry        (PostGIS geometry(Polygon/MultiPolygon, <SRID – TBD>))
+Geometry        (PostGIS geometry(MultiPolygon, 4326) — see docs/GIS.md §2)
 Area
 SurveyNumber, LotNumber, BlockNumber
 BarangayId, ZoneId

@@ -30,6 +30,7 @@ public abstract class ApiControllerBase : ControllerBase
             not null when result.Code.EndsWith("_NOT_FOUND") => StatusCodes.Status404NotFound,
             not null when result.Code.EndsWith("_DUPLICATE") => StatusCodes.Status409Conflict,
             not null when result.Code.Contains("EXCEEDS") => StatusCodes.Status409Conflict,
+            not null when result.Code.EndsWith("_CONCURRENCY_CONFLICT") => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest,
         };
 
