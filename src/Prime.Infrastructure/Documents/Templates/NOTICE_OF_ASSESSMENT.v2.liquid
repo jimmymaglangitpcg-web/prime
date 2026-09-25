@@ -1,0 +1,64 @@
+{% comment %}
+  Notice of Assessment, after the MRPAAO Attachment 10 (p.242; instructions
+  p.167–169). Superseded manual: reference layout
+  (docs/analysis/mrpaao-forms-model.md §14). One notice may list several
+  properties of one declared owner.
+{% endcomment %}
+{% assign n = notice %}{% assign first = items | first %}
+<style>
+  .src { font-size: 8pt; border: 1px solid #555; padding: 2px 6px; margin-bottom: 6px; }
+  .draft { border: 2px solid #b00; color: #b00; font-weight: bold; text-align: center; padding: 3px; margin-bottom: 6px; }
+  .head { text-align: center; line-height: 1.4; }
+  h1 { font-size: 14pt; text-align: center; margin: 10px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+  td, th { border: 1px solid #000; padding: 3px 5px; font-size: 9.5pt; vertical-align: top; }
+  th { background: #eee; }
+  .num { text-align: right; white-space: nowrap; }
+  .sig { margin-top: 36px; text-align: right; }
+  .sig div { display: inline-block; text-align: center; min-width: 240px; border-top: 1px solid #000; padding-top: 2px; }
+  .notes { font-size: 8.5pt; margin-top: 14px; }
+</style>
+<div class="src">Layout: MRPAAO 2004, Attachment 10 — superseded by the Local Assessment Manual; reference layout. Form {{ form.code }} v{{ form.version }}.</div>
+{% if n.status == "Draft" %}<div class="draft">DRAFT — NOT ISSUED</div>{% endif %}
+{% if n.status == "Cancelled" %}<div class="draft">CANCELLED</div>{% endif %}
+<table style="border:none"><tr>
+  <td style="border:none; width:40%">NA No. <b>{{ n.number | default: "(unnumbered)" }}</b></td>
+  <td style="border:none" class="head">REPUBLIC OF THE PHILIPPINES<br>
+    CITY/MUNICIPALITY OF <b>{{ first.municipality | upcase }}</b><br>PROVINCE OF <b>{{ first.province | upcase }}</b></td>
+</tr></table>
+<h1>NOTICE OF ASSESSMENT</h1>
+<p style="text-align:right">{% if n.issuedAt %}{{ n.issuedAt | date_ph }}{% else %}{{ issue.issuedAt | date_ph }}{% endif %}</p>
+<p><b>{{ n.addresseeNames }}</b><br>{{ n.addresseeAddress | default: "(address not recorded)" }}</p>
+<p>Sir/Madam:</p>
+<p>This is to inform you that the real property(ies) indicated hereunder is (are) assessed for the year <b>{{ n.assessmentYear }}</b>
+  in this City/Municipality and ownership of which is/are stated in your name for taxation purposes, (as well as for subsequent years
+  until you are informed of any charges).</p>
+<table>
+  <tr><th>ARP No.</th><th>TDN</th><th>PIN</th><th>Location</th><th>Classification</th><th class="num">Market Value</th><th class="num">Assessed Value</th></tr>
+  {% assign totalMv = 0 %}{% assign totalAv = 0 %}
+  {% for i in items %}
+  <tr><td>{{ i.arpNumber | default: "—" }}</td><td>{{ i.tdNumber | default: "—" }}</td><td>{{ i.pin }}</td><td>{{ i.location }}</td>
+      <td>{{ i.classification }}</td><td class="num">{{ i.marketValue | money }}</td><td class="num">{{ i.assessedValue | money }}</td></tr>
+  {% assign totalMv = totalMv | plus: i.marketValue %}{% assign totalAv = totalAv | plus: i.assessedValue %}
+  {% endfor %}
+  <tr><td colspan="5" class="num"><b>TOTAL</b></td><td class="num"><b>{{ totalMv | money }}</b></td><td class="num"><b>{{ totalAv | money }}</b></td></tr>
+</table>
+{% for i in items %}{% if i.reason == "FirstAssessment" %}
+<p style="font-size:8.5pt">{{ i.tdNumber | default: i.pin }}: assessed for the first time.</p>
+{% elsif i.reason == "AssessmentIncreased" or i.reason == "AssessmentDecreased" %}
+<p style="font-size:8.5pt">{{ i.tdNumber | default: i.pin }}: the assessed value was {{ i.previousAssessedValue | money }} before this assessment.</p>
+{% elsif i.reason == "DeclaredOwnerChanged" or i.reason == "OwnerAddressChanged" or i.reason == "LocationChanged" %}
+<p style="font-size:8.5pt">{{ i.tdNumber | default: i.pin }}: {% case i.reason %}{% when "DeclaredOwnerChanged" %}the FAAS and TD were updated for a change of declared owner.{% when "OwnerAddressChanged" %}the FAAS and TD were updated for a change of the owner's address.{% else %}the FAAS and TD were updated for a change of the property's location.{% endcase %}</p>
+{% endif %}{% endfor %}
+<div class="sig"><div>Provincial/City/Municipal Assessor</div></div>
+<div class="notes"><b>Note:</b>
+  <ol>
+    <li>This serves as the Notice to the declarant in pursuance of Section 223 of RA 7160, otherwise known as the Local Government Code of 1991,
+      for which the due process of provision on real property tax assessment under section 226 of the said Code may be availed of
+      (an appeal may be filed within {{ n.appealPeriodDays }} days from the date of your receipt of this notice{% if n.appealDeadline %}: until {{ n.appealDeadline | date_ph }}{% endif %}).</li>
+    <li>Kindly inform the Assessor's Office of any inconsistency as to the actual ARP No., TDN, PIN, location and classification of the above properties
+      you may have discovered in this notice.</li>
+    <li>Please present this Notice to the Office of the Treasurer when payment is made.</li>
+  </ol>
+</div>
+<div style="font-size:7.5pt">Printed {{ issue.issuedAt | date_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}. {{ form.legalBasis }}.</div>

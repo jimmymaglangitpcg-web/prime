@@ -85,6 +85,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<PropertyTransactionTdCancellation> PropertyTransactionTdCancellations => Set<PropertyTransactionTdCancellation>();
     public DbSet<PropertyTransactionProperty> PropertyTransactionProperties => Set<PropertyTransactionProperty>();
     public DbSet<NoticeOfAssessment> NoticesOfAssessment => Set<NoticeOfAssessment>();
+    public DbSet<NoticeOfAssessmentItem> NoticeOfAssessmentItems => Set<NoticeOfAssessmentItem>();
     public DbSet<BarangayBoundary> BarangayBoundaries => Set<BarangayBoundary>();
     public DbSet<ZoneBoundary> ZoneBoundaries => Set<ZoneBoundary>();
     public DbSet<RoadSegment> RoadSegments => Set<RoadSegment>();

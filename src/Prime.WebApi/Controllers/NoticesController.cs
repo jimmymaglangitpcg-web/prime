@@ -11,6 +11,15 @@ public class NoticesController(INoticeService notices) : ApiControllerBase
     public async Task<ActionResult<NoticeDto>> Generate(GenerateNoticeRequest request, CancellationToken ct) =>
         HandleCreated(await notices.GenerateAsync(request, ct), nameof(Get), dto => new { id = dto.Id });
 
+    /// <summary>One notice for several of one declared owner's assessments (MRPAAO Att. 10).</summary>
+    [HttpPost("combined")]
+    public async Task<ActionResult<NoticeDto>> GenerateCombined(GenerateCombinedNoticeRequest request, CancellationToken ct) =>
+        HandleResult(await notices.GenerateCombinedAsync(request, ct));
+
+    [HttpGet("candidates")]
+    public async Task<ActionResult<IReadOnlyList<NoticeCandidateDto>>> Candidates([FromQuery] Guid taxpayerId, CancellationToken ct) =>
+        HandleResult(await notices.CandidatesAsync(taxpayerId, ct));
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<NoticeDto>> Get(Guid id, CancellationToken ct) => HandleResult(await notices.GetAsync(id, ct));
 

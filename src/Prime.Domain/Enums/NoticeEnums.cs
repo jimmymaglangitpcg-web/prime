@@ -7,6 +7,12 @@ public enum NoticeReason
     FirstAssessment = 0,
     AssessmentIncreased = 1,
     AssessmentDecreased = 2,
+    // The MRPAAO also sends a notice when the FAAS and TD are updated for a
+    // change of declared owner, of the owner's address, or of the property's
+    // location (p.168), though the value may be unchanged.
+    DeclaredOwnerChanged = 3,
+    OwnerAddressChanged = 4,
+    LocationChanged = 5,
 }
 
 public enum NoticeStatus

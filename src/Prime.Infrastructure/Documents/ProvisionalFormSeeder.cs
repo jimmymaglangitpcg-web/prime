@@ -40,7 +40,7 @@ public sealed class ProvisionalFormSeeder(IServiceScopeFactory scopes, ILogger<P
     [
         ("TAX_BILL", 1, "Real Property Tax Bill", FormSubjectType.TaxBill, FormAuthority.PrimeProvisional, "PRIME provisional template"),
         ("TAX_DECLARATION", 3, "Tax Declaration of Real Property", FormSubjectType.TaxDeclaration, FormAuthority.Mrpaao, "MRPAAO Attachment 4 (p.236)"),
-        ("NOTICE_OF_ASSESSMENT", 1, "Notice of Assessment", FormSubjectType.NoticeOfAssessment, FormAuthority.PrimeProvisional, "PRIME provisional template"),
+        ("NOTICE_OF_ASSESSMENT", 2, "Notice of Assessment", FormSubjectType.NoticeOfAssessment, FormAuthority.Mrpaao, "MRPAAO Attachment 10 (p.242)"),
         ("FAAS", 1, "Field Appraisal and Assessment Sheet", FormSubjectType.Assessment, FormAuthority.PrimeProvisional, "PRIME provisional template"),
         ("STATEMENT_OF_ACCOUNT", 1, "Statement of Account — Real Property Tax", FormSubjectType.StatementOfAccount, FormAuthority.PrimeProvisional, "PRIME provisional template"),
         ("FAAS_LAND", 1, "Real Property Field Appraisal & Assessment Sheet — Land / Other Improvements", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 1 (p.230–231)"),

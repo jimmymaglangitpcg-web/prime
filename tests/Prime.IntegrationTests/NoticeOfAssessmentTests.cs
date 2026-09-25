@@ -157,4 +157,70 @@ public class NoticeOfAssessmentTests(WebApplicationFactory<Program> factory) : I
         (await c.Notices.CancelAsync(n.Id, "DEMO: wrong addressee")).Value.Status.ShouldBe(NoticeStatus.Cancelled);
         (await c.Notices.GenerateAsync(new GenerateNoticeRequest(c.Seed.AssessmentId))).IsSuccess.ShouldBeTrue(); // a cancelled notice frees the assessment
     }
+
+    // --- Step 5b (docs/analysis/mrpaao-forms-model.md §14) ---
+
+    [Fact]
+    public async Task CombinedNotice_ListsTheOwnersAssessments_AndPrintsTheManualsLayout()
+    {
+        var (c, tx) = await BeginAsync();
+        await using var _ = tx;
+        var owner = await c.Db.PropertyTaxpayers.Where(x => x.PropertyId == c.Seed.PropertyId && x.IsCurrent).Select(x => x.TaxpayerId!.Value).SingleAsync();
+        var sole = await c.Db.PropertyTaxpayers.Where(x => x.PropertyId == c.Seed.PropertyId).Select(x => x.OwnershipTypeId!.Value).FirstAsync();
+        var other = await BillingFlowTests.SeedPostedAssessmentAsync(c.Services, c.Db, new DateOnly(2026, 1, 1));
+        (await c.Services.GetRequiredService<ITaxpayerService>().AddOwnerAsync(
+            new AddPropertyOwnerRequest(other.PropertyId, owner, sole, 100m, new DateOnly(2020, 1, 1)))).IsSuccess.ShouldBeTrue();
+
+        var candidates = (await c.Notices.CandidatesAsync(owner)).Value;
+        candidates.Select(x => x.AssessmentId).ShouldBe([c.Seed.AssessmentId, other.AssessmentId], ignoreOrder: true);
+
+        var notice = await c.Notices.GenerateCombinedAsync(new GenerateCombinedNoticeRequest(owner, [c.Seed.AssessmentId, other.AssessmentId]));
+
+        notice.IsSuccess.ShouldBeTrue(notice.IsSuccess ? null : notice.Message);
+        notice.Value.Items.ShouldNotBeNull().Count.ShouldBe(2);
+        notice.Value.AssessedValue.ShouldBe(200_000m); // the items' total
+        notice.Value.AddresseeNames.ShouldContain("DEMO_Owner");
+        notice.Value.AddresseeTaxpayerId.ShouldBe(owner);
+        (await c.Notices.ListByPropertyAsync(other.PropertyId)).Value.ShouldContain(n => n.Id == notice.Value.Id); // shows on both properties
+        (await c.Notices.CandidatesAsync(owner)).Value.ShouldBeEmpty(); // both now have a notice
+
+        var form = await c.Services.GetRequiredService<IFormService>().PreviewAsync("NOTICE_OF_ASSESSMENT", notice.Value.Id);
+        form.IsSuccess.ShouldBeTrue(form.IsSuccess ? null : form.Message);
+        form.Value.Authority.ShouldBe(FormAuthority.Mrpaao);
+        var html = form.Value.Html;
+        html.ShouldContain("MRPAAO 2004, Attachment 10");
+        html.ShouldContain(c.Seed.TaxDeclaration.TaxDeclarationNumber);
+        html.ShouldContain(other.TaxDeclaration.TaxDeclarationNumber);
+        html.ShouldContain("200,000.00");
+        html.ShouldContain("Section 223 of RA 7160");
+    }
+
+    [Fact]
+    public async Task CombinedNotice_RefusesAnAssessmentTheAddresseeDoesNotOwn()
+    {
+        var (c, tx) = await BeginAsync();
+        await using var _ = tx;
+        var owner = await c.Db.PropertyTaxpayers.Where(x => x.PropertyId == c.Seed.PropertyId && x.IsCurrent).Select(x => x.TaxpayerId!.Value).SingleAsync();
+        var stranger = await BillingFlowTests.SeedPostedAssessmentAsync(c.Services, c.Db, new DateOnly(2026, 1, 1));
+
+        (await c.Notices.GenerateCombinedAsync(new GenerateCombinedNoticeRequest(owner, [c.Seed.AssessmentId, stranger.AssessmentId])))
+            .Code.ShouldBe("NOTICE_ADDRESSEE_NOT_OWNER");
+    }
+
+    [Fact]
+    public async Task UnchangedValue_TakesADescriptiveReason_ButNotADerivedOne()
+    {
+        var (c, tx) = await BeginAsync();
+        await using var _ = tx;
+        var unchanged = await ReassessAsync(c, assessedValue: null);
+
+        (await c.Notices.GenerateAsync(new GenerateNoticeRequest(unchanged, NoticeReason.AssessmentIncreased))).Code.ShouldBe("VALIDATION_FAILED");
+        var notice = await c.Notices.GenerateAsync(new GenerateNoticeRequest(unchanged, NoticeReason.DeclaredOwnerChanged));
+
+        notice.IsSuccess.ShouldBeTrue(notice.IsSuccess ? null : notice.Message);
+        notice.Value.Reason.ShouldBe(NoticeReason.DeclaredOwnerChanged);
+        notice.Value.Items.ShouldNotBeNull().ShouldHaveSingleItem().Reason.ShouldBe(NoticeReason.DeclaredOwnerChanged);
+        (await c.Notices.GenerateAsync(new GenerateNoticeRequest(unchanged, NoticeReason.OwnerAddressChanged))).Code.ShouldBe("NOTICE_DUPLICATE"); // a draft is open
+    }
 }
+

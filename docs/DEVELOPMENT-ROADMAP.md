@@ -1110,7 +1110,15 @@ committed as `81ce318`.
 entry stamp on posting (plan §12). Migration
 `TransactionCodeAndPostingStamp` is applied locally only.
 
-**Step 5a done (2026-09-25, uncommitted):** MRPAAO layouts for the FAAS
+Steps 4 and 5a are committed as `f9376c6`.
+
+**Step 5b done (2026-09-25, uncommitted):** notices list several
+properties (items), a combined notice for one declared owner, the
+MRPAAO's descriptive reasons (owner, address, location changed), and the
+Attachment 10 layout (v2) (plan §14). Migration `NoticeItems` is applied
+locally only.
+
+**Step 5a done (2026-09-25):** MRPAAO layouts for the FAAS
 (land, building, machinery; subject = the TD) and the TD (v3), with the
 new `Mrpaao` form authority (plan §13). No migration. Integration tests
 now run serially (shared dev DB). Next: step 5b (Notice of Assessment for

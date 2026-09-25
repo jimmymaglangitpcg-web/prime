@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '../lib/apiClient';
-import type { NoticeDto, NoticeServiceMode } from '../lib/types';
+import type { NoticeCandidateDto, NoticeDto, NoticeReason, NoticeServiceMode } from '../lib/types';
 
 export function usePropertyNotices(propertyId: string | undefined) {
   return useQuery({
@@ -15,8 +15,22 @@ function useNoticeMutation<T>(propertyId: string, fn: (v: T) => Promise<NoticeDt
   return useMutation({ mutationFn: fn, onSuccess: () => queryClient.invalidateQueries({ queryKey: ['properties', propertyId, 'notices'] }) });
 }
 
+/** Reason omitted: derived from the values (LGC §223); or one of the MRPAAO's descriptive reasons. */
 export const useGenerateNotice = (propertyId: string) =>
-  useNoticeMutation(propertyId, (assessmentId: string) => apiPost<NoticeDto>('/api/notices', { assessmentId }));
+  useNoticeMutation(propertyId, ({ assessmentId, reason }: { assessmentId: string; reason?: NoticeReason }) =>
+    apiPost<NoticeDto>('/api/notices', { assessmentId, reason }));
+
+/** One notice to one declared owner for several of the owner's assessments (MRPAAO Att. 10). */
+export const useGenerateCombinedNotice = (propertyId: string) =>
+  useNoticeMutation(propertyId, (body: { taxpayerId: string; assessmentIds: string[] }) => apiPost<NoticeDto>('/api/notices/combined', body));
+
+export function useNoticeCandidates(taxpayerId: string | undefined) {
+  return useQuery({
+    queryKey: ['notice-candidates', taxpayerId],
+    queryFn: () => apiGet<NoticeCandidateDto[]>('/api/notices/candidates', { taxpayerId }),
+    enabled: !!taxpayerId,
+  });
+}
 
 export const useIssueNotice = (propertyId: string) =>
   useNoticeMutation(propertyId, (id: string) => apiPost<NoticeDto>(`/api/notices/${id}/issue`, {}));

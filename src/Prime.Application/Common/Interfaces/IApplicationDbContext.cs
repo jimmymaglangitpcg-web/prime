@@ -68,6 +68,7 @@ public interface IApplicationDbContext
     DbSet<PropertyTransactionTdCancellation> PropertyTransactionTdCancellations { get; }
     DbSet<PropertyTransactionProperty> PropertyTransactionProperties { get; }
     DbSet<NoticeOfAssessment> NoticesOfAssessment { get; }
+    DbSet<NoticeOfAssessmentItem> NoticeOfAssessmentItems { get; }
     /// <summary>Read by forms and approvals for signatory names.</summary>
     DbSet<AppUser> AppUsers { get; }
     DbSet<BarangayBoundary> BarangayBoundaries { get; }

@@ -2,13 +2,11 @@ import { useState } from 'react';
 import { Alert, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { PlusOutlined, WarningOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useCancelNotice, useGenerateNotice, useIssueNotice, usePropertyNotices, useRecordNoticeService } from '../../../api/notices';
+import { useCancelNotice, useGenerateCombinedNotice, useGenerateNotice, useIssueNotice, useNoticeCandidates, usePropertyNotices, useRecordNoticeService } from '../../../api/notices';
 import { useRpuAssessments } from '../../../api/assessments';
 import { ApiRequestError } from '../../../lib/apiClient';
 import { formatMoney } from '../../../lib/format';
-import {
-  noticeReasonLabel, serviceModeLabel, type NoticeDto, type NoticeServiceMode, type NoticeStatus, type RpuSummaryDto,
-} from '../../../lib/types';
+import { type NoticeCandidateDto, type NoticeDto, type NoticeReason, type NoticeServiceMode, type NoticeStatus, type PropertyOwnerDto, type RpuSummaryDto, descriptiveNoticeReasons, noticeReasonLabel, serviceModeLabel } from '../../../lib/types';
 import { PrintFormButton } from '../../../components/PrintFormButton';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
@@ -19,10 +17,11 @@ const statusColor: Record<NoticeStatus, string> = { Draft: 'default', Issued: 'b
  * a first assessment or an increase/decrease, issued, then served by one of
  * the three statutory modes with proof — which starts the appeal period (§226).
  */
-export function NoticesSection({ propertyId, rpus }: { propertyId: string; rpus: RpuSummaryDto[] }) {
+export function NoticesSection({ propertyId, rpus, owners }: { propertyId: string; rpus: RpuSummaryDto[]; owners: PropertyOwnerDto[] }) {
   const { data = [], isLoading } = usePropertyNotices(propertyId);
   const issue = useIssueNotice(propertyId);
   const [generating, setGenerating] = useState(false);
+  const [combining, setCombining] = useState(false);
   const [serving, setServing] = useState<NoticeDto | null>(null);
   const [cancelling, setCancelling] = useState<NoticeDto | null>(null);
   const [reason, setReason] = useState('');
@@ -32,7 +31,10 @@ export function NoticesSection({ propertyId, rpus }: { propertyId: string; rpus:
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
         <Typography.Title level={5} style={{ margin: 0 }}>Notices of Assessment</Typography.Title>
-        <Button icon={<PlusOutlined />} onClick={() => setGenerating(true)} disabled={rpus.length === 0}>Generate notice</Button>
+        <Space wrap>
+          <Button onClick={() => setCombining(true)} disabled={owners.length === 0}>Combined notice for an owner</Button>
+          <Button icon={<PlusOutlined />} onClick={() => setGenerating(true)} disabled={rpus.length === 0}>Generate notice</Button>
+        </Space>
       </div>
       {issue.isError && <Alert type="error" showIcon closable style={{ marginBottom: 8 }} title="Could not issue" description={errorText(issue.error)} />}
       <Table<NoticeDto>
@@ -73,6 +75,7 @@ export function NoticesSection({ propertyId, rpus }: { propertyId: string; rpus:
         ]}
       />
       <GenerateNoticeModal propertyId={propertyId} rpus={rpus} open={generating} onClose={() => setGenerating(false)} />
+      {combining && <CombinedNoticeModal propertyId={propertyId} owners={owners} onClose={() => setCombining(false)} />}
       <RecordServiceModal propertyId={propertyId} notice={serving} onClose={() => setServing(null)} />
       <Modal title="Cancel notice" open={cancelling !== null} okText="Cancel notice" cancelText="Back"
         okButtonProps={{ danger: true, disabled: reason.trim() === '', loading: cancel.isPending }} onCancel={() => setCancelling(null)}
@@ -87,6 +90,7 @@ export function NoticesSection({ propertyId, rpus }: { propertyId: string; rpus:
 function GenerateNoticeModal({ propertyId, rpus, open, onClose }: { propertyId: string; rpus: RpuSummaryDto[]; open: boolean; onClose: () => void }) {
   const [rpuId, setRpuId] = useState<string | undefined>(rpus[0]?.id);
   const [assessmentId, setAssessmentId] = useState<string>();
+  const [reason, setReason] = useState<NoticeReason | undefined>();
   const { data: assessments = [] } = useRpuAssessments(rpuId);
   const generate = useGenerateNotice(propertyId);
   const posted = assessments.filter((a) => a.status === 'Posted');
@@ -94,7 +98,7 @@ function GenerateNoticeModal({ propertyId, rpus, open, onClose }: { propertyId: 
   return (
     <Modal title="Generate Notice of Assessment" open={open} okText="Generate draft" okButtonProps={{ disabled: !assessmentId, loading: generate.isPending }}
       onCancel={() => { generate.reset(); onClose(); }}
-      onOk={() => assessmentId && generate.mutate(assessmentId, { onSuccess: () => { setAssessmentId(undefined); onClose(); } })} destroyOnHidden>
+      onOk={() => assessmentId && generate.mutate({ assessmentId, reason }, { onSuccess: () => { setAssessmentId(undefined); setReason(undefined); onClose(); } })} destroyOnHidden>
       <Typography.Paragraph type="secondary">
         Required when property is assessed for the first time or its assessment is increased or decreased (LGC §223).
       </Typography.Paragraph>
@@ -105,6 +109,9 @@ function GenerateNoticeModal({ propertyId, rpus, open, onClose }: { propertyId: 
         <Select aria-label="Posted assessment" value={assessmentId} onChange={setAssessmentId} style={{ width: '100%' }} placeholder="Posted assessment"
           notFoundContent="No posted assessments for this RPU"
           options={posted.map((a) => ({ value: a.id, label: `${a.assessmentYear} — AV ${formatMoney(a.assessedValue)} (effective ${a.effectiveDate})` }))} />
+        <Select aria-label="Reason" value={reason} onChange={setReason} allowClear style={{ width: '100%' }}
+          placeholder="Reason: from the values (first assessment, increase or decrease)"
+          options={descriptiveNoticeReasons.map((r) => ({ value: r, label: `${noticeReasonLabel[r]} (MRPAAO p.168)` }))} />
       </Space>
     </Modal>
   );
@@ -140,3 +147,35 @@ function RecordServiceModal({ propertyId, notice, onClose }: { propertyId: strin
     </Modal>
   );
 }
+
+/**
+ * One notice to one declared owner listing several of the owner's posted
+ * assessments that need a notice (MRPAAO Att. 10). The appeal period then runs
+ * from the one receipt.
+ */
+function CombinedNoticeModal({ propertyId, owners, onClose }: { propertyId: string; owners: PropertyOwnerDto[]; onClose: () => void }) {
+  const [taxpayerId, setTaxpayerId] = useState<string | undefined>(owners[0]?.taxpayerId ?? undefined);
+  const [selected, setSelected] = useState<string[]>([]);
+  const { data: candidates = [], isFetching } = useNoticeCandidates(taxpayerId);
+  const generate = useGenerateCombinedNotice(propertyId);
+  return (
+    <Modal open title="Combined Notice of Assessment for an owner" okText="Generate draft" onCancel={onClose}
+      okButtonProps={{ disabled: !taxpayerId || selected.length === 0, loading: generate.isPending }}
+      onOk={() => taxpayerId && generate.mutate({ taxpayerId, assessmentIds: selected }, { onSuccess: onClose })} width={760} destroyOnHidden>
+      {generate.isError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title="No notice generated" description={errorText(generate.error)} />}
+      <Select aria-label="Owner" value={taxpayerId} onChange={(v) => { setTaxpayerId(v); setSelected([]); }} style={{ width: '100%', marginBottom: 12 }}
+        options={owners.map((o) => ({ value: o.taxpayerId!, label: o.taxpayerDisplayName }))} />
+      <Table<NoticeCandidateDto> size="small" rowKey="assessmentId" loading={isFetching} dataSource={candidates} pagination={false}
+        locale={{ emptyText: "None of this owner's posted assessments needs a notice" }}
+        rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys as string[]) }}
+        columns={[
+          { title: 'PIN', dataIndex: 'pin' },
+          { title: 'RPU', dataIndex: 'rpuNumber' },
+          { title: 'Year', dataIndex: 'assessmentYear' },
+          { title: 'Assessed value', dataIndex: 'assessedValue', align: 'right', render: formatMoney },
+          { title: 'Reason', dataIndex: 'reason', render: (r: NoticeReason) => noticeReasonLabel[r] },
+        ]} />
+    </Modal>
+  );
+}
+

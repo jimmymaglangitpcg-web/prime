@@ -941,7 +941,8 @@ export interface PropertyTransactionDto {
 
 // --- Notices of Assessment (LGC §§223, 226; docs/FORMS-REVISION-PLAN.md A6) ---
 
-export type NoticeReason = 'FirstAssessment' | 'AssessmentIncreased' | 'AssessmentDecreased';
+export type NoticeReason = 'FirstAssessment' | 'AssessmentIncreased' | 'AssessmentDecreased'
+  | 'DeclaredOwnerChanged' | 'OwnerAddressChanged' | 'LocationChanged';
 export type NoticeStatus = 'Draft' | 'Issued' | 'Served' | 'Cancelled';
 /** The three modes LGC §223 allows. Electronic service is not established by any source, so it is not offered. */
 export type NoticeServiceMode = 'Personal' | 'RegisteredMail' | 'ThroughPunongBarangay';
@@ -950,7 +951,22 @@ export const noticeReasonLabel: Record<NoticeReason, string> = {
   FirstAssessment: 'First assessment',
   AssessmentIncreased: 'Increased',
   AssessmentDecreased: 'Decreased',
+  DeclaredOwnerChanged: 'Declared owner changed',
+  OwnerAddressChanged: "Owner's address changed",
+  LocationChanged: 'Location changed',
 };
+
+/** The MRPAAO's reasons for a notice whose value may be unchanged (p.168). */
+export const descriptiveNoticeReasons: NoticeReason[] = ['DeclaredOwnerChanged', 'OwnerAddressChanged', 'LocationChanged'];
+
+export interface NoticeItemDto {
+  sequence: number; propertyId: string; rpuId: string; assessmentId: string; taxDeclarationId: string | null; reason: NoticeReason;
+  previousAssessedValue: number | null; assessedValue: number; marketValue: number; assessmentYear: number; assessmentEffectiveDate: string;
+}
+
+export interface NoticeCandidateDto {
+  assessmentId: string; propertyId: string; pin: string; rpuId: string; rpuNumber: string; assessmentYear: number; assessedValue: number; reason: NoticeReason;
+}
 
 export const serviceModeLabel: Record<NoticeServiceMode, string> = {
   Personal: 'Personal delivery',
@@ -988,6 +1004,10 @@ export interface NoticeDto {
   appealDeadline: string | null;
   cancelledAt: string | null;
   cancellationReason: string | null;
+  /** Set for a notice combining several properties of one declared owner. */
+  addresseeTaxpayerId: string | null;
+  /** One row per property assessment the notice gives (MRPAAO Att. 10). */
+  items: NoticeItemDto[] | null;
 }
 
 /** A FAAS "Property Assessment" row (docs/analysis/mrpaao-forms-model.md §8.2). */

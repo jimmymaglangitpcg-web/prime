@@ -1,8 +1,8 @@
 # PRIME — Forms Model from the MRPAAO (2004/2006)
 
-Status: **steps 1–4 and 5a implemented 2026-09-25** (§6–§13; commits
-`c5b3f8d` step 1, `81ce318` steps 2–3). Step 5b (Notice of Assessment for
-several properties), 6 and 7 are outlines.
+Status: **steps 1–5 implemented 2026-09-25** (§6–§14; commits `c5b3f8d`
+step 1, `81ce318` steps 2–3, `f9376c6` steps 4–5a). Steps 6 (registers)
+and 7 (sworn statement) are outlines.
 
 Decision (user, 2026-09-25): the forms follow the **Manual on Real
 Property Appraisal and Assessment Operations** (`docs/References/ManualRPAandAO.pdf`,
@@ -1034,4 +1034,73 @@ once more classes used that pattern.
 - The provisional TD v2 was installed today, so it is marked Cancelled
   (superseded by v3 on its first day).
 - One TD (R5) is now issued under v3.
+
+---
+
+## 14. Step 5b — Notice of Assessment for several properties (2026-09-25)
+
+**Model.**
+- A notice keeps one addressee, one service record and one appeal clock,
+  and now lists **items** (`NoticeOfAssessmentItems`): one per property
+  assessment, each with its reason and frozen values.
+- The header's assessment fields are the first item's, and its values are
+  the items' totals.
+- `AddresseeTaxpayerId` marks a notice combining several properties of one
+  declared owner.
+- The migration `NoticeItems` gave every existing notice one item from its
+  own values.
+
+**Reasons.** The value reasons (first assessment, increase, decrease;
+LGC §223) are still derived, and are given once per assessment. The
+MRPAAO's descriptive reasons (p.168) are new:
+- `DeclaredOwnerChanged`, `OwnerAddressChanged`, `LocationChanged`;
+- the user names one, and it is allowed although the value is unchanged;
+- it may recur, but not while a draft notice for the assessment is open;
+- naming a value reason is refused (`VALIDATION_FAILED`).
+
+**Combined notice.**
+- `POST /api/notices/combined {taxpayerId, assessmentIds}`: every
+  assessment must be posted and need a notice for its values, and the
+  taxpayer must be a current declared owner of each unit
+  (`NOTICE_ADDRESSEE_NOT_OWNER`).
+- The addressee is the taxpayer's name and address.
+- The §223 issue period runs from the earliest approval among the items.
+- `GET /api/notices/candidates?taxpayerId=` lists the owner's posted
+  assessments that need a notice and have none.
+- A combined notice appears in the Notices tab of every property it lists.
+
+**Form.** `NOTICE_OF_ASSESSMENT` v2 is the MRPAAO Attachment 10 layout:
+- NA No., the Republic / city or municipality / province heading, the date
+  and the addressee;
+- the manual's letter text, and item rows (ARP No., TDN, PIN, location,
+  classification, MV, AV) with totals;
+- a line per item stating its reason (and the previous AV for an increase
+  or decrease);
+- the assessor's signature, and the manual's notes 1–3, with the appeal
+  period and deadline added to note 1.
+
+**Not in this step:** notices are not prepared automatically when a
+transfer or a correction changes the declared owner, address or location;
+the assessor generates them with the reason.
+
+**UI:** the Generate dialog has an optional descriptive reason, and a new
+"Combined notice for an owner" dialog lists the chosen owner's candidates
+with checkboxes.
+
+**Verified:**
+- 3 new integration tests:
+  - a combined notice for two properties (candidates, two items, total AV
+    200,000, the addressee, shown on both properties, and the v2 form with
+    both TDNs, total and §223 note);
+  - a refusal when the addressee does not own a unit;
+  - a descriptive reason on an unchanged value (derived reasons refused,
+    duplicates refused while a draft is open).
+- Two older notice tests are kept by matching their wording in v2 ("DRAFT
+  — NOT ISSUED", "assessed for the first time", "… days from the date of
+  your receipt").
+- Full suite passes (101 domain, 37 application, 149 integration).
+- Production frontend build and lint pass.
+- In the browser: the DEMO property's served notice prints in the v2
+  layout, the combined dialog loads the owner's candidates, and there are
+  no console errors.
 

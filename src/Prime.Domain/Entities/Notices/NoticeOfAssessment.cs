@@ -62,4 +62,36 @@ public sealed class NoticeOfAssessment : AuditableEntity
     public DateTimeOffset? CancelledAt { get; set; }
     public Guid? CancelledBy { get; set; }
     public string? CancellationReason { get; set; }
+
+    /// <summary>
+    /// The addressee of a notice combining several properties of one declared
+    /// owner (MRPAAO Att. 10). Null: addressed to a property's declared parties.
+    /// </summary>
+    public Guid? AddresseeTaxpayerId { get; set; }
+
+    /// <summary>
+    /// One row per property assessment the notice gives (MRPAAO Att. 10:
+    /// ARPN, TDN, PIN, location, classification, MV, AV). The header's
+    /// assessment fields are the first item's; its values are the items' totals.
+    /// </summary>
+    public List<NoticeOfAssessmentItem> Items { get; set; } = [];
 }
+
+/// <summary>A property assessment a notice gives, with the reason and values frozen.</summary>
+public sealed class NoticeOfAssessmentItem : Entity
+{
+    public Guid NoticeOfAssessmentId { get; set; }
+    public int Sequence { get; set; }
+    public Guid PropertyId { get; set; }
+    public Guid RpuId { get; set; }
+    public Guid AssessmentId { get; set; }
+    public Assessment? Assessment { get; set; }
+    public Guid? TaxDeclarationId { get; set; }
+    public NoticeReason Reason { get; set; }
+    public decimal? PreviousAssessedValue { get; set; }
+    public decimal AssessedValue { get; set; }
+    public decimal MarketValue { get; set; }
+    public int AssessmentYear { get; set; }
+    public DateOnly AssessmentEffectiveDate { get; set; }
+}
+

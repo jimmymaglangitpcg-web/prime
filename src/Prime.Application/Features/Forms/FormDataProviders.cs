@@ -2,10 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Appraisal;
 using Prime.Application.Features.Billing.Bills;
 using Prime.Application.Features.Properties;
+using Prime.Application.Features.TaxDeclarations;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
 
@@ -313,14 +315,18 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
     }
 }
 
-/// <summary>Notice of Assessment (LGC §223). Only an issued or served notice can be issued as a form; a draft is previewed.</summary>
-public sealed class NoticeFormDataProvider(IApplicationDbContext db) : IFormDataProvider
+/// <summary>
+/// Notice of Assessment (LGC §223). Only an issued or served notice can be
+/// issued as a form; a draft is previewed. Its <c>items</c> are the MRPAAO
+/// Att. 10 rows: ARPN, TDN, PIN, location, classification, MV, AV.
+/// </summary>
+public sealed class NoticeFormDataProvider(IApplicationDbContext db, IOptions<FaasOptions> faas) : IFormDataProvider
 {
     public FormSubjectType SubjectType => FormSubjectType.NoticeOfAssessment;
 
     public async Task<FormSubjectData?> BuildAsync(Guid subjectId, CancellationToken cancellationToken)
     {
-        var n = await db.NoticesOfAssessment.AsNoTracking().FirstOrDefaultAsync(x => x.Id == subjectId, cancellationToken);
+        var n = await db.NoticesOfAssessment.AsNoTracking().Include(x => x.Items).FirstOrDefaultAsync(x => x.Id == subjectId, cancellationToken);
         if (n is null)
         {
             return null;
@@ -339,7 +345,10 @@ public sealed class NoticeFormDataProvider(IApplicationDbContext db) : IFormData
                 {
                     NoticeReason.FirstAssessment => "assessed for the first time",
                     NoticeReason.AssessmentIncreased => "increased",
-                    _ => "decreased",
+                    NoticeReason.AssessmentDecreased => "decreased",
+                    NoticeReason.DeclaredOwnerChanged => "updated for a change of declared owner",
+                    NoticeReason.OwnerAddressChanged => "updated for a change of the owner's address",
+                    _ => "updated for a change of the property's location",
                 },
                 previousAssessedValue = n.PreviousAssessedValue,
                 assessedValue = n.AssessedValue,
@@ -349,17 +358,54 @@ public sealed class NoticeFormDataProvider(IApplicationDbContext db) : IFormData
                 addresseeNames = n.AddresseeNames,
                 addresseeAddress = n.AddresseeAddress,
                 appealPeriodDays = n.AppealPeriodDays,
+                appealDeadline = n.AppealDeadline,
                 status = n.Status.ToString(),
                 issuedAt = n.IssuedAt,
                 taxDeclarationNumber = tdNumber,
                 rpuNumber,
             },
             property = await FormData.PropertyAsync(db, n.PropertyId, cancellationToken),
+            items = await ItemsAsync(n, cancellationToken),
         });
         var blocker = n.Status is NoticeStatus.Issued or NoticeStatus.Served
             ? null
             : $"Only an issued notice can be printed as issued (this one is {n.Status}); preview it instead.";
         return new FormSubjectData(n.NoticeNumber, data, blocker);
+    }
+
+    private async Task<List<object>> ItemsAsync(Domain.Entities.Notices.NoticeOfAssessment n, CancellationToken ct)
+    {
+        var rows = new List<object>();
+        foreach (var i in n.Items.OrderBy(i => i.Sequence))
+        {
+            var property = await db.Properties.AsNoTracking().Where(p => p.Id == i.PropertyId)
+                .Select(p => new { p.PropertyIdentificationNumber, p.Street, Barangay = p.Barangay!.Name, Municipality = p.Municipality!.Name, Province = p.Province!.Name })
+                .FirstAsync(ct);
+            var suffix = await db.RealPropertyUnits.Where(r => r.Id == i.RpuId).Select(r => r.PinSuffix).FirstAsync(ct);
+            var td = i.TaxDeclarationId is { } tdId
+                ? await db.TaxDeclarations.AsNoTracking().Where(x => x.Id == tdId).Select(x => new { x.TaxDeclarationNumber, x.AssessmentId }).FirstOrDefaultAsync(ct)
+                : null;
+            var faasNumber = await db.Assessments.Where(a => a.Id == i.AssessmentId).Select(a => a.FaasNumber).FirstOrDefaultAsync(ct);
+            var classification = string.Join(", ", await db.AssessmentLines.Where(l => l.AssessmentId == i.AssessmentId).OrderBy(l => l.Sequence)
+                .Select(l => l.Classification!.Name).ToListAsync(ct));
+            rows.Add(new
+            {
+                sequence = i.Sequence,
+                arpNumber = faas.Value.NumberSource == FaasNumberSource.TaxDeclaration ? td?.TaxDeclarationNumber : faasNumber,
+                tdNumber = td?.TaxDeclarationNumber,
+                pin = RealPropertyUnits.UnitPin.Compose(property.PropertyIdentificationNumber, suffix, false),
+                location = string.Join(", ", new[] { property.Street, property.Barangay }.Where(x => !string.IsNullOrWhiteSpace(x))),
+                municipality = property.Municipality,
+                province = property.Province,
+                classification,
+                reason = i.Reason.ToString(),
+                previousAssessedValue = i.PreviousAssessedValue,
+                marketValue = i.MarketValue,
+                assessedValue = i.AssessedValue,
+                assessmentYear = i.AssessmentYear,
+            });
+        }
+        return rows;
     }
 }
 
