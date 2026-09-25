@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Prime.Domain.Entities;
 using Prime.Domain.Entities.Billing;
 using Prime.Domain.Entities.Forms;
+using Prime.Domain.Entities.Notices;
 using Prime.Domain.Entities.Transactions;
 using Prime.Domain.Entities.Workflow;
 using Prime.Domain.Entities.Gis;
@@ -52,6 +53,7 @@ public interface IApplicationDbContext
     DbSet<PropertyTransactionParty> PropertyTransactionParties { get; }
     DbSet<PropertyTransactionTdCancellation> PropertyTransactionTdCancellations { get; }
     DbSet<PropertyTransactionProperty> PropertyTransactionProperties { get; }
+    DbSet<NoticeOfAssessment> NoticesOfAssessment { get; }
     /// <summary>Read by forms and approvals for signatory names.</summary>
     DbSet<AppUser> AppUsers { get; }
     DbSet<BarangayBoundary> BarangayBoundaries { get; }

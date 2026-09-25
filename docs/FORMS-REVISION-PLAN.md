@@ -3,9 +3,9 @@
 **FAAS, Tax Declaration and related assessment forms: from the initial
 system to the forms prescribed under the Local Assessment Manual (LAM)**
 
-Status: **A1–A5 implemented 2026-09-25**; A6–A10 not started. See §11
-(A1–A3), §12 (A4) and §13 (A5) for what was built and where it deviates
-from this plan.
+Status: **A1–A7 implemented 2026-09-25**; A8–A10 not started. See §11
+(A1–A3), §12 (A4), §13 (A5), §14 (A6) and §15 (A7) for what was built and
+where it deviates from this plan.
 
 ---
 
@@ -603,3 +603,139 @@ closes and the error shows in the page.
 Migration `PropertyTransactions`: seven new tables plus three nullable
 link columns. Applied to the local dev DB only.
 
+---
+
+## 14. Implementation status — A6 Notice of Assessment, 2026-09-25
+
+**Record.** `NoticeOfAssessment` (LGC §223) is generated from a **posted**
+assessment, only when a notice is required:
+- a first assessment; or
+- an increase or decrease against the previous assessment (the one it
+  names, else the latest earlier posted assessment of the RPU).
+
+An unchanged value is refused (`NOTICE_NOT_REQUIRED`). There is at most
+one live notice per assessment.
+
+Frozen on the notice:
+- the addressees (the current declared parties; legal-interest holders
+  are excluded);
+- the values and the reason;
+- the periods applied, which come from configuration with their citations
+  (`Notices:IssuePeriodDays` = 30 for §223, `Notices:AppealPeriodDays` =
+  60 for §226) and are required at startup.
+
+**Lifecycle.** Draft → Issued (numbered by a `NoticeOfAssessment` scheme
+if one is in force) → Served, or Cancelled before service.
+- Recording service needs one of the **three §223 modes** (personal,
+  registered mail, through the punong barangay), the receipt date
+  (between the issue date and today), the recipient and a proof reference.
+- The **appeal deadline** = receipt date + the frozen appeal period.
+  Electronic service is not offered (no authoritative source, baseline
+  Q11).
+- A notice not issued by its due date (the approval date + the issue
+  period) is flagged Overdue.
+
+**Form.** Provisional `NOTICE_OF_ASSESSMENT` v1. It uses only PRIME data
+and the statute's own words about the appeal right. A draft previews but
+cannot be issued.
+
+**UI.** A Notices tab on the Property Profile: generate (choose RPU and
+posted assessment), issue, record service, print, cancel.
+
+**Also fixed while verifying:** the issue due date counted from the
+approval's UTC date, which is one day early for approvals before 8 AM in
+Manila. `IClock.LocalDate(instant)` now converts timestamps to the LGU
+calendar.
+
+**Open (DOMAIN VERIFICATION REQUIRED):**
+- Periods are counted in calendar days; whether a deadline falling on a
+  non-working day moves is not applied.
+- The LAM's notice form and its proof-of-service requirements.
+- Back-tax interest from receipt of notice (§222) belongs to billing and
+  is not yet applied.
+
+**Verified:**
+- 4 integration tests: the full generate → issue → serve cycle with the
+  appeal deadline; increase detection and the unchanged-value refusal;
+  refusals (no addressee, unposted assessment); draft preview versus
+  issue, and cancel then regenerate.
+- A time-zone unit test and the template parse test.
+- Live in the browser: a first-assessment notice generated, issued,
+  served by registered mail (appeal deadline 2026-11-24), and printed.
+
+Migration `NoticesOfAssessment`: one new table. Applied to the local dev
+DB only.
+
+---
+
+## 15. Implementation status — A7 appraisal record (FAAS aggregate), 2026-09-25
+
+**Read model.** `AppraisalRecordService` assembles one record per
+**assessment**. PRIME values each land, building or machinery item
+separately, so an assessment covers exactly one appraised item. The record
+holds:
+- the property's location and survey/title references;
+- the parties declared **on the assessment's effective date** (LGC
+  §§204–205). Parties recorded later are left out, so a reprint of an old
+  FAAS never shows today's owner;
+- the RPU and the Tax Declaration **in force on that date**: approved,
+  effective by then, and not cancelled before it;
+- the appraised item's registered details (land, building with its
+  components, or machinery);
+- the valuation: method, SMV ordinance, schedule rate and the full
+  calculation breakdown;
+- the assessment: the classification, actual use and property type of the
+  assessment-level row it used, the frozen percentage, the bracket, and the
+  level's ordinance;
+- the previous assessment and the change in assessed value (the same rule
+  as the Notice of Assessment, now shared in `AssessmentHistory`);
+- who recorded it, the frozen approval signatures, and its notices.
+
+It computes nothing (CLAUDE.md Rule 9). Every value is one PRIME already
+recorded.
+
+**Breakdown order.** The breakdown is stored as `jsonb`, which does not
+keep key order. `ValuationCalculator.BreakdownOrder` fixes the reading
+order (inputs, intermediate values, market value). A unit test keeps it in
+step with the keys the calculator writes.
+
+**FAAS number.** `Assessment.FaasNumber` is assigned when the approval
+completes, only if a `Faas` numbering scheme is in force (none is shipped).
+It is never typed by hand and is unique.
+
+**Serving it.**
+- `GET /api/assessments/{id}/appraisal-record`.
+- Form subject `Assessment`: its data provider wraps the same record under
+  `appraisal`. It can be issued once the assessment is Approved or Posted;
+  a Draft or pending one can only be previewed. There is no FAAS template
+  yet; that is A8.
+- UI: an **Assessments** table under each RPU on the Property Profile, with
+  an **Appraisal record** drawer.
+
+**Deviation from §4.1:** there is one form subject for all three FAAS
+kinds. A8 decides whether to use one FAAS form that branches on
+`appraisal.kind`, or three codes (FAAS_LAND/BUILDING/MACHINERY) with a
+kind check.
+
+**Open (DOMAIN VERIFICATION REQUIRED):**
+- The LAM's FAAS field list (checklist §6 item 2). Missing fields are added
+  to the read model, not to templates.
+- The asset's descriptive fields are its current registered values. They
+  cannot be edited today (no update endpoints), and an issued FAAS freezes
+  them. If editing is added later, those fields need versioning.
+
+**Verified:**
+- 4 integration tests: a land record with a party effective later
+  excluded; a reassessment showing the previous value and the change; a
+  FAAS number assigned on approval, with the signer shown and the form
+  provider serving the same data; a draft that previews but cannot be
+  issued, and an unknown id.
+- A unit test for the breakdown order.
+- Full suite passes (90 domain, 37 application, 105 integration tests).
+- Production frontend build and lint pass.
+- Live in the browser on the DEMO property: the drawer shows the TD in
+  force, the land, the SMV, the ordered breakdown, the level bracket, the
+  approver and the served notice, with no console errors.
+
+Migration `AssessmentFaasNumber`: one nullable column and a unique index.
+Applied to the local dev DB only.

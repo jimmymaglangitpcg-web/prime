@@ -3,6 +3,7 @@ using Prime.Application.Common.Interfaces;
 using Prime.Domain.Entities;
 using Prime.Domain.Entities.Billing;
 using Prime.Domain.Entities.Forms;
+using Prime.Domain.Entities.Notices;
 using Prime.Domain.Entities.Transactions;
 using Prime.Domain.Entities.Workflow;
 using Prime.Domain.Entities.Gis;
@@ -70,6 +71,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<PropertyTransactionParty> PropertyTransactionParties => Set<PropertyTransactionParty>();
     public DbSet<PropertyTransactionTdCancellation> PropertyTransactionTdCancellations => Set<PropertyTransactionTdCancellation>();
     public DbSet<PropertyTransactionProperty> PropertyTransactionProperties => Set<PropertyTransactionProperty>();
+    public DbSet<NoticeOfAssessment> NoticesOfAssessment => Set<NoticeOfAssessment>();
     public DbSet<BarangayBoundary> BarangayBoundaries => Set<BarangayBoundary>();
     public DbSet<ZoneBoundary> ZoneBoundaries => Set<ZoneBoundary>();
     public DbSet<RoadSegment> RoadSegments => Set<RoadSegment>();

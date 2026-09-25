@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Prime.Infrastructure.Persistence;
 namespace Prime.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PrimeDbContext))]
-    partial class PrimeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260924233341_NoticesOfAssessment")]
+    partial class NoticesOfAssessment
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -60,10 +63,6 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly>("EffectiveDate")
                         .HasColumnType("date");
 
-                    b.Property<string>("FaasNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<decimal>("MarketValue")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -103,9 +102,6 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("AssessmentLevelId");
 
                     b.HasIndex("AssessmentYear");
-
-                    b.HasIndex("FaasNumber")
-                        .IsUnique();
 
                     b.HasIndex("PreviousAssessmentId");
 

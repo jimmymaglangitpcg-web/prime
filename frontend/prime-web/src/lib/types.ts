@@ -615,7 +615,7 @@ export type NumberedDocumentKind =
   | 'OfficialReceipt'
   | 'PropertyTransaction';
 export type FormAuthority = 'PrimeProvisional' | 'Lam' | 'Blgf' | 'LguOrdinance' | 'Other';
-export type FormSubjectType = 'TaxBill' | 'TaxDeclaration';
+export type FormSubjectType = 'TaxBill' | 'TaxDeclaration' | 'NoticeOfAssessment' | 'Assessment';
 export type ApprovalSubjectType = 'Assessment' | 'TaxDeclaration' | 'PropertyTransaction';
 
 interface ConfigurationHeader {
@@ -827,4 +827,118 @@ export interface PropertyTransactionDto {
   issuedTaxDeclarations: TransactionTdDto[];
   cancelledTaxDeclarations: TransactionTdDto[];
   relatedProperties: { propertyId: string; propertyIdentificationNumber: string; role: 'Source' | 'Result' }[];
+}
+
+// --- Notices of Assessment (LGC §§223, 226; docs/FORMS-REVISION-PLAN.md A6) ---
+
+export type NoticeReason = 'FirstAssessment' | 'AssessmentIncreased' | 'AssessmentDecreased';
+export type NoticeStatus = 'Draft' | 'Issued' | 'Served' | 'Cancelled';
+/** The three modes LGC §223 allows. Electronic service is not established by any source, so it is not offered. */
+export type NoticeServiceMode = 'Personal' | 'RegisteredMail' | 'ThroughPunongBarangay';
+
+export const noticeReasonLabel: Record<NoticeReason, string> = {
+  FirstAssessment: 'First assessment',
+  AssessmentIncreased: 'Increased',
+  AssessmentDecreased: 'Decreased',
+};
+
+export const serviceModeLabel: Record<NoticeServiceMode, string> = {
+  Personal: 'Personal delivery',
+  RegisteredMail: 'Registered mail',
+  ThroughPunongBarangay: 'Through the punong barangay',
+};
+
+export interface NoticeDto {
+  id: string;
+  noticeNumber: string | null;
+  propertyId: string;
+  rpuId: string;
+  assessmentId: string;
+  taxDeclarationId: string | null;
+  reason: NoticeReason;
+  previousAssessedValue: number | null;
+  assessedValue: number;
+  marketValue: number;
+  assessmentYear: number;
+  assessmentEffectiveDate: string;
+  addresseeNames: string;
+  addresseeAddress: string | null;
+  issuePeriodDays: number;
+  issueDueDate: string;
+  issueOverdue: boolean;
+  appealPeriodDays: number;
+  status: NoticeStatus;
+  createdAt: string;
+  issuedAt: string | null;
+  serviceMode: NoticeServiceMode | null;
+  receivedDate: string | null;
+  servedTo: string | null;
+  proofReference: string | null;
+  serviceNotes: string | null;
+  appealDeadline: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+}
+
+export interface AssessmentSummaryDto {
+  id: string;
+  rpuId: string;
+  assessmentYear: number;
+  marketValue: number;
+  assessedValue: number;
+  assessmentPercentage: number;
+  status: WorkflowStatus;
+  effectiveDate: string;
+  previousAssessmentId: string | null;
+  faasNumber: string | null;
+  remarks: string | null;
+}
+
+// --- Appraisal record / FAAS aggregate (docs/FORMS-REVISION-PLAN.md A7) ---
+
+export type ValuationSourceType = 'Land' | 'Building' | 'Machinery';
+
+export interface AppraisalRecordDto {
+  assessmentId: string;
+  faasNumber: string | null;
+  kind: ValuationSourceType;
+  status: WorkflowStatus;
+  property: {
+    id: string; pin: string; street: string | null; sitio: string | null; lotNumber: string | null; blockNumber: string | null;
+    surveyNumber: string | null; titleNumber: string | null; taxMapNumber: string | null; barangay: string; municipality: string; province: string;
+  };
+  partiesAsOf: string;
+  parties: { name: string; role: PropertyPartyRole; roleLabel: string; sharePercent: number; address: string | null }[];
+  rpu: { id: string; number: string; type: RpuType };
+  taxDeclaration: { id: string; number: string; revisionNumber: number; effectivityDate: string; status: WorkflowStatus } | null;
+  land: {
+    id: string; area: number; areaUnit: string; classification: string; actualUse: string; subClassification: string | null; zone: string | null;
+    locationFactor: number | null; roadFrontage: number | null; roadType: string | null; isCornerLot: boolean; zoning: string | null;
+  } | null;
+  building: {
+    id: string; buildingType: string; structuralType: string; actualUse: string; numberOfStoreys: number; floorArea: number; totalFloorArea: number;
+    yearConstructed: number | null; yearCompleted: number | null; condition: string; completionPercentage: number;
+    components: { componentType: string; description: string | null; quantity: number | null; unitCost: number | null; cost: number | null }[];
+  } | null;
+  machinery: {
+    id: string; machineryType: string; description: string | null; brand: string | null; model: string | null; serialNumber: string | null;
+    capacity: number | null; capacityUnit: string | null; dateAcquired: string | null; acquisitionCost: number; installationCost: number | null;
+    otherCost: number | null; isBrandNew: boolean; replacementCost: number | null; economicLifeYears: number | null; remainingLifeYears: number | null;
+  } | null;
+  valuation: {
+    id: string; method: string; marketValue: number; effectiveDate: string; computedAt: string;
+    smv: { id: string; ordinanceNumber: string; ordinanceDate: string; effectivityDate: string; revisionYear: number; description: string | null } | null;
+    scheduleUnit: string | null; scheduleRate: number | null;
+    breakdown: { key: string; value: number }[];
+  };
+  assessment: {
+    year: number; effectiveDate: string; classification: string; actualUse: string; propertyType: string; marketValue: number;
+    assessmentLevelPercent: number; levelLowerValue: number; levelUpperValue: number | null; levelOrdinanceNumber: string;
+    levelOrdinanceDate: string | null; assessedValue: number; revisionReference: string | null; remarks: string | null;
+  };
+  previous: { assessmentId: string; faasNumber: string | null; year: number; effectiveDate: string; marketValue: number; assessedValue: number; assessedValueChange: number } | null;
+  recordedBy: string | null;
+  recordedAt: string;
+  signatures: { label: string; name: string; position: string | null; signedAt: string }[];
+  notices: { id: string; number: string | null; status: NoticeStatus; issuedAt: string | null; receivedDate: string | null; appealDeadline: string | null }[];
 }

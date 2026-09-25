@@ -70,6 +70,7 @@ public class FluidFormRendererTests
     [InlineData("TAX_BILL.v1.liquid")]
     [InlineData("TAX_DECLARATION.v1.liquid")]
     [InlineData("TAX_DECLARATION.v2.liquid")]
+    [InlineData("NOTICE_OF_ASSESSMENT.v1.liquid")]
     public void ProvisionalTemplates_AreEmbeddedAndParse(string file) =>
         renderer.Validate(ProvisionalFormSeeder.ReadTemplate(file)).ShouldBeNull();
 }

@@ -15,6 +15,7 @@ public sealed class AssessmentConfiguration : IEntityTypeConfiguration<Assessmen
         builder.Property(x => x.AssessedValue).HasPrecision(18, 2);
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(x => x.Remarks).HasMaxLength(2000);
+        builder.Property(x => x.FaasNumber).HasMaxLength(100);
 
         builder.HasOne(x => x.Rpu).WithMany().HasForeignKey(x => x.RpuId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Property).WithMany().HasForeignKey(x => x.PropertyId).OnDelete(DeleteBehavior.Restrict);
@@ -29,5 +30,6 @@ public sealed class AssessmentConfiguration : IEntityTypeConfiguration<Assessmen
         builder.HasIndex(x => new { x.RpuId, x.EffectiveDate });
         builder.HasIndex(x => x.AssessmentYear);
         builder.HasIndex(x => x.RevisionReference);
+        builder.HasIndex(x => x.FaasNumber).IsUnique();
     }
 }

@@ -14,5 +14,7 @@ public sealed class LguClock(IOptions<LguOptions> options, TimeProvider time) : 
 
     public DateTimeOffset UtcNow => time.GetUtcNow();
 
-    public DateOnly Today => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), zone).DateTime);
+    public DateOnly Today => LocalDate(time.GetUtcNow());
+
+    public DateOnly LocalDate(DateTimeOffset instant) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, zone).DateTime);
 }

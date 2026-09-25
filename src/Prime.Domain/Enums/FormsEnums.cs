@@ -32,6 +32,9 @@ public enum FormSubjectType
 {
     TaxBill = 0,
     TaxDeclaration = 1,
+    NoticeOfAssessment = 2,
+    /// <summary>An assessment's appraisal record — what a FAAS renders (docs/FORMS-REVISION-PLAN.md A7).</summary>
+    Assessment = 3,
 }
 
 /// <summary>Records whose approval can follow a configured <c>ApprovalChain</c>.</summary>

@@ -1,0 +1,43 @@
+{% comment %}
+  PRIME provisional layout (docs/FORMS-REVISION-PLAN.md). Neutral design built
+  only from PRIME data and the unamended text of LGC sections 223 and 226 — no
+  LAM content. The official notice form is prescribed under the LAM.
+{% endcomment %}
+<style>
+  .hdr { text-align: center; margin-bottom: 12px; }
+  .hdr .lgu { font-weight: bold; font-size: 12pt; }
+  .hdr h1 { font-size: 15pt; margin: 6px 0 2px; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+  th, td { border: 1px solid #555; padding: 3px 6px; font-size: 10pt; vertical-align: top; }
+  th { background: #eee; text-align: left; width: 32%; }
+  .num { text-align: right; }
+  .foot { font-size: 8pt; color: #333; margin-top: 16px; }
+</style>
+<div class="hdr">
+  {% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% else %}<div class="lgu">[LGU name not configured]</div>{% endif %}
+  {% if lgu.office %}<div>{{ lgu.office }}</div>{% endif %}
+  <h1>{{ form.title }}</h1>
+  <div>{% if notice.number %}Notice No. {{ notice.number }} · {% endif %}{% if notice.issuedAt %}{{ notice.issuedAt | date_ph }}{% else %}<b>DRAFT — NOT ISSUED</b>{% endif %}</div>
+</div>
+
+<p><b>To:</b> {{ notice.addresseeNames }}{% if notice.addresseeAddress %}<br>{{ notice.addresseeAddress }}{% endif %}</p>
+
+<p>You are hereby notified that the real property described below has been {{ notice.reasonLabel }}{% if notice.reason != "FirstAssessment" %} in its assessment{% endif %}, effective {{ notice.assessmentEffectiveDate | date_ph }}.</p>
+
+<table>
+  <tr><th>Property Identification No.</th><td>{{ property.pin }}</td></tr>
+  <tr><th>Location</th><td>{% if property.street %}{{ property.street }}, {% endif %}{{ property.barangay }}, {{ property.municipality }}, {{ property.province }}</td></tr>
+  <tr><th>RPU / TD No.</th><td>{{ notice.rpuNumber }}{% if notice.taxDeclarationNumber %} / {{ notice.taxDeclarationNumber }}{% endif %}</td></tr>
+  <tr><th>Assessment year</th><td>{{ notice.assessmentYear }}</td></tr>
+  <tr><th>Market value</th><td class="num">{{ notice.marketValue | money }}</td></tr>
+  {% if notice.previousAssessedValue %}<tr><th>Previous assessed value</th><td class="num">{{ notice.previousAssessedValue | money }}</td></tr>{% endif %}
+  <tr><th>Assessed value</th><td class="num"><b>{{ notice.assessedValue | money }}</b></td></tr>
+</table>
+
+<p>If you are not satisfied with this assessment, you may appeal to the Local Board of Assessment Appeals within
+{{ notice.appealPeriodDays }} days from the date of your receipt of this notice (RA 7160 Sec. 226).</p>
+
+<div class="foot">
+  Form {{ form.code }} v{{ form.version }} — {{ form.legalBasis }}.
+  {% if issue.issuedBy %}Printed by {{ issue.issuedBy }}.{% endif %}
+</div>

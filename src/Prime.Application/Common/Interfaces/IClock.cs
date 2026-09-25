@@ -13,4 +13,7 @@ public interface IClock
 
     /// <summary>Today's date in the LGU's time zone.</summary>
     DateOnly Today { get; }
+
+    /// <summary>The LGU-local calendar date of <paramref name="instant"/> (e.g. the day an approval happened).</summary>
+    DateOnly LocalDate(DateTimeOffset instant);
 }

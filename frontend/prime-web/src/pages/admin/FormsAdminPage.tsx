@@ -33,7 +33,7 @@ const period = (x: { effectiveDate: string; endDate: string | null }) => `${x.ef
 
 const kinds: NumberedDocumentKind[] = ['PropertyIdentificationNumber', 'TaxDeclaration', 'TaxBill', 'Faas', 'NoticeOfAssessment', 'OfficialReceipt', 'PropertyTransaction'];
 const authorities: FormAuthority[] = ['PrimeProvisional', 'Lam', 'Blgf', 'LguOrdinance', 'Other'];
-const subjects: FormSubjectType[] = ['TaxBill', 'TaxDeclaration'];
+const subjects: FormSubjectType[] = ['TaxBill', 'TaxDeclaration', 'NoticeOfAssessment', 'Assessment'];
 
 /** Shared "legal basis + effective date + remarks" fields every configuration version carries. */
 function HeaderFields() {

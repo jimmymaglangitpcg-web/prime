@@ -32,6 +32,7 @@ public sealed class ProvisionalFormSeeder(IServiceScopeFactory scopes, ILogger<P
     [
         ("TAX_BILL", 1, "Real Property Tax Bill", FormSubjectType.TaxBill),
         ("TAX_DECLARATION", 2, "Tax Declaration of Real Property", FormSubjectType.TaxDeclaration),
+        ("NOTICE_OF_ASSESSMENT", 1, "Notice of Assessment", FormSubjectType.NoticeOfAssessment),
     ];
 
     public async Task StartAsync(CancellationToken cancellationToken)

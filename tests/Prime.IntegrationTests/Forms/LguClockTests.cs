@@ -26,6 +26,10 @@ public class LguClockTests
         Clock(new DateTimeOffset(2026, 9, 25, 3, 0, 0, TimeSpan.Zero)).Today.ShouldBe(new DateOnly(2026, 9, 25));
 
     [Fact]
+    public void LocalDate_OfAnInstant_UsesTheLguCalendar() =>
+        Clock(DateTimeOffset.UtcNow).LocalDate(new DateTimeOffset(2026, 9, 24, 22, 30, 0, TimeSpan.Zero)).ShouldBe(new DateOnly(2026, 9, 25));
+
+    [Fact]
     public void MissingTimeZone_FailsLoudly() =>
         Should.Throw<InvalidOperationException>(() => Clock(DateTimeOffset.UtcNow, zone: ""));
 }

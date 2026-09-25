@@ -50,6 +50,13 @@ public sealed class Assessment : AuditableEntity
     public Guid? RevisionReference { get; set; }
 
     public string? Remarks { get; set; }
+
+    /// <summary>
+    /// The number of this assessment's appraisal record (FAAS), assigned when
+    /// its approval completes if a FAAS numbering scheme is in force
+    /// (docs/FORMS-REVISION-PLAN.md A7). Null otherwise — never typed by hand.
+    /// </summary>
+    public string? FaasNumber { get; set; }
     public Guid? ApprovedBy { get; set; }
     public DateTimeOffset? ApprovedAt { get; set; }
 }

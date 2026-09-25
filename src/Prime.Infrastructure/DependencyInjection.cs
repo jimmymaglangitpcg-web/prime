@@ -61,6 +61,14 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         // Billing engine policy choices (docs/BILLING.md §5); each bill freezes the value used.
+        // Statutory notice periods (LGC §§223, 226), each with its citation; required so none is assumed.
+        services.AddOptions<Prime.Application.Features.Notices.NoticeOptions>()
+            .Bind(configuration.GetSection(Prime.Application.Features.Notices.NoticeOptions.SectionName))
+            .Validate(o => o.IssuePeriodDays is > 0 && !string.IsNullOrWhiteSpace(o.IssuePeriodLegalBasis),
+                "Notices:IssuePeriodDays (> 0) and Notices:IssuePeriodLegalBasis are required.")
+            .Validate(o => o.AppealPeriodDays is > 0 && !string.IsNullOrWhiteSpace(o.AppealPeriodLegalBasis),
+                "Notices:AppealPeriodDays (> 0) and Notices:AppealPeriodLegalBasis are required.")
+            .ValidateOnStart();
         services.AddOptions<BillingOptions>().Bind(configuration.GetSection(BillingOptions.SectionName));
 
         // Forms foundation (docs/FORMS-REVISION-PLAN.md): LGU branding, numbering, rendering, provisional forms.

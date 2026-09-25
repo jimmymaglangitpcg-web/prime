@@ -1,7 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Features.Appraisal;
 using Prime.Application.Features.Properties;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
@@ -30,7 +32,8 @@ public interface IFormDataProvider
 
 internal static class FormData
 {
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
+    // Enums as names, as the API writes them, so templates compare against readable values.
+    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
 
     public static JsonObject ToJson(object value) => (JsonObject)JsonSerializer.SerializeToNode(value, Options)!;
 
@@ -195,5 +198,79 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
             ? $"A {td.Status} Tax Declaration cannot be issued."
             : null;
         return new FormSubjectData(td.TaxDeclarationNumber, data, blocker);
+    }
+}
+
+/// <summary>Notice of Assessment (LGC §223). Only an issued or served notice can be issued as a form; a draft is previewed.</summary>
+public sealed class NoticeFormDataProvider(IApplicationDbContext db) : IFormDataProvider
+{
+    public FormSubjectType SubjectType => FormSubjectType.NoticeOfAssessment;
+
+    public async Task<FormSubjectData?> BuildAsync(Guid subjectId, CancellationToken cancellationToken)
+    {
+        var n = await db.NoticesOfAssessment.AsNoTracking().FirstOrDefaultAsync(x => x.Id == subjectId, cancellationToken);
+        if (n is null)
+        {
+            return null;
+        }
+        var tdNumber = n.TaxDeclarationId is { } tdId
+            ? await db.TaxDeclarations.Where(x => x.Id == tdId).Select(x => x.TaxDeclarationNumber).FirstOrDefaultAsync(cancellationToken)
+            : null;
+        var rpuNumber = await db.RealPropertyUnits.Where(x => x.Id == n.RpuId).Select(x => x.RpuNumber).FirstAsync(cancellationToken);
+        var data = FormData.ToJson(new
+        {
+            notice = new
+            {
+                number = n.NoticeNumber,
+                reason = n.Reason.ToString(),
+                reasonLabel = n.Reason switch
+                {
+                    NoticeReason.FirstAssessment => "assessed for the first time",
+                    NoticeReason.AssessmentIncreased => "increased",
+                    _ => "decreased",
+                },
+                previousAssessedValue = n.PreviousAssessedValue,
+                assessedValue = n.AssessedValue,
+                marketValue = n.MarketValue,
+                assessmentYear = n.AssessmentYear,
+                assessmentEffectiveDate = n.AssessmentEffectiveDate,
+                addresseeNames = n.AddresseeNames,
+                addresseeAddress = n.AddresseeAddress,
+                appealPeriodDays = n.AppealPeriodDays,
+                status = n.Status.ToString(),
+                issuedAt = n.IssuedAt,
+                taxDeclarationNumber = tdNumber,
+                rpuNumber,
+            },
+            property = await FormData.PropertyAsync(db, n.PropertyId, cancellationToken),
+        });
+        var blocker = n.Status is NoticeStatus.Issued or NoticeStatus.Served
+            ? null
+            : $"Only an issued notice can be printed as issued (this one is {n.Status}); preview it instead.";
+        return new FormSubjectData(n.NoticeNumber, data, blocker);
+    }
+}
+
+/// <summary>
+/// FAAS: the appraisal record of one assessment (docs/FORMS-REVISION-PLAN.md
+/// A7), from the same read model the API serves. Issuable once the
+/// assessment is approved — the appraisal is then complete and signed.
+/// </summary>
+public sealed class AppraisalRecordFormDataProvider(IAppraisalRecordService appraisals) : IFormDataProvider
+{
+    public FormSubjectType SubjectType => FormSubjectType.Assessment;
+
+    public async Task<FormSubjectData?> BuildAsync(Guid subjectId, CancellationToken cancellationToken)
+    {
+        var record = await appraisals.GetAsync(subjectId, cancellationToken);
+        if (record.IsFailure)
+        {
+            return null;
+        }
+        var r = record.Value;
+        var blocker = r.Status is WorkflowStatus.Approved or WorkflowStatus.Posted
+            ? null
+            : $"Only an approved or posted assessment's appraisal record can be issued (this one is {r.Status}); preview it instead.";
+        return new FormSubjectData(r.FaasNumber, FormData.ToJson(new { appraisal = r }), blocker);
     }
 }

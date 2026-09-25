@@ -22,6 +22,21 @@ namespace Prime.Domain.DomainServices;
 public static class ValuationCalculator
 {
     /// <summary>
+    /// The order a breakdown is read in: inputs, then intermediate values,
+    /// then the result. Stored breakdowns (jsonb) do not keep key order, so
+    /// displays sort by this list; a key not listed here goes just before
+    /// MarketValue. Keep it in step with the keys the methods below write.
+    /// </summary>
+    public static readonly IReadOnlyList<string> BreakdownOrder =
+    [
+        "Area", "TotalFloorArea", "Rate", "LocationFactor", "CompletionPercentage",
+        "IsBrandNew", "AcquisitionCost", "InstallationCost", "OtherCost", "TotalAcquisitionCost",
+        "ReplacementCost", "EconomicLifeYears", "RemainingLifeYears", "RemainingFraction", "DepreciatedValue",
+        "MinimumRemainingValuePercent", "MinimumRemainingValue", "MinimumApplied",
+        "BaseValue", "ValueBeforeClamp", "MinimumValue", "MaximumValue", "MarketValue",
+    ];
+
+    /// <summary>
     /// MarketValue = Area × SMV rate × LocationFactor, clamped to the
     /// schedule's Minimum/MaximumValue if set. <see cref="Land.LocationFactor"/>
     /// already exists on the entity for exactly this purpose (§24) — it is

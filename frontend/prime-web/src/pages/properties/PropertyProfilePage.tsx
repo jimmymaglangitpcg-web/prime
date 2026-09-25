@@ -7,6 +7,7 @@ import { ParcelsSection } from './sections/ParcelsSection';
 import { RpuSection } from './sections/RpuSection';
 import { BillingSection } from './sections/BillingSection';
 import { TransactionsSection } from './sections/TransactionsSection';
+import { NoticesSection } from './sections/NoticesSection';
 
 /**
  * CLAUDE.md §50 Property Profile — "one of the most important screens in
@@ -70,6 +71,7 @@ export function PropertyProfilePage() {
             { key: 'parcels', label: `Parcels (${profile.parcels.length})`, children: <ParcelsSection propertyId={property.id} parcels={profile.parcels} /> },
             { key: 'rpus', label: `RPUs (${profile.rpus.length})`, children: <RpuSection propertyId={property.id} rpus={profile.rpus} /> },
             { key: 'transactions', label: 'Transactions', children: <TransactionsSection propertyId={property.id} rpus={profile.rpus} taxDeclarations={profile.taxDeclarations} /> },
+            { key: 'notices', label: 'Notices', children: <NoticesSection propertyId={property.id} rpus={profile.rpus} /> },
             { key: 'billing', label: 'Billing', children: <BillingSection propertyId={property.id} rpus={profile.rpus} /> },
           ]}
         />
@@ -79,8 +81,8 @@ export function PropertyProfilePage() {
         style={{ marginTop: 24 }}
         type="info"
         showIcon
-        title="Current assessment, payments, and delinquency sections are not shown yet"
-        description="Assessments exist in the API (Phase 6) but have no screen yet; payments arrive with Phase 9 (Collection) and delinquency with Phase 10."
+        title="Payments and delinquency are not shown yet"
+        description="Assessments and their appraisal records are listed under each RPU. Creating, approving and posting assessments is still done through the API. Payments arrive with Phase 9 (Collection) and delinquency with Phase 10."
       />
     </div>
   );

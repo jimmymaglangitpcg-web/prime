@@ -25,6 +25,7 @@ public sealed record AssessmentDto(
     Guid? PreviousAssessmentId,
     Guid? RevisionReference,
     string? Remarks,
+    string? FaasNumber,
     Guid? ApprovedBy,
     DateTimeOffset? ApprovedAt,
     DateTimeOffset CreatedAt);

@@ -1,11 +1,17 @@
 using Microsoft.AspNetCore.Mvc;
+using Prime.Application.Features.Appraisal;
 using Prime.Application.Features.Assessments;
 
 namespace Prime.WebApi.Controllers;
 
 [Route("api/assessments")]
-public class AssessmentsController(IAssessmentService assessmentService) : ApiControllerBase
+public class AssessmentsController(IAssessmentService assessmentService, IAppraisalRecordService appraisals) : ApiControllerBase
 {
+    /// <summary>The assessment's appraisal record — the data a FAAS shows (docs/FORMS-REVISION-PLAN.md A7).</summary>
+    [HttpGet("{id:guid}/appraisal-record")]
+    public async Task<ActionResult<AppraisalRecordDto>> GetAppraisalRecord(Guid id, CancellationToken cancellationToken) =>
+        HandleResult(await appraisals.GetAsync(id, cancellationToken));
+
     [HttpPost]
     public async Task<ActionResult<AssessmentDto>> Create(CreateAssessmentRequest request, CancellationToken cancellationToken) =>
         HandleCreated(await assessmentService.CreateAsync(request, cancellationToken), nameof(GetById), dto => new { id = dto.Id });

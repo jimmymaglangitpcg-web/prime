@@ -275,4 +275,25 @@ public class ValuationCalculatorTests
     [Fact]
     public void MissingMachineryInputs_BrandNew_NeedsNothingMore() =>
         ValuationCalculator.MissingMachineryInputs(new Machinery { IsBrandNew = true, AcquisitionCost = 1m }).ShouldBeNull();
+
+    // --- Breakdown display order ---
+
+    [Fact]
+    public void BreakdownOrder_ListsEveryKeyTheMethodsWrite_EndingWithMarketValue()
+    {
+        var bounded = Schedule(rate: 1000m, min: 1m, max: 10_000_000m);
+        var breakdowns = new[]
+        {
+            ValuationCalculator.CalculateLand(new Land { Area = 100m, LocationFactor = 1.1m }, bounded).Breakdown,
+            ValuationCalculator.CalculateBuilding(new Building { TotalFloorArea = 100m, CompletionPercentage = 100m }, bounded).Breakdown,
+            ValuationCalculator.CalculateMachinery(new Machinery { IsBrandNew = true, AcquisitionCost = 1000m }, Section225).Breakdown,
+            ValuationCalculator.CalculateMachinery(new Machinery
+            {
+                AcquisitionCost = 1000m, ReplacementCost = 2000m, EconomicLifeYears = 10, RemainingLifeYears = 1,
+            }, Section225).Breakdown,
+        };
+
+        breakdowns.SelectMany(b => b.Keys).Distinct().ShouldAllBe(key => ValuationCalculator.BreakdownOrder.Contains(key));
+        ValuationCalculator.BreakdownOrder[^1].ShouldBe("MarketValue");
+    }
 }

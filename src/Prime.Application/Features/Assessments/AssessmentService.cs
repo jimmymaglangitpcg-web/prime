@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Approvals;
+using Prime.Application.Features.Numbering;
 using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.Assessments;
@@ -21,6 +22,7 @@ public sealed class AssessmentService(
     IValidator<CreateAssessmentRequest> validator,
     ICurrentUserService currentUser,
     IApprovalChainService approvals,
+    INumberingService numbering,
     IClock clock) : IAssessmentService
 {
     public async Task<Result<AssessmentDto>> CreateAsync(CreateAssessmentRequest request, CancellationToken cancellationToken = default)
@@ -144,6 +146,14 @@ public sealed class AssessmentService(
             assessment.Status = WorkflowStatus.Approved;
             assessment.ApprovedBy = currentUser.AppUserId;
             assessment.ApprovedAt = DateTimeOffset.UtcNow;
+            // The appraisal record (FAAS) is complete once approved: number it if a FAAS scheme is in force.
+            var context = await NumberContexts.ForPropertyAsync(db, assessment.PropertyId, assessment.AssessmentYear, cancellationToken);
+            var faasNumber = await numbering.GenerateIfConfiguredAsync(NumberedDocumentKind.Faas, context, clock.Today, cancellationToken);
+            if (faasNumber.IsFailure)
+            {
+                return Result.Failure<AssessmentDto>(faasNumber.Code!, faasNumber.Message!);
+            }
+            assessment.FaasNumber = faasNumber.Value;
         }
         try
         {
@@ -264,6 +274,7 @@ public sealed class AssessmentService(
         x.PreviousAssessmentId,
         x.RevisionReference,
         x.Remarks,
+        x.FaasNumber,
         x.ApprovedBy,
         x.ApprovedAt,
         x.CreatedAt);
