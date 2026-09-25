@@ -53,6 +53,14 @@ public sealed class TaxDeclaration : AuditableEntity
     /// </summary>
     public Guid? PropertyTransactionId { get; set; }
 
+    /// <summary>
+    /// The assessment this TD declares. The TD together with it is the FAAS
+    /// (docs/analysis/mrpaao-forms-model.md §6.1): a new assessment gets a new
+    /// TD, and a transfer gets a new TD naming the same assessment.
+    /// </summary>
+    public Guid? AssessmentId { get; set; }
+    public Assessment? Assessment { get; set; }
+
     public DateTimeOffset? CancelledAt { get; set; }
     public Guid? CancelledBy { get; set; }
     public string? CancellationReason { get; set; }

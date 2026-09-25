@@ -65,15 +65,16 @@ export function TransactionsSection({ propertyId, rpus, taxDeclarations }: {
           { title: '', render: (_, t) => <Button size="small" onClick={(e) => { e.stopPropagation(); setSelectedId(t.id); }}>Open</Button> },
         ]}
       />
-      <NewTransactionModal propertyId={propertyId} taxDeclarations={taxDeclarations} open={openNew}
+      <NewTransactionModal propertyId={propertyId} rpus={rpus} taxDeclarations={taxDeclarations} open={openNew}
         onClose={(createdId) => { setOpenNew(false); if (createdId) setSelectedId(createdId); }} />
       <TransactionDrawer tx={selected} propertyId={propertyId} rpus={rpus} onClose={() => setSelectedId(null)} />
     </div>
   );
 }
 
-function NewTransactionModal({ propertyId, taxDeclarations, open, onClose }: {
+function NewTransactionModal({ propertyId, rpus, taxDeclarations, open, onClose }: {
   propertyId: string;
+  rpus: RpuSummaryDto[];
   taxDeclarations: TaxDeclarationSummaryDto[];
   open: boolean;
   onClose: (createdId?: string) => void;
@@ -96,6 +97,7 @@ function NewTransactionModal({ propertyId, taxDeclarations, open, onClose }: {
         onFinish={(v) => openTx.mutate({
           transactionTypeId: v.transactionTypeId, propertyId, effectiveDate: v.effectiveDate.format('YYYY-MM-DD'), description: v.description,
           cancelTaxDeclarationIds: v.cancelTaxDeclarationIds,
+          transferRpuId: kind === 'Transfer' ? v.transferRpuId : undefined,
           newParties: kind === 'Transfer'
             ? (v.newParties ?? []).map((p: { role: PropertyPartyRole; taxpayerId?: string; ownershipTypeId?: string; ownershipPercentage?: number }) => ({
                 role: p.role,
@@ -119,6 +121,13 @@ function NewTransactionModal({ propertyId, taxDeclarations, open, onClose }: {
         </Form.Item>
         {kind === 'Transfer' && (
           <>
+            {rpus.some((r) => r.rpuType !== 'Land') && (
+              <Form.Item name="transferRpuId" label="Transfers"
+                extra="A building or machinery can change hands without the land: only that unit's owners change.">
+                <Select allowClear placeholder="Whole property"
+                  options={rpus.filter((r) => r.rpuType !== 'Land').map((r) => ({ value: r.id, label: `RPU ${r.rpuNumber} (${r.rpuType}) only` }))} />
+              </Form.Item>
+            )}
             <Typography.Text strong>New parties — the current owners are ended on approval</Typography.Text>
             <Form.List name="newParties">
               {(fields, { add, remove }) => (
@@ -196,7 +205,10 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
         <Descriptions.Item label="Status">{statusTag(tx.status)}</Descriptions.Item>
         <Descriptions.Item label="Kind">{tx.kind}</Descriptions.Item>
         <Descriptions.Item label="Effective">{tx.effectiveDate}</Descriptions.Item>
-        <Descriptions.Item label="Property">{tx.propertyIdentificationNumber}</Descriptions.Item>
+        <Descriptions.Item label="Property">
+          {tx.propertyIdentificationNumber}
+          {tx.transferRpuId && ` — RPU ${rpus.find((r) => r.id === tx.transferRpuId)?.rpuNumber ?? ''} only`}
+        </Descriptions.Item>
         <Descriptions.Item label="Description" span={2}>{tx.description}</Descriptions.Item>
         {tx.closeReason && <Descriptions.Item label="Closed" span={2}>{tx.closeReason}</Descriptions.Item>}
       </Descriptions>

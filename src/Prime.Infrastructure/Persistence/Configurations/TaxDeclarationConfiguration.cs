@@ -17,6 +17,8 @@ public sealed class TaxDeclarationConfiguration : IEntityTypeConfiguration<TaxDe
         builder.HasOne<TaxDeclaration>().WithMany().HasForeignKey(x => x.SupersededByTaxDeclarationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Prime.Domain.Entities.Transactions.PropertyTransaction>().WithMany().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => x.PropertyTransactionId);
+        builder.HasOne(x => x.Assessment).WithMany().HasForeignKey(x => x.AssessmentId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.AssessmentId);
         builder.HasMany(x => x.Annotations).WithOne().HasForeignKey(x => x.TaxDeclarationId).OnDelete(DeleteBehavior.Restrict);
         // One current (Approved) Tax Declaration per RPU — docs/FORMS-REVISION-PLAN.md A4.
         builder.HasIndex(x => x.RpuId).IsUnique().HasFilter("\"Status\" = 'Approved'").HasDatabaseName("UX_TaxDeclarations_Rpu_Approved");

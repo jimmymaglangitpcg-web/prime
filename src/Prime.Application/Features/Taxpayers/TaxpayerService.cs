@@ -114,8 +114,16 @@ public sealed class TaxpayerService(
             return Result.Failure<PropertyOwnerDto>("OWNERSHIP_TYPE_NOT_FOUND", "The specified ownership type does not exist.");
         }
 
+        // A party of the whole property, or of one unit owned apart from the land (MRPAAO p.42).
+        if (request.RpuId is { } unitId && !await db.RealPropertyUnits.AnyAsync(
+                r => r.Id == unitId && r.PropertyId == request.PropertyId && r.RpuType != RpuType.Land, cancellationToken))
+        {
+            return Result.Failure<PropertyOwnerDto>("PROPERTY_PARTY_UNIT_INVALID",
+                "The unit must be a building, machinery or other-improvement RPU of the property; the land's parties are the property's.");
+        }
+        // Shares and the unknown-owner rule apply within the same scope.
         var current = await db.PropertyTaxpayers
-            .Where(pt => pt.PropertyId == request.PropertyId && pt.IsCurrent)
+            .Where(pt => pt.PropertyId == request.PropertyId && pt.RpuId == request.RpuId && pt.IsCurrent)
             .ToListAsync(cancellationToken);
 
         if (request.Role == PropertyPartyRole.UnknownOwner && current.Any(pt => pt.Role == PropertyPartyRole.Owner))
@@ -157,6 +165,7 @@ public sealed class TaxpayerService(
         var propertyTaxpayer = new PropertyTaxpayer
         {
             PropertyId = request.PropertyId,
+            RpuId = request.RpuId,
             Role = request.Role,
             TaxpayerId = request.TaxpayerId,
             OwnershipTypeId = request.OwnershipTypeId,

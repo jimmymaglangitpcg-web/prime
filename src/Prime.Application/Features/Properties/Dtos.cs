@@ -62,7 +62,9 @@ public sealed record PropertyOwnerDto(
     bool IsCurrent,
     PropertyPartyRole Role,
     string? EndReason,
-    string? Address);
+    string? Address,
+    Guid? RpuId = null,
+    string? RpuNumber = null);
 
 public sealed record ParcelSummaryDto(
     Guid Id,

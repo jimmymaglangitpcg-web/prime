@@ -25,7 +25,7 @@ public class TaxpayersController(ITaxpayerService taxpayerService) : ApiControll
     public async Task<ActionResult<PropertyOwnerDto>> AddOwner(Guid propertyId, [FromBody] AddOwnerBody body, CancellationToken cancellationToken)
     {
         var request = new AddPropertyOwnerRequest(propertyId, body.TaxpayerId, body.OwnershipTypeId, body.OwnershipPercentage, body.StartDate,
-            body.Role ?? PropertyPartyRole.Owner);
+            body.Role ?? PropertyPartyRole.Owner, body.RpuId);
         return HandleResult(await taxpayerService.AddOwnerAsync(request, cancellationToken));
     }
 
@@ -39,5 +39,7 @@ public class TaxpayersController(ITaxpayerService taxpayerService) : ApiControll
         HandleResult(await taxpayerService.EndPartyAsync(propertyTaxpayerId, request, cancellationToken));
 
     /// <summary>Role defaults to Owner. TaxpayerId is omitted for an unknown owner; OwnershipTypeId is for owners only.</summary>
-    public sealed record AddOwnerBody(Guid? TaxpayerId, Guid? OwnershipTypeId, decimal OwnershipPercentage, DateOnly StartDate, PropertyPartyRole? Role = null);
+    /// <summary>RpuId: a party of that unit only (docs/analysis/mrpaao-forms-model.md §6.4); omitted for the whole property.</summary>
+    public sealed record AddOwnerBody(Guid? TaxpayerId, Guid? OwnershipTypeId, decimal OwnershipPercentage, DateOnly StartDate,
+        PropertyPartyRole? Role = null, Guid? RpuId = null);
 }

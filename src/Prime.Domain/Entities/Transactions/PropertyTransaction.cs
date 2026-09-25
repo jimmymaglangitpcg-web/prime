@@ -60,6 +60,12 @@ public sealed class PropertyTransaction : AuditableEntity
     public DateOnly EffectiveDate { get; set; }
     public string Description { get; set; } = string.Empty;
 
+    /// <summary>
+    /// For a transfer of one unit (e.g. a building without its land): the unit
+    /// whose parties change. Null: the whole property's parties change.
+    /// </summary>
+    public Guid? TransferRpuId { get; set; }
+
     public WorkflowStatus Status { get; set; } = WorkflowStatus.Draft;
     public DateTimeOffset? SubmittedAt { get; set; }
     public Guid? ApprovedBy { get; set; }

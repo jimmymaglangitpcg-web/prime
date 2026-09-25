@@ -112,8 +112,8 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
 
         // The parties in whose name the property was declared on the assessment's effective date (LGC §§204–205).
         var eff = a.EffectiveDate;
-        var parties = (await PropertyParties.ProjectAsync(db.PropertyTaxpayers.Where(x => x.PropertyId == a.PropertyId
-                && x.StartDate <= eff && (x.EndDate == null || x.EndDate > eff)), ct))
+        var parties = (await PropertyParties.ProjectAsync(await PropertyParties.ScopeAsync(db, a.PropertyId, a.RpuId,
+                x => x.StartDate <= eff && (x.EndDate == null || x.EndDate > eff), ct), ct))
             .Select(o => new AppraisalPartyDto(o.TaxpayerDisplayName, o.Role, PropertyParties.RoleLabel(o.Role), o.OwnershipPercentage, o.Address))
             .ToList();
 

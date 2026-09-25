@@ -32,7 +32,8 @@ public sealed record OpenTransactionRequest(
     string Description,
     IReadOnlyList<NewPartyRequest>? NewParties = null,
     IReadOnlyList<Guid>? CancelTaxDeclarationIds = null,
-    IReadOnlyList<RelatedPropertyRequest>? RelatedProperties = null);
+    IReadOnlyList<RelatedPropertyRequest>? RelatedProperties = null,
+    Guid? TransferRpuId = null);
 
 public sealed record SatisfyRequirementRequest(string EvidenceReference, string? Note);
 
@@ -57,4 +58,5 @@ public sealed record PropertyTransactionDto(
     IReadOnlyList<TransactionPartyDto> NewParties,
     IReadOnlyList<TransactionTdDto> IssuedTaxDeclarations,
     IReadOnlyList<TransactionTdDto> CancelledTaxDeclarations,
-    IReadOnlyList<TransactionPropertyDto> RelatedProperties);
+    IReadOnlyList<TransactionPropertyDto> RelatedProperties,
+    Guid? TransferRpuId);

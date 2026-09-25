@@ -3,6 +3,7 @@ import { Alert, Badge, Button, Empty, Input, Modal, Space, Table, Tag, Tooltip, 
 import { PlusOutlined } from '@ant-design/icons';
 import type { RpuSummaryDto, TaxDeclarationDto } from '../../../lib/types';
 import { useTaxDeclarationsByRpu, useTdAction, type TdAction } from '../../../api/taxDeclarations';
+import { usePropertyRpus } from '../../../api/rpus';
 import { ApiRequestError } from '../../../lib/apiClient';
 import { TdAnnotationsModal } from '../modals/TdAnnotationsModal';
 import { AddRpuModal } from '../modals/AddRpuModal';
@@ -69,6 +70,10 @@ function TaxDeclarationsForRpu({ propertyId, rpuId }: { propertyId: string; rpuI
         locale={{ emptyText: <Empty description="No Tax Declarations yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
         columns={[
           { title: 'TD Number', dataIndex: 'taxDeclarationNumber' },
+          {
+            title: 'FAAS No.',
+            render: (_, td) => td.faasNumber ?? <Tooltip title="Declares no assessment yet — it becomes a FAAS once it does">—</Tooltip>,
+          },
           { title: 'Revision', dataIndex: 'revisionNumber', width: 90 },
           { title: 'Assessment Year', dataIndex: 'assessmentYear', width: 130 },
           { title: 'Effectivity', dataIndex: 'effectivityDate' },
@@ -132,6 +137,9 @@ function TaxDeclarationsForRpu({ propertyId, rpuId }: { propertyId: string; rpuI
 
 export function RpuSection({ propertyId, rpus }: { propertyId: string; rpus: RpuSummaryDto[] }) {
   const [addOpen, setAddOpen] = useState(false);
+  const { data: details } = usePropertyRpus(propertyId);
+  const detail = (id: string) => details?.find((d) => d.id === id);
+  const numberOf = (id: string | null) => rpus.find((r) => r.id === id)?.rpuNumber;
 
   return (
     <div>
@@ -161,6 +169,27 @@ export function RpuSection({ propertyId, rpus }: { propertyId: string; rpus: Rpu
         columns={[
           { title: 'RPU Number', dataIndex: 'rpuNumber' },
           { title: 'Type', dataIndex: 'rpuType' },
+          {
+            title: 'Unit PIN',
+            render: (_, r) => {
+              const d = detail(r.id);
+              if (!d) return '—';
+              return d.ownedSeparately
+                ? <Tooltip title="Owned apart from the land: the parcel number is in parentheses (MRPAAO p.42)">{d.unitPin}</Tooltip>
+                : d.unitPin;
+            },
+          },
+          {
+            title: 'Stands on / installed in',
+            render: (_, r) => {
+              const d = detail(r.id);
+              const parts = [
+                d?.landRpuId && `Land RPU ${numberOf(d.landRpuId) ?? ''}`,
+                d?.hostRpuId && `Building RPU ${numberOf(d.hostRpuId) ?? ''}`,
+              ].filter(Boolean);
+              return parts.length > 0 ? parts.join(' · ') : '—';
+            },
+          },
           { title: 'Effectivity', dataIndex: 'effectivityDate' },
           {
             title: 'Status',
@@ -170,7 +199,7 @@ export function RpuSection({ propertyId, rpus }: { propertyId: string; rpus: Rpu
         ]}
       />
 
-      <AddRpuModal propertyId={propertyId} open={addOpen} onClose={() => setAddOpen(false)} />
+      <AddRpuModal propertyId={propertyId} rpus={rpus} open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
   );
 }

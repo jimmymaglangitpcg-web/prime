@@ -53,6 +53,7 @@ public sealed class PropertyTransactionConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.CloseReason).HasMaxLength(1000);
         builder.HasOne(x => x.TransactionType).WithMany().HasForeignKey(x => x.TransactionTypeId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Property).WithMany().HasForeignKey(x => x.PropertyId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Prime.Domain.Entities.RealPropertyUnit>().WithMany().HasForeignKey(x => x.TransferRpuId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(x => x.Requirements).WithOne().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(x => x.NewParties).WithOne().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(x => x.TdCancellations).WithOne().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);

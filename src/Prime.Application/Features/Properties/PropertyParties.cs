@@ -1,4 +1,6 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Prime.Application.Common.Interfaces;
 using Prime.Application.Common;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
@@ -13,6 +15,25 @@ namespace Prime.Application.Features.Properties;
 public static class PropertyParties
 {
     public const string UnknownOwnerName = "Unknown owner (declared under LGC §204)";
+
+    /// <summary>
+    /// The parties of one unit matching <paramref name="when"/> (e.g. current, or
+    /// as of a date): the unit's own rows when it has an owner or unknown-owner
+    /// row among them, otherwise the whole property's rows
+    /// (docs/analysis/mrpaao-forms-model.md §6.4). A null <paramref name="rpuId"/>
+    /// gives the whole property's rows.
+    /// </summary>
+    public static async Task<IQueryable<PropertyTaxpayer>> ScopeAsync(IApplicationDbContext db, Guid propertyId, Guid? rpuId,
+        Expression<Func<PropertyTaxpayer, bool>> when, CancellationToken ct)
+    {
+        var rows = db.PropertyTaxpayers.Where(x => x.PropertyId == propertyId).Where(when);
+        if (rpuId is { } unit && await rows.AnyAsync(x => x.RpuId == unit
+                && (x.Role == PropertyPartyRole.Owner || x.Role == PropertyPartyRole.UnknownOwner), ct))
+        {
+            return rows.Where(x => x.RpuId == unit);
+        }
+        return rows.Where(x => x.RpuId == null);
+    }
 
     public static async Task<List<PropertyOwnerDto>> ProjectAsync(IQueryable<PropertyTaxpayer> query, CancellationToken ct)
     {
@@ -34,6 +55,8 @@ public static class PropertyParties
                 pt.EndDate,
                 pt.IsCurrent,
                 pt.EndReason,
+                pt.RpuId,
+                RpuNumber = pt.Rpu == null ? null : pt.Rpu.RpuNumber,
             })
             .ToListAsync(ct);
 
@@ -50,7 +73,9 @@ public static class PropertyParties
             r.IsCurrent,
             r.Role,
             r.EndReason,
-            r.Taxpayer?.Address)).ToList();
+            r.Taxpayer?.Address,
+            r.RpuId,
+            r.RpuNumber)).ToList();
     }
 
     /// <summary>Printed label of a role — English defaults until the LAM's wording is configured.</summary>

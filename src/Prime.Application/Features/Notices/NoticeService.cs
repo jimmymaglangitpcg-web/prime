@@ -103,8 +103,8 @@ public sealed class NoticeService(
         }
 
         var parties = await PropertyParties.ProjectAsync(
-            db.PropertyTaxpayers.Where(x => x.PropertyId == assessment.PropertyId && x.IsCurrent
-                && (x.Role != PropertyPartyRole.LegalInterestHolder)), cancellationToken);
+            (await PropertyParties.ScopeAsync(db, assessment.PropertyId, assessment.RpuId, x => x.IsCurrent, cancellationToken))
+                .Where(x => x.Role != PropertyPartyRole.LegalInterestHolder), cancellationToken);
         if (parties.Count == 0)
         {
             return Fail("NOTICE_NO_ADDRESSEE",

@@ -112,6 +112,7 @@ public class PropertyTransactionTests(WebApplicationFactory<Program> factory) : 
 
         var newTd = (await c.Tds.CreateAsync(Td(c, c.Seed.TaxDeclaration.Id, t.Id))).Value;
         newTd.PropertyTransactionId.ShouldBe(t.Id);
+        newTd.AssessmentId.ShouldBe(c.Seed.AssessmentId); // a transfer's TD declares the assessment already in force: a new FAAS
         (await c.Tds.SubmitForReviewAsync(newTd.Id)).Code.ShouldBe("TAX_DECLARATION_IN_TRANSACTION");
 
         (await c.Tx.SubmitAsync(t.Id)).Code.ShouldBe("TRANSACTION_REQUIREMENTS_UNMET"); // only the mandatory one blocks

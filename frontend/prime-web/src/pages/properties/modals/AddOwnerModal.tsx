@@ -4,11 +4,13 @@ import dayjs from 'dayjs';
 import { useTaxpayerSearch, useAddOwner } from '../../../api/taxpayers';
 import { useOwnershipTypes } from '../../../api/referenceData';
 import { TaxpayerForm } from '../../../components/TaxpayerForm';
-import { partyRoleLabel, type AddOwnerRequest, type PropertyPartyRole, type TaxpayerDto } from '../../../lib/types';
+import { partyRoleLabel, type AddOwnerRequest, type PropertyPartyRole, type RpuSummaryDto, type TaxpayerDto } from '../../../lib/types';
 import { ApiRequestError } from '../../../lib/apiClient';
 
-export function AddOwnerModal({ propertyId, open, onClose }: { propertyId: string; open: boolean; onClose: () => void }) {
-  const [form] = Form.useForm<{ role: PropertyPartyRole; taxpayerId?: string; ownershipTypeId?: string; ownershipPercentage?: number; startDate: dayjs.Dayjs }>();
+export function AddOwnerModal({ propertyId, units, open, onClose }: { propertyId: string; units: RpuSummaryDto[]; open: boolean; onClose: () => void }) {
+  const [form] = Form.useForm<{
+    role: PropertyPartyRole; taxpayerId?: string; ownershipTypeId?: string; ownershipPercentage?: number; startDate: dayjs.Dayjs; rpuId?: string;
+  }>();
   const role = Form.useWatch('role', form) ?? 'Owner';
   const [taxpayerSearchTerm, setTaxpayerSearchTerm] = useState('');
   const [showCreateTaxpayer, setShowCreateTaxpayer] = useState(false);
@@ -63,6 +65,7 @@ export function AddOwnerModal({ propertyId, open, onClose }: { propertyId: strin
               ownershipTypeId: values.role === 'Owner' ? values.ownershipTypeId : undefined,
               ownershipPercentage: values.role === 'UnknownOwner' ? 0 : values.ownershipPercentage ?? 0,
               startDate: values.startDate.format('YYYY-MM-DD'),
+              rpuId: values.rpuId,
             };
             addOwner.mutate(request, { onSuccess: handleClose });
           }}
@@ -71,6 +74,13 @@ export function AddOwnerModal({ propertyId, open, onClose }: { propertyId: strin
             extra={role === 'UnknownOwner' ? 'Declared by the assessor against an unknown owner (§204). Ended automatically when an owner is added.' : undefined}>
             <Select options={(Object.keys(partyRoleLabel) as PropertyPartyRole[]).map((r) => ({ value: r, label: partyRoleLabel[r] }))} />
           </Form.Item>
+
+          {units.length > 0 && (
+            <Form.Item name="rpuId" label="Holds"
+              extra="A building or machinery owned apart from the land takes its own parties; shares then total 100% within that unit.">
+              <Select allowClear placeholder="Whole property" options={units.map((u) => ({ value: u.id, label: `RPU ${u.rpuNumber} (${u.rpuType}) only` }))} />
+            </Form.Item>
+          )}
 
           {role !== 'UnknownOwner' && (<>
           <Form.Item name="taxpayerId" label="Taxpayer" rules={[{ required: true, message: 'Select a taxpayer' }]}>

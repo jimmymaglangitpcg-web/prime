@@ -111,6 +111,9 @@ export interface PropertyOwnerDto {
   role: PropertyPartyRole;
   endReason: string | null;
   address: string | null;
+  /** Set when the party holds one unit only (e.g. a building owned apart from the land). */
+  rpuId: string | null;
+  rpuNumber: string | null;
 }
 
 export interface ParcelSummaryDto {
@@ -203,6 +206,8 @@ export interface AddOwnerRequest {
   ownershipTypeId?: string;
   ownershipPercentage: number;
   startDate: string;
+  /** A party of one building/machinery/other-improvement unit; omitted for the whole property. */
+  rpuId?: string;
 }
 
 // --- Parcel -----------------------------------------------------------
@@ -297,6 +302,10 @@ export interface CreateRpuRequest {
   rpuType: RpuType;
   effectivityDate: string;
   previousRpuId?: string | null;
+  /** The land unit a building, machinery or other improvement stands on. */
+  landRpuId?: string | null;
+  /** The building a machinery unit is installed in. */
+  hostRpuId?: string | null;
 }
 
 export interface RpuDto {
@@ -309,6 +318,13 @@ export interface RpuDto {
   endDate: string | null;
   previousRpuId: string | null;
   createdAt: string;
+  /** PIN postscript: buildings 1001…, machinery 2001… (MRPAAO p.42). */
+  pinSuffix: number | null;
+  /** Property PIN plus postscript; the parcel number is parenthesised when the unit is owned apart from the land. */
+  unitPin: string;
+  ownedSeparately: boolean;
+  landRpuId: string | null;
+  hostRpuId: string | null;
 }
 
 // --- Tax Declaration -----------------------------------------------------------
@@ -356,6 +372,10 @@ export interface TaxDeclarationDto {
   activeAnnotationCount: number;
   /** Set when the TD was drafted under a property transaction; it is approved with the transaction. */
   propertyTransactionId: string | null;
+  /** The assessment this TD declares; the TD with it is the FAAS. */
+  assessmentId: string | null;
+  /** Null until the TD declares an assessment. */
+  faasNumber: string | null;
 }
 
 export interface TaxDeclarationAnnotationDto {
@@ -786,6 +806,8 @@ export interface OpenTransactionRequest {
   description: string;
   newParties?: NewPartyRequest[];
   cancelTaxDeclarationIds?: string[];
+  /** A transfer of one unit only (not land); omitted for the whole property. */
+  transferRpuId?: string;
 }
 
 export interface TransactionRequirementStatusDto extends TransactionRequirementDto {
@@ -827,6 +849,7 @@ export interface PropertyTransactionDto {
   issuedTaxDeclarations: TransactionTdDto[];
   cancelledTaxDeclarations: TransactionTdDto[];
   relatedProperties: { propertyId: string; propertyIdentificationNumber: string; role: 'Source' | 'Result' }[];
+  transferRpuId: string | null;
 }
 
 // --- Notices of Assessment (LGC §§223, 226; docs/FORMS-REVISION-PLAN.md A6) ---

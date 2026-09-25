@@ -1,7 +1,7 @@
 import { Alert, Button, DatePicker, Form, Input, Modal, Select } from 'antd';
 import dayjs from 'dayjs';
 import { useCreateRpu } from '../../../api/rpus';
-import type { CreateRpuRequest } from '../../../lib/types';
+import type { CreateRpuRequest, RpuSummaryDto } from '../../../lib/types';
 import { ApiRequestError } from '../../../lib/apiClient';
 
 const rpuTypeOptions = [
@@ -11,9 +11,20 @@ const rpuTypeOptions = [
   { value: 'OtherImprovement', label: 'Other Improvement' },
 ];
 
-export function AddRpuModal({ propertyId, open, onClose }: { propertyId: string; open: boolean; onClose: () => void }) {
-  const [form] = Form.useForm<{ rpuNumber: string; rpuType: CreateRpuRequest['rpuType']; effectivityDate: dayjs.Dayjs }>();
+/**
+ * A building, machinery or other improvement names the land unit it stands
+ * on, and machinery the building it is installed in — the FAAS "Land
+ * Reference" and "Building Owner + PIN" blocks. PIN postscripts are assigned
+ * by the server.
+ */
+export function AddRpuModal({ propertyId, rpus, open, onClose }: { propertyId: string; rpus: RpuSummaryDto[]; open: boolean; onClose: () => void }) {
+  const [form] = Form.useForm<{
+    rpuNumber: string; rpuType: CreateRpuRequest['rpuType']; effectivityDate: dayjs.Dayjs; landRpuId?: string; hostRpuId?: string;
+  }>();
+  const rpuType = Form.useWatch('rpuType', form);
   const createRpu = useCreateRpu(propertyId);
+  const lands = rpus.filter((r) => r.rpuType === 'Land');
+  const buildings = rpus.filter((r) => r.rpuType === 'Building');
 
   function handleClose() {
     form.resetFields();
@@ -42,6 +53,8 @@ export function AddRpuModal({ propertyId, open, onClose }: { propertyId: string;
             rpuNumber: values.rpuNumber,
             rpuType: values.rpuType,
             effectivityDate: values.effectivityDate.format('YYYY-MM-DD'),
+            landRpuId: values.rpuType !== 'Land' ? values.landRpuId ?? null : null,
+            hostRpuId: values.rpuType === 'Machinery' ? values.hostRpuId ?? null : null,
           };
           createRpu.mutate(request, { onSuccess: handleClose });
         }}
@@ -51,8 +64,20 @@ export function AddRpuModal({ propertyId, open, onClose }: { propertyId: string;
         </Form.Item>
 
         <Form.Item name="rpuType" label="RPU Type" rules={[{ required: true, message: 'Select an RPU type' }]}>
-          <Select options={rpuTypeOptions} />
+          <Select options={rpuTypeOptions} onChange={() => form.setFieldsValue({ landRpuId: lands.length === 1 ? lands[0].id : undefined, hostRpuId: undefined })} />
         </Form.Item>
+
+        {rpuType && rpuType !== 'Land' && (
+          <Form.Item name="landRpuId" label="Stands on land unit" extra="The FAAS land reference: the land's owner, title, lot and TD.">
+            <Select allowClear placeholder="None" options={lands.map((r) => ({ value: r.id, label: `RPU ${r.rpuNumber}` }))} />
+          </Form.Item>
+        )}
+
+        {rpuType === 'Machinery' && (
+          <Form.Item name="hostRpuId" label="Installed in building" extra="The FAAS building reference: the building's owner and PIN.">
+            <Select allowClear placeholder="None" options={buildings.map((r) => ({ value: r.id, label: `RPU ${r.rpuNumber}` }))} />
+          </Form.Item>
+        )}
 
         <Form.Item name="effectivityDate" label="Effectivity Date" rules={[{ required: true }]}>
           <DatePicker style={{ width: '100%' }} />

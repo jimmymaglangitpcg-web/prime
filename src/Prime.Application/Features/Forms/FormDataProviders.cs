@@ -38,9 +38,12 @@ internal static class FormData
 
     public static JsonObject ToJson(object value) => (JsonObject)JsonSerializer.SerializeToNode(value, Options)!;
 
-    /// <summary>Current parties in whose name the property is declared (LGC §§204–205), named as everywhere else in PRIME.</summary>
-    public static async Task<List<object>> CurrentOwnersAsync(IApplicationDbContext db, Guid propertyId, CancellationToken ct) =>
-        (await PropertyParties.ProjectAsync(db.PropertyTaxpayers.Where(x => x.PropertyId == propertyId && x.IsCurrent), ct))
+    /// <summary>
+    /// Current parties in whose name the property — or, with <paramref name="rpuId"/>, that unit — is
+    /// declared (LGC §§204–205), named as everywhere else in PRIME.
+    /// </summary>
+    public static async Task<List<object>> CurrentOwnersAsync(IApplicationDbContext db, Guid propertyId, Guid? rpuId, CancellationToken ct) =>
+        (await PropertyParties.ProjectAsync(await PropertyParties.ScopeAsync(db, propertyId, rpuId, x => x.IsCurrent, ct), ct))
         .Select(o => (object)new
         {
             name = o.TaxpayerDisplayName,
@@ -101,7 +104,7 @@ public sealed class TaxBillFormDataProvider(IApplicationDbContext db) : IFormDat
                 taxDeclarationNumber = bill.TaxDeclaration!.TaxDeclarationNumber,
             },
             property = await FormData.PropertyAsync(db, bill.PropertyId, cancellationToken),
-            owners = await FormData.CurrentOwnersAsync(db, bill.PropertyId, cancellationToken),
+            owners = await FormData.CurrentOwnersAsync(db, bill.PropertyId, bill.RpuId, cancellationToken),
             taxTypes = bill.TaxTypes.OrderBy(t => t.TaxType!.SortOrder).ThenBy(t => t.TaxType!.Code).Select(t => new
             {
                 code = t.TaxType!.Code, name = t.TaxType.Name, ratePercent = t.RatePercent,
@@ -182,7 +185,7 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
             }),
             rpu = new { number = td.Rpu!.RpuNumber, type = td.Rpu.RpuType.ToString() },
             property = await FormData.PropertyAsync(db, td.PropertyId, cancellationToken),
-            owners = await FormData.CurrentOwnersAsync(db, td.PropertyId, cancellationToken),
+            owners = await FormData.CurrentOwnersAsync(db, td.PropertyId, td.RpuId, cancellationToken),
             assessment = assessment is null ? null : new
             {
                 year = assessment.AssessmentYear,
@@ -298,7 +301,7 @@ public sealed class StatementOfAccountFormDataProvider(IApplicationDbContext db,
         {
             statement = statement.Value,
             property = await FormData.PropertyAsync(db, subjectId, cancellationToken),
-            owners = await FormData.CurrentOwnersAsync(db, subjectId, cancellationToken),
+            owners = await FormData.CurrentOwnersAsync(db, subjectId, null, cancellationToken),
         });
         return new FormSubjectData(null, data,
             "A statement of account can only be previewed and printed: it changes with every bill and payment, and PRIME does not yet keep issued statements.");

@@ -323,6 +323,8 @@ The repository has a GitHub remote. Therefore:
    start Phase 9 and backfill?
 2. **Provisional forms**: a neutral PRIME layout (recommended), or the
    2004/2006 manual layouts as a clearly labelled "legacy reference"?
+   **Answered 2026-09-25: the 2004/2006 manual (MRPAAO) is the source for
+   form layouts and fields; see docs/analysis/mrpaao-forms-model.md.**
 3. **PDF rendering**: server-side HTML-to-PDF (recommended, one pipeline for
    all forms), or browser print only for now?
 4. **Where private material lives** during development: a git-ignored

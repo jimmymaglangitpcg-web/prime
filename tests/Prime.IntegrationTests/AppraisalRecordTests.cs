@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Appraisal;
@@ -30,9 +31,9 @@ public class AppraisalRecordTests(WebApplicationFactory<Program> factory) : ICla
         public IAppraisalRecordService Appraisals => Services.GetRequiredService<IAppraisalRecordService>();
     }
 
-    private async Task<(Ctx Ctx, IAsyncDisposable Transaction)> BeginAsync(bool post = true)
+    private async Task<(Ctx Ctx, IAsyncDisposable Transaction)> BeginAsync(bool post = true, WebApplicationFactory<Program>? host = null)
     {
-        var scope = factory.Services.CreateScope();
+        var scope = (host ?? factory).Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PrimeDbContext>();
         var transaction = await db.Database.BeginTransactionAsync();
         await db.NumberingSchemes.Where(x => x.Status == WorkflowStatus.Approved)
@@ -130,7 +131,10 @@ public class AppraisalRecordTests(WebApplicationFactory<Program> factory) : ICla
     [Fact]
     public async Task Approval_NumbersTheFaas_AndTheRecordCarriesSignerAndNumber()
     {
-        var (c, tx) = await BeginAsync(post: false);
+        // FAAS numbers of their own (Faas:NumberSource = Own); by default the FAAS number is the TD's (FaasIdentityTests).
+        await using var own = factory.WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(new Dictionary<string, string?> { ["Faas:NumberSource"] = "Own" })));
+        var (c, tx) = await BeginAsync(post: false, own);
         await using var _ = tx;
         var user = c.Services.GetRequiredService<CurrentUserService>();
         var users = Enumerable.Range(0, 2).Select(i => new AppUser

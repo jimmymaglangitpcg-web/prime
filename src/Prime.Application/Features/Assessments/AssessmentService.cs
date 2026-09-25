@@ -1,9 +1,12 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Approvals;
 using Prime.Application.Features.Numbering;
+using Prime.Application.Features.TaxDeclarations;
 using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.Assessments;
@@ -23,7 +26,9 @@ public sealed class AssessmentService(
     ICurrentUserService currentUser,
     IApprovalChainService approvals,
     INumberingService numbering,
-    IClock clock) : IAssessmentService
+    IClock clock,
+    IOptions<FaasOptions> faas,
+    ILogger<AssessmentService> logger) : IAssessmentService
 {
     public async Task<Result<AssessmentDto>> CreateAsync(CreateAssessmentRequest request, CancellationToken cancellationToken = default)
     {
@@ -146,14 +151,18 @@ public sealed class AssessmentService(
             assessment.Status = WorkflowStatus.Approved;
             assessment.ApprovedBy = currentUser.AppUserId;
             assessment.ApprovedAt = DateTimeOffset.UtcNow;
-            // The appraisal record (FAAS) is complete once approved: number it if a FAAS scheme is in force.
-            var context = await NumberContexts.ForPropertyAsync(db, assessment.PropertyId, assessment.AssessmentYear, cancellationToken);
-            var faasNumber = await numbering.GenerateIfConfiguredAsync(NumberedDocumentKind.Faas, context, clock.Today, cancellationToken);
-            if (faasNumber.IsFailure)
+            // With FAAS numbers of their own, number the appraisal record once approved, if a FAAS
+            // scheme is in force. By default the FAAS number is the TD's (docs/analysis/mrpaao-forms-model.md §6.1).
+            if (faas.Value.NumberSource == FaasNumberSource.Own)
             {
-                return Result.Failure<AssessmentDto>(faasNumber.Code!, faasNumber.Message!);
+                var context = await NumberContexts.ForPropertyAsync(db, assessment.PropertyId, assessment.AssessmentYear, cancellationToken);
+                var faasNumber = await numbering.GenerateIfConfiguredAsync(NumberedDocumentKind.Faas, context, clock.Today, cancellationToken);
+                if (faasNumber.IsFailure)
+                {
+                    return Result.Failure<AssessmentDto>(faasNumber.Code!, faasNumber.Message!);
+                }
+                assessment.FaasNumber = faasNumber.Value;
             }
-            assessment.FaasNumber = faasNumber.Value;
         }
         try
         {
@@ -200,7 +209,21 @@ public sealed class AssessmentService(
         }
 
         assessment.Status = WorkflowStatus.Posted;
+        var ownsTransaction = db.Database.CurrentTransaction is null;
+        await using var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
+        if (faas.Value.PrepareTdOnPosting)
+        {
+            // The new FAAS: a Draft TD declaring this assessment, for the assessor to review and approve.
+            if (await FaasTaxDeclarations.PrepareForPostedAsync(db, numbering, assessment, clock.Today, cancellationToken) is { } skipped)
+            {
+                logger.LogInformation("No Tax Declaration prepared for posted assessment {AssessmentId}: {Reason}", assessment.Id, skipped);
+            }
+        }
         await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return Result.Success(ToDto(assessment));
     }

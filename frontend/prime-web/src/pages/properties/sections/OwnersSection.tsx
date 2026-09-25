@@ -4,21 +4,24 @@ import { PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useEndParty } from '../../../api/taxpayers';
 import { ApiRequestError } from '../../../lib/apiClient';
-import { partyRoleLabel, type PropertyOwnerDto, type PropertyPartyRole } from '../../../lib/types';
+import { partyRoleLabel, type PropertyOwnerDto, type PropertyPartyRole, type RpuSummaryDto } from '../../../lib/types';
 import { AddOwnerModal } from '../modals/AddOwnerModal';
 
 /**
  * Parties in whose name the property is declared — owners, administrators,
  * beneficial users, claimants, or an unknown owner (LGC §§204–205). History
- * is kept: ending a party records the date and reason.
+ * is kept: ending a party records the date and reason. A party may hold one
+ * unit only — a building or machinery owned apart from the land.
  */
-export function OwnersSection({ propertyId, owners }: { propertyId: string; owners: PropertyOwnerDto[] }) {
+export function OwnersSection({ propertyId, owners, rpus }: { propertyId: string; owners: PropertyOwnerDto[]; rpus: RpuSummaryDto[] }) {
   const [addOpen, setAddOpen] = useState(false);
   const [ending, setEnding] = useState<PropertyOwnerDto | null>(null);
   const [endDate, setEndDate] = useState(dayjs());
   const [reason, setReason] = useState('');
   const endParty = useEndParty(propertyId);
-  const currentTotal = owners.filter((o) => o.isCurrent && o.role === 'Owner').reduce((sum, o) => sum + o.ownershipPercentage, 0);
+  // Shares count per scope; the heading shows the whole property's.
+  const currentTotal = owners.filter((o) => o.isCurrent && o.role === 'Owner' && !o.rpuId).reduce((sum, o) => sum + o.ownershipPercentage, 0);
+  const hasUnitParties = owners.some((o) => o.rpuId);
 
   return (
     <div>
@@ -39,6 +42,7 @@ export function OwnersSection({ propertyId, owners }: { propertyId: string; owne
         locale={{ emptyText: <Empty description="No owners registered yet" /> }}
         columns={[
           { title: 'Name', dataIndex: 'taxpayerDisplayName' },
+          ...(hasUnitParties ? [{ title: 'Holds', render: (_: unknown, o: PropertyOwnerDto) => (o.rpuNumber ? `RPU ${o.rpuNumber} only` : 'Whole property') }] : []),
           { title: 'Capacity', dataIndex: 'role', render: (r: PropertyPartyRole) => <Tag color={r === 'UnknownOwner' ? 'orange' : r === 'Owner' ? 'blue' : 'purple'}>{partyRoleLabel[r]}</Tag> },
           { title: 'Ownership Type', dataIndex: 'ownershipTypeName', render: (v: string | null) => v ?? '—' },
           { title: 'Share', render: (_, o) => (o.role === 'Owner' ? `${o.ownershipPercentage}%` : '—') },
@@ -58,7 +62,7 @@ export function OwnersSection({ propertyId, owners }: { propertyId: string; owne
         ]}
       />
 
-      <AddOwnerModal propertyId={propertyId} open={addOpen} onClose={() => setAddOpen(false)} />
+      <AddOwnerModal propertyId={propertyId} units={rpus.filter((r) => r.rpuType !== 'Land')} open={addOpen} onClose={() => setAddOpen(false)} />
 
       <Modal
         title={ending ? `End ${partyRoleLabel[ending.role].toLowerCase()} — ${ending.taxpayerDisplayName}` : ''}

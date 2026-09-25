@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Approvals;
@@ -88,7 +89,8 @@ public sealed class TransactionService(
     ICurrentUserService currentUser,
     IApprovalChainService approvals,
     INumberingService numbering,
-    IClock clock) : ITransactionService
+    IClock clock,
+    IOptions<FaasOptions> faas) : ITransactionService
 {
     // --- Catalogue ---
 
@@ -178,6 +180,18 @@ public sealed class TransactionService(
         {
             return Fail("TRANSACTION_PARTIES_NOT_ALLOWED", "Only a transfer changes the property's parties.");
         }
+        if (request.TransferRpuId is { } unitId)
+        {
+            if (type.Kind != PropertyTransactionKind.Transfer)
+            {
+                return Fail("TRANSACTION_UNIT_NOT_ALLOWED", "Only a transfer can target one unit.");
+            }
+            // The land passes with the property itself; a unit transfer is for what stands on it.
+            if (!await db.RealPropertyUnits.AnyAsync(x => x.Id == unitId && x.PropertyId == request.PropertyId && x.RpuType != RpuType.Land, cancellationToken))
+            {
+                return Fail("TRANSACTION_UNIT_INVALID", "The unit must be a building, machinery or other-improvement RPU of the transaction's property.");
+            }
+        }
         foreach (var p in parties)
         {
             if (p.TaxpayerId is { } tp && !await db.Taxpayers.AnyAsync(x => x.Id == tp, cancellationToken))
@@ -208,7 +222,7 @@ public sealed class TransactionService(
         {
             TransactionTypeId = type.Id, TypeCode = type.Code, TypeName = type.Name, Kind = type.Kind,
             TransactionNumber = number.Value, PropertyId = request.PropertyId, EffectiveDate = request.EffectiveDate,
-            Description = request.Description.Trim(),
+            Description = request.Description.Trim(), TransferRpuId = request.TransferRpuId,
             Requirements = type.Requirements.OrderBy(r => r.Sequence).Select(r => new PropertyTransactionRequirement
             {
                 Sequence = r.Sequence, Code = r.Code, Label = r.Label, IsMandatory = r.IsMandatory, LegalBasis = r.LegalBasis,
@@ -372,7 +386,7 @@ public sealed class TransactionService(
                 .OrderBy(x => x.RevisionNumber).ToListAsync(cancellationToken);
             foreach (var td in own)
             {
-                var check = await TaxDeclarationApproval.CheckAsync(db, td, cancellationToken);
+                var check = await TaxDeclarationApproval.CheckAsync(db, td, faas.Value.RequireAssessmentOnTd, cancellationToken);
                 if (check.IsFailure)
                 {
                     return await AbortAsync(transaction, check.Code!, $"TD {td.TaxDeclarationNumber}: {check.Message}");
@@ -398,7 +412,7 @@ public sealed class TransactionService(
                 }
                 db.PropertyTaxpayers.AddRange(tx.NewParties.Select(p => new PropertyTaxpayer
                 {
-                    PropertyId = tx.PropertyId, Role = p.Role, TaxpayerId = p.TaxpayerId, OwnershipTypeId = p.OwnershipTypeId,
+                    PropertyId = tx.PropertyId, RpuId = tx.TransferRpuId, Role = p.Role, TaxpayerId = p.TaxpayerId, OwnershipTypeId = p.OwnershipTypeId,
                     OwnershipPercentage = p.OwnershipPercentage, StartDate = tx.EffectiveDate, IsCurrent = true,
                     StartedByTransactionId = tx.Id,
                 }));
@@ -496,9 +510,14 @@ public sealed class TransactionService(
         return Fail(code, message);
     }
 
-    /// <summary>The parties a transfer ends: the current owners and any unknown-owner declaration.</summary>
+    /// <summary>
+    /// The parties a transfer ends: the current owners and any unknown-owner
+    /// declaration of its scope — the whole property, or the one unit it
+    /// targets. A unit that had no owners of its own ends nothing: it passes
+    /// to its new owners while the land stays with the property's.
+    /// </summary>
     private IQueryable<PropertyTaxpayer> EndingPartiesQuery(PropertyTransaction tx) =>
-        db.PropertyTaxpayers.Where(x => x.PropertyId == tx.PropertyId && x.IsCurrent
+        db.PropertyTaxpayers.Where(x => x.PropertyId == tx.PropertyId && x.RpuId == tx.TransferRpuId && x.IsCurrent
             && (x.Role == PropertyPartyRole.Owner || x.Role == PropertyPartyRole.UnknownOwner));
 
     /// <summary>
@@ -539,7 +558,8 @@ public sealed class TransactionService(
             issued,
             tx.TdCancellations.Select(c => new TransactionTdDto(c.TaxDeclarationId, c.TaxDeclaration!.TaxDeclarationNumber,
                 c.TaxDeclaration.PropertyId, c.TaxDeclaration.Status)).ToList(),
-            tx.RelatedProperties.Select(r => new TransactionPropertyDto(r.PropertyId, r.Property!.PropertyIdentificationNumber, r.Role)).ToList());
+            tx.RelatedProperties.Select(r => new TransactionPropertyDto(r.PropertyId, r.Property!.PropertyIdentificationNumber, r.Role)).ToList(),
+            tx.TransferRpuId);
     }
 
     private static Result<PropertyTransactionDto> NotFound() => Fail("PROPERTY_TRANSACTION_NOT_FOUND", "No property transaction was found with the given id.");

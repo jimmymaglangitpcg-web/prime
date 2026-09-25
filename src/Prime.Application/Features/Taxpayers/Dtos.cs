@@ -49,6 +49,7 @@ public sealed record AddPropertyOwnerRequest(
     Guid? OwnershipTypeId,
     decimal OwnershipPercentage,
     DateOnly StartDate,
-    PropertyPartyRole Role = PropertyPartyRole.Owner);
+    PropertyPartyRole Role = PropertyPartyRole.Owner,
+    Guid? RpuId = null);
 
 public sealed record EndPropertyPartyRequest(DateOnly EndDate, string Reason);

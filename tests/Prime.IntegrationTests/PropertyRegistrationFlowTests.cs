@@ -150,6 +150,21 @@ public class PropertyRegistrationFlowTests(WebApplicationFactory<Program> factor
             var taxDeclaration = await createTdResponse.Content.ReadFromJsonAsync<TaxDeclarationDto>(JsonOptions);
             taxDeclaration.ShouldNotBeNull();
 
+            // 6. A building on the land, owned apart from it (docs/analysis/mrpaao-forms-model.md §6.2–6.4).
+            // The same taxpayer as the property owner: at the property's scope this would be a duplicate.
+            var buildingResponse = await client.PostAsJsonAsync("/api/rpus", new CreateRpuRequest(
+                property.Id, $"TEST-BLDG-{testId}", RpuType.Building, DateOnly.FromDateTime(DateTime.UtcNow), null, LandRpuId: rpu.Id));
+            buildingResponse.StatusCode.ShouldBe(HttpStatusCode.Created, await buildingResponse.Content.ReadAsStringAsync());
+            var building = (await buildingResponse.Content.ReadFromJsonAsync<RpuDto>(JsonOptions)).ShouldNotBeNull();
+            building.PinSuffix.ShouldBe(1001);
+            building.LandRpuId.ShouldBe(rpu.Id);
+            var unitOwnerResponse = await client.PostAsJsonAsync($"/api/properties/{property.Id}/owners",
+                new TaxpayersController_AddOwnerBody(taxpayer.Id, ownershipType.Id, 100m, DateOnly.FromDateTime(DateTime.UtcNow), RpuId: building.Id));
+            unitOwnerResponse.StatusCode.ShouldBe(HttpStatusCode.OK, await unitOwnerResponse.Content.ReadAsStringAsync());
+            (await unitOwnerResponse.Content.ReadFromJsonAsync<PropertyOwnerDto>(JsonOptions)).ShouldNotBeNull().RpuId.ShouldBe(building.Id);
+            var units = await client.GetFromJsonAsync<List<RpuDto>>($"/api/properties/{property.Id}/rpus", JsonOptions);
+            units.ShouldNotBeNull().Single(u => u.Id == building.Id).UnitPin.ShouldBe($"TEST-PIN-({testId})-1001");
+
             // Verify: Property Profile shows everything
             var profileResponse = await client.GetAsync($"/api/properties/{property.Id}");
             profileResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -218,5 +233,6 @@ public class PropertyRegistrationFlowTests(WebApplicationFactory<Program> factor
     }
 
     // Mirrors TaxpayersController.AddOwnerBody's shape for the client-side POST body.
-    private sealed record TaxpayersController_AddOwnerBody(Guid TaxpayerId, Guid OwnershipTypeId, decimal OwnershipPercentage, DateOnly StartDate);
+    private sealed record TaxpayersController_AddOwnerBody(Guid TaxpayerId, Guid OwnershipTypeId, decimal OwnershipPercentage, DateOnly StartDate,
+        PropertyPartyRole? Role = null, Guid? RpuId = null);
 }

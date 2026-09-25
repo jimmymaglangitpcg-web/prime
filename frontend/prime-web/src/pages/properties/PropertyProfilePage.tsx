@@ -67,7 +67,7 @@ export function PropertyProfilePage() {
       <Card>
         <Tabs
           items={[
-            { key: 'owners', label: `Owners (${profile.owners.length})`, children: <OwnersSection propertyId={property.id} owners={profile.owners} /> },
+            { key: 'owners', label: `Owners (${profile.owners.length})`, children: <OwnersSection propertyId={property.id} owners={profile.owners} rpus={profile.rpus} /> },
             { key: 'parcels', label: `Parcels (${profile.parcels.length})`, children: <ParcelsSection propertyId={property.id} parcels={profile.parcels} /> },
             { key: 'rpus', label: `RPUs (${profile.rpus.length})`, children: <RpuSection propertyId={property.id} rpus={profile.rpus} /> },
             { key: 'transactions', label: 'Transactions', children: <TransactionsSection propertyId={property.id} rpus={profile.rpus} taxDeclarations={profile.taxDeclarations} /> },

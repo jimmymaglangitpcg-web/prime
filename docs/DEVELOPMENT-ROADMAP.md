@@ -1067,8 +1067,22 @@ Migration `AssessmentFaasNumber` is applied locally only.
 complete (plan §16). There is one `FAAS` form that branches on kind and
 is issuable once the assessment is approved, and a preview-only
 `STATEMENT_OF_ACCOUNT` form, since statements are point-in-time and PRIME
-does not yet keep them as records. No migration. Next in the plan: A9
-building depreciation hook, A10 LAM intake checklist.
+does not yet keep them as records. No migration. A8 is committed
+(`35b7188`, not pushed).
+
+**MRPAAO forms model (2026-09-25):** the forms now follow the 2004/2006
+manual's layouts and fields (docs/analysis/mrpaao-forms-model.md), with
+its rules kept configurable. **Step 1 done, uncommitted:**
+- FAAS = TD + the assessment it declares, and the FAAS number is the TD
+  number;
+- posting an assessment prepares a Draft TD;
+- unit PIN postscripts (1001…, 2001…) and building-to-land and
+  machinery-to-building links;
+- per-unit parties and unit transfers.
+
+Migration `FaasIdentityAndUnits` is applied locally only. Next: step 2
+(multi-row appraisal and assessment). Plan items A9 (building
+depreciation) and A10 (LAM checklist) remain.
 
 Candidates, in roadmap order:
 

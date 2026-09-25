@@ -15,9 +15,19 @@ namespace Prime.Application.Features.TaxDeclarations;
 /// </summary>
 internal static class TaxDeclarationApproval
 {
-    /// <summary>The TD <paramref name="td"/> replaces (null if none), or why it cannot be approved.</summary>
-    public static async Task<Result<TaxDeclaration?>> CheckAsync(IApplicationDbContext db, TaxDeclaration td, CancellationToken ct)
+    /// <summary>
+    /// The TD <paramref name="td"/> replaces (null if none), or why it cannot be approved.
+    /// A TD drafted before its assessment existed is bound here to the assessment
+    /// in force; with <paramref name="requireAssessment"/> it cannot be approved without one.
+    /// </summary>
+    public static async Task<Result<TaxDeclaration?>> CheckAsync(IApplicationDbContext db, TaxDeclaration td, bool requireAssessment, CancellationToken ct)
     {
+        td.AssessmentId ??= await FaasTaxDeclarations.AssessmentInForceAsync(db, td.RpuId, td.EffectivityDate, ct);
+        if (td.AssessmentId is null && requireAssessment)
+        {
+            return Result.Failure<TaxDeclaration?>("TAX_DECLARATION_ASSESSMENT_REQUIRED",
+                $"TD {td.TaxDeclarationNumber} declares no assessment; approve an assessment for its RPU first.");
+        }
         var current = await db.TaxDeclarations.FirstOrDefaultAsync(
             x => x.RpuId == td.RpuId && x.Id != td.Id && x.Status == WorkflowStatus.Approved, ct);
         if (current is not null && current.Id != td.PreviousTaxDeclarationId)

@@ -71,6 +71,14 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddOptions<BillingOptions>().Bind(configuration.GetSection(BillingOptions.SectionName));
 
+        // MRPAAO forms model (docs/analysis/mrpaao-forms-model.md §6): FAAS = TD + its assessment; unit PIN postscripts.
+        services.AddOptions<Prime.Application.Features.TaxDeclarations.FaasOptions>()
+            .Bind(configuration.GetSection(Prime.Application.Features.TaxDeclarations.FaasOptions.SectionName));
+        services.AddOptions<Prime.Application.Features.RealPropertyUnits.UnitPinOptions>()
+            .Bind(configuration.GetSection(Prime.Application.Features.RealPropertyUnits.UnitPinOptions.SectionName))
+            .Validate(o => o.SuffixStart.Values.All(v => v > 0), "UnitPin:SuffixStart values must be positive.")
+            .ValidateOnStart();
+
         // Forms foundation (docs/FORMS-REVISION-PLAN.md): LGU branding, numbering, rendering, provisional forms.
         services.AddOptions<LguOptions>().Bind(configuration.GetSection(LguOptions.SectionName));
         services.AddSingleton(TimeProvider.System);

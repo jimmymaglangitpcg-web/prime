@@ -7,7 +7,9 @@ public sealed record CreateRpuRequest(
     string RpuNumber,
     RpuType RpuType,
     DateOnly EffectivityDate,
-    Guid? PreviousRpuId);
+    Guid? PreviousRpuId,
+    Guid? LandRpuId = null,
+    Guid? HostRpuId = null);
 
 public sealed record RpuDto(
     Guid Id,
@@ -18,4 +20,9 @@ public sealed record RpuDto(
     DateOnly EffectivityDate,
     DateOnly? EndDate,
     Guid? PreviousRpuId,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    int? PinSuffix,
+    string UnitPin,
+    bool OwnedSeparately,
+    Guid? LandRpuId,
+    Guid? HostRpuId);

@@ -18,6 +18,14 @@ public sealed class PropertyTaxpayer : AuditableEntity
     public PropertyEntity? Property { get; set; }
     public PropertyPartyRole Role { get; set; } = PropertyPartyRole.Owner;
 
+    /// <summary>
+    /// Null: a party of the whole property. Set: a party of that unit only —
+    /// e.g. a building owned by someone other than the landowner (MRPAAO p.42).
+    /// A unit with current parties of its own uses them; otherwise the property's.
+    /// </summary>
+    public Guid? RpuId { get; set; }
+    public RealPropertyUnit? Rpu { get; set; }
+
     public Guid? TaxpayerId { get; set; }
     public Taxpayer? Taxpayer { get; set; }
 

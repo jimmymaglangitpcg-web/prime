@@ -26,9 +26,12 @@ public sealed class PropertyTaxpayerConfiguration : IEntityTypeConfiguration<Pro
         builder.HasOne<Prime.Domain.Entities.Transactions.PropertyTransaction>().WithMany().HasForeignKey(x => x.StartedByTransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Prime.Domain.Entities.Transactions.PropertyTransaction>().WithMany().HasForeignKey(x => x.EndedByTransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.Property(x => x.OwnershipPercentage).HasPrecision(9, 6);
-        // At most one current unknown-owner declaration per property.
-        builder.HasIndex(x => x.PropertyId).IsUnique().HasFilter("\"Role\" = 'UnknownOwner' AND \"IsCurrent\"")
+        // At most one current unknown-owner declaration per scope (the property, or one unit).
+        builder.HasIndex(x => new { x.PropertyId, x.RpuId }).IsUnique().AreNullsDistinct(false)
+            .HasFilter("\"Role\" = 'UnknownOwner' AND \"IsCurrent\"")
             .HasDatabaseName("UX_PropertyTaxpayers_CurrentUnknownOwner");
+        builder.HasOne(x => x.Rpu).WithMany().HasForeignKey(x => x.RpuId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.RpuId);
 
         builder.HasOne(x => x.Property).WithMany().HasForeignKey(x => x.PropertyId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Taxpayer).WithMany().HasForeignKey(x => x.TaxpayerId).OnDelete(DeleteBehavior.Restrict);
