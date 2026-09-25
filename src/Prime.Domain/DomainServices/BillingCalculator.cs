@@ -13,8 +13,10 @@ namespace Prime.Domain.DomainServices;
 ///
 /// Per tax type:
 /// <list type="number">
-/// <item>Annual tax = AssessedValue × TaxRate. A classification-specific
-/// rate wins over the general (null-classification) rate.</item>
+/// <item>Annual tax = Σ over the assessment lines of line assessed value ×
+/// the tax rate for the line's classification, each rounded. A
+/// classification-specific rate wins over the general (null-classification)
+/// rate; a line with neither bears none of that tax type.</item>
 /// <item>If a <see cref="TaxIncreaseCapRule"/> applies and a matching
 /// baseline was supplied: annual tax = min(annual tax, baseline × (1 +
 /// MaxIncreasePercent/100)) — per tax type, never on the bill total.</item>
@@ -45,9 +47,13 @@ public static class BillingCalculator
     {
         var problems = new List<string>();
 
-        if (input.AssessedValue < 0)
+        if (input.AssessedValue < 0 || input.Lines.Any(l => l.AssessedValue < 0))
         {
             problems.Add("assessed value is negative");
+        }
+        if (input.Lines.Count > 0 && input.Lines.Sum(l => l.AssessedValue) != input.AssessedValue)
+        {
+            problems.Add("the assessed value differs from the sum of its lines");
         }
 
         var allRules = input.TaxRates.Cast<BillingRule>()
@@ -130,9 +136,10 @@ public static class BillingCalculator
         var lines = new List<BillingLine>();
         var notes = new List<string>();
 
-        foreach (var rate in SelectRatePerTaxType(ApplicableRates(input)))
+        foreach (var taxTypeId in ApplicableRates(input).Select(r => r.TaxTypeId).Distinct())
         {
-            var taxType = AnnualTax(input, rate, notes);
+            var taxType = AnnualTax(input, taxTypeId, notes);
+            var rate = input.TaxRates.First(r => r.Id == taxType.TaxRateId);
             taxTypes.Add(taxType);
 
             var shares = SplitIntoInstallments(taxType.AnnualTax, installments);
@@ -187,25 +194,44 @@ public static class BillingCalculator
         return counting == InterestMonthCounting.FractionCountsAsFullMonth && partial ? completed + 1 : completed;
     }
 
-    private static BillingTaxTypeResult AnnualTax(BillingCalculationInput input, TaxRate rate, List<string> notes)
+    /// <summary>
+    /// One tax type's annual tax: each line taxed at the rate for its
+    /// classification, summed, then any increase cap applied to the total
+    /// (the cap is per tax type, never per line). The result names the
+    /// principal line's rate — the line with the largest assessed value.
+    /// </summary>
+    private static BillingTaxTypeResult AnnualTax(BillingCalculationInput input, Guid taxTypeId, List<string> notes)
     {
-        var computed = Money(input.AssessedValue * rate.Rate / 100m);
-        var cap = MostSpecific(input.TaxIncreaseCapRules, r => r.TaxTypeId, rate.TaxTypeId);
+        var lines = new List<BillingTaxTypeLine>();
+        foreach (var line in input.EffectiveLines)
+        {
+            var rate = input.TaxRates.FirstOrDefault(r => r.TaxTypeId == taxTypeId && r.ClassificationId is not null && r.ClassificationId == line.ClassificationId)
+                ?? input.TaxRates.FirstOrDefault(r => r.TaxTypeId == taxTypeId && r.ClassificationId is null);
+            if (rate is not null)
+            {
+                lines.Add(new BillingTaxTypeLine(line.ClassificationId, line.AssessedValue, rate.Id, rate.Rate, Money(line.AssessedValue * rate.Rate / 100m)));
+            }
+        }
+        var principal = lines.OrderByDescending(l => l.AssessedValue).First();
+        var assessedValue = lines.Sum(l => l.AssessedValue);
+        var computed = lines.Sum(l => l.Tax);
+
+        var cap = MostSpecific(input.TaxIncreaseCapRules, r => r.TaxTypeId, taxTypeId);
         if (cap is null)
         {
-            return new BillingTaxTypeResult(rate.TaxTypeId, rate.Id, rate.Rate, input.AssessedValue, computed, null, null, null, computed);
+            return new BillingTaxTypeResult(taxTypeId, principal.TaxRateId, principal.RatePercent, assessedValue, computed, null, null, null, computed, lines);
         }
 
-        var baseline = input.CapBaselines.SingleOrDefault(b => b.TaxTypeId == rate.TaxTypeId && b.Baseline == cap.Baseline);
+        var baseline = input.CapBaselines.SingleOrDefault(b => b.TaxTypeId == taxTypeId && b.Baseline == cap.Baseline);
         if (baseline is null)
         {
-            notes.Add($"Tax increase cap {cap.Id} was not applied to tax type {rate.TaxTypeId}: no {cap.Baseline} baseline tax was supplied (DOMAIN VERIFICATION REQUIRED — docs/BILLING.md §3.7).");
-            return new BillingTaxTypeResult(rate.TaxTypeId, rate.Id, rate.Rate, input.AssessedValue, computed, null, null, null, computed);
+            notes.Add($"Tax increase cap {cap.Id} was not applied to tax type {taxTypeId}: no {cap.Baseline} baseline tax was supplied (DOMAIN VERIFICATION REQUIRED — docs/BILLING.md §3.7).");
+            return new BillingTaxTypeResult(taxTypeId, principal.TaxRateId, principal.RatePercent, assessedValue, computed, null, null, null, computed, lines);
         }
 
         var limit = Money(baseline.Amount * (1m + cap.MaxIncreasePercent / 100m));
-        return new BillingTaxTypeResult(rate.TaxTypeId, rate.Id, rate.Rate, input.AssessedValue, computed,
-            cap.Id, baseline.Amount, limit, Math.Min(computed, limit));
+        return new BillingTaxTypeResult(taxTypeId, principal.TaxRateId, principal.RatePercent, assessedValue, computed,
+            cap.Id, baseline.Amount, limit, Math.Min(computed, limit), lines);
     }
 
     private static List<decimal> SplitIntoInstallments(decimal annualTax, List<PaymentScheduleInstallment> installments)
@@ -291,12 +317,12 @@ public static class BillingCalculator
             $"{Format(rule.RatePerMonth)}%/month × {months} months{capped} on {Format(tax)} past due {Format(dueDate)}");
     }
 
-    private static List<TaxRate> ApplicableRates(BillingCalculationInput input) =>
-        input.TaxRates.Where(r => r.ClassificationId is null || r.ClassificationId == input.ClassificationId).ToList();
-
-    /// <summary>Per tax type, the classification-specific rate if any, else the general one; first-seen tax type order.</summary>
-    private static IEnumerable<TaxRate> SelectRatePerTaxType(List<TaxRate> rates) =>
-        rates.GroupBy(r => r.TaxTypeId).Select(g => g.FirstOrDefault(r => r.ClassificationId is not null) ?? g.First());
+    /// <summary>The rates that apply to at least one line: general ones, and those of a line's classification.</summary>
+    private static List<TaxRate> ApplicableRates(BillingCalculationInput input)
+    {
+        var classifications = input.EffectiveLines.Select(l => l.ClassificationId).ToHashSet();
+        return input.TaxRates.Where(r => r.ClassificationId is null || classifications.Contains(r.ClassificationId)).ToList();
+    }
 
     /// <summary>The rule scoped to <paramref name="taxTypeId"/> if any, else the one scoped to every tax type (null).</summary>
     private static T? MostSpecific<T>(IReadOnlyList<T> rules, Func<T, Guid?> scope, Guid taxTypeId) where T : class =>

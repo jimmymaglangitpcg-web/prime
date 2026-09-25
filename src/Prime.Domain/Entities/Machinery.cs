@@ -43,9 +43,28 @@ public sealed class Machinery : AuditableEntity
     public int? EconomicLifeYears { get; set; }
     public int? RemainingLifeYears { get; set; }
 
+    // MRPAAO Att. 3 (docs/analysis/mrpaao-forms-model.md §10).
+    public int? YearInstalled { get; set; }
+    public int? YearOfInitialOperation { get; set; }
+    /// <summary>
+    /// Recorded and printed only: the replacement cost stays an entered figure
+    /// (deriving it from this factor is DOMAIN VERIFICATION REQUIRED).
+    /// </summary>
+    public decimal? ConversionFactor { get; set; }
+
     public decimal? Depreciation { get; set; }
     public decimal? MarketValue { get; set; }
     public decimal? AssessedValue { get; set; }
 
     public RecordStatus Status { get; set; } = RecordStatus.Active;
+
+    /// <summary>
+    /// The machine's own classification and actual use, when it differs from
+    /// its unit's Tax Declaration's (MRPAAO Att. 3: one assessment row per
+    /// use). Null: the TD's.
+    /// </summary>
+    public Guid? ClassificationId { get; set; }
+    public Classification? Classification { get; set; }
+    public Guid? ActualUseId { get; set; }
+    public ActualUse? ActualUse { get; set; }
 }

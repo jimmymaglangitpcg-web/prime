@@ -255,7 +255,8 @@ public sealed class FormService(
             authority = definition.Authority.ToString(), provisional = Provisional(definition),
             sourceReference = definition.SourceReference, legalBasis = definition.LegalBasis,
         });
-        snapshot["lgu"] = FormData.ToJson(new { name = lgu.Value.Name, office = lgu.Value.Office, province = lgu.Value.Province, address = lgu.Value.Address });
+        snapshot["lgu"] = FormData.ToJson(new { name = lgu.Value.Name, office = lgu.Value.Office, province = lgu.Value.Province, address = lgu.Value.Address,
+            sanggunianName = lgu.Value.SanggunianName });
         snapshot["issue"] = FormData.ToJson(new { issuedAt = clock.UtcNow, issuedBy = issuerName, isPreview = preview, documentNumber = subject.DocumentNumber });
         return Result.Success((definition, subject, snapshot));
     }

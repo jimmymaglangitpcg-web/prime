@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TaxClearanceModal } from '../modals/DescriptionModals';
 import {
   Alert, Button, DatePicker, Descriptions, Drawer, Empty, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Typography,
 } from 'antd';
@@ -188,6 +189,7 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
   const [evidence, setEvidence] = useState('');
   const [tdRpuId, setTdRpuId] = useState<string | undefined>(rpus[0]?.id);
   const [addTdOpen, setAddTdOpen] = useState(false);
+  const [clearanceOpen, setClearanceOpen] = useState(false);
   if (!tx) return null;
   const editable = tx.status === 'Draft' || tx.status === 'PendingReview';
 
@@ -211,7 +213,16 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
         </Descriptions.Item>
         <Descriptions.Item label="Description" span={2}>{tx.description}</Descriptions.Item>
         {tx.closeReason && <Descriptions.Item label="Closed" span={2}>{tx.closeReason}</Descriptions.Item>}
+        {tx.kind === 'Transfer' && (
+          <Descriptions.Item label="BIR clearance (CAR)" span={2}>
+            {tx.taxClearance?.carNumber ? `CAR ${tx.taxClearance.carNumber}${tx.taxClearance.carDate ? ` of ${tx.taxClearance.carDate}` : ''}` : 'Not recorded'}
+            {editable && <Button size="small" style={{ marginLeft: 8 }} onClick={() => setClearanceOpen(true)}>{tx.taxClearance ? 'Edit' : 'Record'}</Button>}
+          </Descriptions.Item>
+        )}
       </Descriptions>
+      {clearanceOpen && (
+        <TaxClearanceModal propertyId={propertyId} transactionId={tx.id} value={tx.taxClearance} onClose={() => setClearanceOpen(false)} />
+      )}
 
       <Space wrap style={{ marginBottom: 16 }}>
         {tx.status === 'Draft' && <Button type="primary" onClick={() => confirm('submit', 'Submit for review?', 'Mandatory requirements must be satisfied. Its TDs go for review with it.')}>Submit</Button>}

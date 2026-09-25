@@ -66,6 +66,26 @@ public class ReferenceDataController(IReferenceDataService referenceDataService)
     public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetTaxTypes(CancellationToken cancellationToken) =>
         Ok(await referenceDataService.GetTaxTypesAsync(cancellationToken));
 
+    [HttpGet("improvement-kinds")]
+    public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetImprovementKinds(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetImprovementKindsAsync(cancellationToken));
+
+    [HttpGet("building-component-types")]
+    public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetBuildingComponentTypes(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetBuildingComponentTypesAsync(cancellationToken));
+
+    [HttpGet("title-types")]
+    public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetTitleTypes(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetTitleTypesAsync(cancellationToken));
+
+    [HttpGet("structural-parts")]
+    public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetStructuralParts(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetStructuralPartsAsync(cancellationToken));
+
+    [HttpGet("structural-materials")]
+    public async Task<ActionResult<IReadOnlyList<StructuralMaterialDto>>> GetStructuralMaterials(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetStructuralMaterialsAsync(cancellationToken));
+
     [HttpGet("annotation-types")]
     public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetAnnotationTypes(CancellationToken cancellationToken) =>
         Ok(await referenceDataService.GetAnnotationTypesAsync(cancellationToken));

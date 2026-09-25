@@ -66,6 +66,12 @@ internal static class FormData
             surveyNumber = p.SurveyNumber,
             titleNumber = p.TitleNumber,
             taxMapNumber = p.TaxMapNumber,
+            titleType = p.TitleType == null ? null : p.TitleType.Name,
+            titleDate = p.TitleDate,
+            boundaryNorth = p.BoundaryNorth,
+            boundaryEast = p.BoundaryEast,
+            boundarySouth = p.BoundarySouth,
+            boundaryWest = p.BoundaryWest,
             barangay = p.Barangay!.Name,
             municipality = p.Municipality!.Name,
             province = p.Province!.Name,
@@ -141,6 +147,8 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
         }
 
         var assessment = await db.Assessments.AsNoTracking()
+            .Include(x => x.Lines).ThenInclude(l => l.Classification)
+            .Include(x => x.Lines).ThenInclude(l => l.ActualUse)
             .Where(x => x.RpuId == td.RpuId && x.Status == WorkflowStatus.Posted)
             .OrderByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
@@ -193,8 +201,25 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
                 marketValue = assessment.MarketValue,
                 assessmentLevelPercent = assessment.AssessmentPercentage,
                 assessedValue = assessment.AssessedValue,
+                // The TD's rows: classification, actual use, market value, level, assessed value (MRPAAO Att. 4).
+                lines = assessment.Lines.OrderBy(l => l.Sequence).Select(l => new
+                {
+                    classification = l.Classification!.Name, actualUse = l.ActualUse!.Name, marketValue = l.MarketValue,
+                    assessmentLevelPercent = l.AssessmentPercentage, assessedValue = l.AssessedValue,
+                }),
             },
             signatories,
+            // A TD issued under a transfer carries the BIR clearance on its back (MRPAAO Annex A).
+            transferClearance = td.PropertyTransactionId is { } txId
+                ? await db.TransferTaxClearances.AsNoTracking().Where(x => x.PropertyTransactionId == txId).Select(c => new
+                {
+                    carNumber = c.CarNumber, carDate = c.CarDate, transferorName = c.TransferorName, transferorTin = c.TransferorTin,
+                    transfereeTin = c.TransfereeTin, capitalGainsTax = c.CapitalGainsTax, capitalGainsTaxReceipt = c.CapitalGainsTaxReceipt,
+                    capitalGainsTaxDate = c.CapitalGainsTaxDate, documentaryStampTax = c.DocumentaryStampTax,
+                    documentaryStampTaxReceipt = c.DocumentaryStampTaxReceipt, documentaryStampTaxDate = c.DocumentaryStampTaxDate,
+                    transferTax = c.TransferTax, transferTaxReceipt = c.TransferTaxReceipt, transferTaxDate = c.TransferTaxDate,
+                }).FirstOrDefaultAsync(cancellationToken)
+                : null,
         });
         // A cancelled TD stays printable — certified copies of historical records (LGC §472(b)(9));
         // the form marks it CANCELLED. A rejected or voided one never became a declaration.

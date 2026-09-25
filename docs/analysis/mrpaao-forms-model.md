@@ -1,7 +1,7 @@
 # PRIME — Forms Model from the MRPAAO (2004/2006)
 
-Status: **step 1 implemented 2026-09-25** (§6, §7); steps 2–7 are
-outlines.
+Status: **steps 1–3 implemented 2026-09-25** (§6–§11; step 1 is commit
+`c5b3f8d`). Steps 4–7 are outlines.
 
 Decision (user, 2026-09-25): the forms follow the **Manual on Real
 Property Appraisal and Assessment Operations** (`docs/References/ManualRPAandAO.pdf`,
@@ -420,4 +420,448 @@ FKs, indexes and 3 check constraints, and recreates the unknown-owner
 index with the unit in its key. It is applied to the local dev DB only.
 The dev DB now also holds a DEMO building RPU (`DEMO-BLDG-562763`) with a
 building-only owner.
+
+---
+
+## 8. Step 2 design — multi-row appraisal and assessment (approved 2026-09-25)
+
+### 8.1 What the manual needs, and what PRIME has
+
+| Manual (Att. 1–3) | PRIME today |
+|---|---|
+| Land appraisal: several strips (classification, sub-class, area, unit value, base MV) | One `Land` per RPU with one classification (unique index on `RpuId`) |
+| Other improvements: trees/plants (kind, number, unit value, base MV) | Nothing |
+| Market value adjustments: several factors (factor, %, value adjustment) | One `LocationFactor` multiplier |
+| Building: core by unit construction cost, plus additional items; assessment rows by actual use (mixed use) | One area × one SMV rate; components carry cost but are not valued |
+| Machinery: one row per machine on one FAAS | One `Machinery` per RPU (unique index) |
+| Property assessment: one row per actual use (MV, level, AV), then totals | One market value, one level, one assessed value |
+| TD: rows of classification, area, MV, actual use, level, AV | One classification and actual use on the TD |
+
+Everything downstream reads the single row: billing (`AssessedValue` plus
+the TD's classification, which picks classification-specific rates), the
+appraisal record, the Notice of Assessment, the forms, and general
+revision.
+
+### 8.2 The model: lines at each stage
+
+```text
+RPU
+ └─ Valuation (one per valuation run; totals)
+      └─ ValuationLine*   one per strip / improvement / building portion / machine
+           classification, sub-class, actual use, quantity + unit, unit value,
+           base value, adjustments, market value, own breakdown, source row
+ └─ Assessment (totals; FAAS header)
+      └─ AssessmentLine*  one per (classification, actual use)
+           market value = Σ its valuation lines, assessment level (resolved per line),
+           assessed value
+```
+
+- **`ValuationLine`**: the unit of calculation. `Valuation.ComputedMarketValue`
+  = Σ lines. Each line keeps its own breakdown (jsonb) and the SMV
+  schedule it used, so each FAAS appraisal row is reproducible (CLAUDE.md
+  §31). `Valuation.SourceType` stays (land/building/machinery).
+  `SourceId` becomes nullable, because a machinery FAAS has several sources.
+- **`AssessmentLine`**: valuation lines grouped by (classification, actual
+  use) — the manual's "Property Assessment" rows. Each group gets its own
+  assessment level: classification, actual use, property type and bracket.
+  `Assessment.MarketValue` and `Assessment.AssessedValue` = Σ lines.
+  `AssessmentLevelId` and `AssessmentPercentage` become nullable: set when
+  there is one line, null for a mixed-use FAAS, where the lines carry them.
+- **Rounding**: assessed value per line to centavos (today's rule), and the
+  total is the sum of rounded lines. DOMAIN VERIFICATION REQUIRED (the
+  manual's "nearest tens" stays a switch, off).
+- **Bracket basis** (DOMAIN VERIFICATION REQUIRED): the market value the
+  level bracket is looked up with. Setting `Assessment:LevelBracketBasis` =
+  `Line` (default: each line's own MV) or `Unit` (the RPU's total MV,
+  applied to every line). Whole-value (not marginal) application stays as
+  today.
+
+### 8.3 Inputs per kind
+
+**Land** (Att. 1):
+- `Land` stays the land record: location, road, corner lot, zoning, and
+  one row per land RPU.
+- New `LandStrip*`: classification, sub-class, actual use, zone, area,
+  area unit. Valued by the SMV schedule for its classification, actual
+  use and zone.
+- New `LandImprovement*` (trees, plants and other non-building
+  improvements):
+  - improvement kind (new lookup `ImprovementKind`), number,
+    productive/non-productive, actual use;
+  - valued by an SMV schedule row for that kind. `SmvSchedule` gains a
+    nullable `ImprovementKindId` and a unit such as "per tree".
+- New `LandAdjustment*`, one row per factor:
+  - it references an adjustment factor from a new configurable
+    `AdjustmentFactor` catalogue, belonging to an SMV: code, name,
+    percent, and which property type or classification it applies to;
+  - the percent is frozen on the row. Value adjustment = base value ×
+    Σ% / 100.
+  - The manual's examples (corner influence, road, distance to market,
+    blighted area) are data, never code.
+  - Adjustments apply per strip, or to all strips (a nullable `LandStripId`).
+- `Land.Area`, `ClassificationId`, `ActualUseId` and `SubClassificationId`
+  become the **principal strip's** mirror (kept in step by the service),
+  so existing readers keep working.
+- `LocationFactor` stays for rows that already carry it, applied as today.
+  New entries use adjustment rows.
+
+**Building** (Att. 2):
+- New `BuildingUsePortion*`: actual use, classification, floor area (Σ =
+  total floor area). A mixed-use building gives one assessment line per use.
+- Valuation: unit construction cost (the SMV rate for the building) ×
+  portion area = building core, then + additional items and × completion.
+  - Additional items are `BuildingComponent` rows flagged
+    `IsAdditionalItem` with a cost, added to the portion they belong to,
+    or spread by area.
+  - Depreciation stays absent until plan A9 supplies a configurable table.
+- A building with no portions values as one portion with the TD's
+  classification and actual use, which is today's behaviour.
+
+**Machinery** (Att. 3):
+- Drop the one-machine-per-RPU rule, so a machinery RPU holds several
+  `Machinery` rows.
+- Each gets `ActualUseId` and `ClassificationId` (default: the TD's) and
+  becomes one valuation line (LGC §224–225, unchanged).
+
+### 8.4 Downstream
+
+| Consumer | Change |
+|---|---|
+| `ValuationService` | New `ComputeForRpuAsync(rpuId)`, used by general revision and the UI. It builds all lines for the RPU in one valuation. The per-entity methods remain and value the whole RPU. |
+| `AssessmentService.CreateAsync` | Unchanged request. It groups the valuation lines into assessment lines and resolves a level per line. Refused, with the line named, if any line has no level. |
+| Billing | `BillingCalculationInput` takes assessment lines (classification, assessed value). Per tax type: tax = Σ line AV × rate for that line's classification. The increase cap applies to the tax type's total. New `TaxBillTaxTypeLine` rows keep each line's base, rate and tax for the breakdown. `TaxBill.AssessedValue` = total. `TaxBill.ClassificationId` = the principal line's. |
+| TD | The TD keeps its principal classification and actual use (the largest line by market value). Its rows come from its assessment's lines. The prepared TD (step 1) takes the principal from the lines. |
+| Appraisal record (A7), NA, forms | They carry the lines. Templates render rows (step 5). |
+| General revision | Uses `ComputeForRpuAsync`, so every kind and every line is revalued together. |
+
+### 8.5 Existing data (migration)
+
+The migration is additive, plus one data step that derives lines from
+what is already stored:
+- Each existing `Valuation` gets one `ValuationLine` with the same
+  market value and breakdown.
+- Each existing `Assessment` gets one `AssessmentLine` with the same market
+  value, level, percent and assessed value.
+- Each existing `Land` gets one `LandStrip` from its area, classification
+  and actual use.
+
+No value changes. Every assessment then has at least one line, so readers
+can rely on lines. The migration drops the unique index on
+`Machinery.RpuId`; that is the only constraint removed.
+
+### 8.6 Delivery in four parts (each built, tested and shown to you)
+
+1. **2a — lines core**:
+   - `ValuationLine` and `AssessmentLine`, the backfill,
+     `ComputeForRpuAsync`, and assessments built from lines;
+   - billing per line, and the appraisal record, notice and bill carrying
+     lines;
+   - general revision switched over;
+   - UI: the assessment lines table under each RPU.
+
+   No new inputs yet, so every existing unit gets exactly one line.
+2. **2b — land strips, improvements, adjustments**: the three land tables,
+   the `ImprovementKind` and `AdjustmentFactor` catalogues (with maker-checker
+   approval like other configuration), `SmvSchedule.ImprovementKindId`, and
+   the land UI.
+3. **2c — building use portions and additional items**.
+4. **2d — several machines per machinery RPU**.
+
+### 8.7 Decisions (user, 2026-09-25: "agree to all")
+
+1. Assessment lines are grouped by (classification, actual use), with a
+   level per line.
+2. The default bracket basis is `Line`.
+3. Tax is computed per line and summed per tax type, with the increase
+   cap on the total.
+4. `LocationFactor` is kept for legacy rows only.
+5. Delivered in the order 2a → 2b → 2c → 2d.
+
+**DOMAIN VERIFICATION REQUIRED**: the bracket basis; rounding per line
+vs. per total; whether adjustment factors add (Σ%) or compound; how
+additional items and depreciation combine for buildings (A9); and the
+productive / non-productive treatment of trees.
+
+---
+
+## 9. Step 2 — implementation status (2026-09-25)
+
+**2a — lines core.**
+- **New tables:** `ValuationLines`, `AssessmentLines` and
+  `TaxBillTaxTypeLines`.
+- **Assessment:** `AssessmentLevelId` and `AssessmentPercentage` are now
+  nullable, and set only for a single-line assessment (check constraint
+  `CK_Assessments_Level`).
+- **Assessment creation:** `AssessmentService.CreateAsync` groups a
+  valuation's lines by (classification, actual use). A line without its
+  own classification or use takes the unit's TD's. Each group gets its own
+  level. The bracket basis is the `Assessment:LevelBracketBasis` setting,
+  `Line` by default. A group without a level is refused and named
+  (`ASSESSMENT_LEVEL_NOT_FOUND`).
+- **Billing calculator:** takes `Lines`. Each line is taxed at the rate
+  for its classification (class-specific rate first, else the general
+  one) and rounded, and the lines are summed per tax type. The increase
+  cap applies to the tax type's total. The bill keeps the per-line tax
+  (`TaxBillTaxTypeLine`), and the tax type names the principal line's rate.
+- **Other readers:** `ValuationService.ComputeForRpuAsync` values a whole
+  unit, and general revision uses it. The appraisal record, the TD form
+  data, the bill DTO and the prepared TD (step 1) read the lines. The
+  prepared TD takes the principal line's classification and use.
+- **Existing records:** the migration gave every existing valuation,
+  assessment and bill tax row one line with the same values. This was
+  verified on the dev DB: 0 mismatches.
+
+**2b — land.**
+- **New tables:** `LandStrips`, `LandImprovements` and `LandAdjustments`,
+  plus the `ImprovementKinds` lookup and the `AdjustmentFactors`
+  configuration.
+  - Adjustment factors are versioned per (SMV, code) with maker-checker
+    approval, through `/api/adjustment-factors`.
+  - `SmvSchedule.ImprovementKindId` holds rates for trees and plants.
+    The schedule versioning key now includes it.
+- **Strips and improvements:**
+  - A new land starts with strip 1 from its registration.
+  - `POST /api/land/{id}/strips|improvements|adjustments` add rows.
+  - Land keeps the total area and mirrors the principal strip's
+    classification.
+  - Each strip is priced by its own SMV rate.
+  - Each improvement is priced by the rate for its kind, under its own
+    classification and use or the principal strip's.
+- **Adjustments:** they add (Σ%), then the legacy `LocationFactor`
+  applies, then the schedule limits.
+  - **Deviation from §8.3:** an adjustment names the factor by **code**.
+    Valuation takes the version in force under the SMV that prices the
+    strip (`ADJUSTMENT_FACTOR_NOT_FOUND` otherwise). So a general revision
+    under a new SMV applies the new ordinance's percentages without
+    re-entering adjustments.
+  - A land with no strips is valued as one strip of its own fields,
+    adjustments included. Adding a strip to such a land first turns its
+    registered area into strip 1.
+- **Existing land:** the migration gave every existing land one strip.
+- **Breakdown change:** the location factor now appears only when the
+  land carries one. Before, a factor of 1 was always shown.
+
+**2c — buildings.**
+- **New table:** `BuildingUsePortions`. `BuildingComponents` gains
+  `IsAdditionalItem` (which requires a cost, by check constraint) and
+  `BuildingUsePortionId`.
+- **Endpoints:** `POST /api/buildings/{id}/use-portions|components`. This
+  is the first component endpoint; components were model-only before.
+- **Valuation:** each portion's floor area × its SMV rate, plus its
+  additional items (items not tied to a portion are spread by floor area
+  to the centavo), × completion.
+  - The portions must total the building's total floor area
+    (`BUILDING_USE_PORTIONS_INCOMPLETE`), and adding one cannot exceed it.
+  - A building with no portions values as before, under its TD's
+    classification and use.
+
+**2d — machinery.**
+- The unique index on `MachineryUnits.RpuId` is dropped, so several
+  machines per unit are allowed. This is the only constraint removed in
+  step 2.
+- Machines gain an optional `ClassificationId` and `ActualUseId`
+  (default: the TD's).
+- Valuing any machine values the whole unit, one line per machine.
+  `Valuation.SourceId` names the first machine; the lines name each one.
+- `GET /api/rpus/{id}/machinery-units` lists the machines. The old
+  single-machine endpoint returns the first one.
+- The appraisal record carries `MachineryUnits`.
+
+**UI.**
+- Assessments table: shows "N rows" when a unit has several levels.
+- Appraisal drawer: appraisal rows and assessment rows, with bracket and
+  ordinance.
+- Land: strips, improvements and adjustments tables with add dialogs.
+- Building: use portions (with a coverage warning), and components with
+  an additional-item flag.
+- Machinery: a machines table with "Add machine". A machine can name its
+  own classification and use.
+
+**Known gaps (not fixed here):**
+- **Assessment level brackets cannot be entered through the API.**
+  `AssessmentLevelService` keeps one open level per (classification, use,
+  property type) and closes it when a new one is created. So a bracket set
+  (e.g. 0–250,000 at x%, above at y%) exists only as data. The tests
+  insert brackets directly. This needs a small change to how the level
+  service versions brackets.
+- There is no correction path for strips, improvements, adjustments,
+  portions or components: rows can be added, not edited or ended. Land,
+  Building and Machinery have no update endpoints either.
+- The provisional FAAS template (A8) still shows one assessment level.
+  For a mixed-use assessment it shows the principal line's fields and a
+  blank level. The row tables are step 5 (MRPAAO templates).
+- The improvement kinds and component types lookups have no admin API
+  (the same gap as the other lookups).
+
+**DOMAIN VERIFICATION REQUIRED** (unchanged from §8.7):
+- the bracket basis;
+- rounding per line;
+- whether adjustment percentages add or compound;
+- whether adjustments apply to improvements (today they do not);
+- how additional items are spread;
+- how productive and non-productive trees are treated.
+
+**Verified:**
+- Unit tests: multi-line billing (per-class rates, principal rate, per-line
+  rounding, cap on the total, sum check); land strip, improvement and
+  building-portion calculations; spreading by area.
+- Integration tests (`AssessmentLinesTests`, `LandAppraisalTests`,
+  `BuildingAppraisalTests`, `MachineryAppraisalTests`):
+  - a level per line, and the `Unit` bracket basis;
+  - a missing level named;
+  - a bill taxing each line;
+  - strips, improvements and adjustments valued and assessed by use;
+  - an unknown factor code, and a factor not in force;
+  - use portions with spread and assigned additional items;
+  - incomplete or excess portions;
+  - two machines on one FAAS;
+  - a machine with missing inputs named.
+- Full suite passes (101 domain, 37 application, 127 integration).
+- Production frontend build and lint pass.
+- In the browser on `DEMO-BILL-AE94B8`:
+  - the appraisal drawer shows the assessment row;
+  - the land shows the backfilled strip 1;
+  - adding a 100 sqm strip raised the land area to 600 sqm;
+  - the building and machinery sections render.
+
+**Migrations:** `AppraisalAndAssessmentLines` (with backfill),
+`LandStripsImprovementsAdjustments` (with backfill),
+`BuildingUsePortionsAndAdditionalItems` and `SeveralMachinesPerUnit`.
+All are applied to the local dev DB only. The DEMO land now has two
+strips (500 + 100 sqm).
+
+---
+
+## 10. Step 3 design — descriptive fields (implemented; see §11)
+
+These fields describe the property and are printed on the FAAS and TD.
+None of them changes a value.
+
+### 10.1 Fields
+
+| Where | New fields | Source (MRPAAO) |
+|---|---|---|
+| **Property** | Boundaries: North, East, South, West (text, max 500 each). Title kind (new lookup `TitleType`: OCT, TCT, CLOA, CCT … as LGU data) and title date. | Att. 1, 4; p.146 |
+| **Building** | Building permit no. and date issued; CCT no.; certificate of completion date; certificate of occupancy date; date constructed/completed; date occupied. The age is computed. | Att. 2; p.150 |
+| **Building floors** (new `BuildingFloor*`) | Floor number and area. The manual's form has 1st–4th floor areas ("use additional sheets"), so PRIME allows any number of floors. Floor areas must total the building's total floor area when floors are given. | Att. 2 |
+| **Structural materials** (new `BuildingMaterial*`) | Structure part × material × floor (null = all floors), with "Others (specify)" text. It uses two configurable catalogues, `StructuralPart` (roof, flooring, walls & partitions …) and `StructuralMaterial` (per part). | Att. 2; p.150–152 |
+| **Machinery** | Year installed; year of initial operation; conversion factor. | Att. 3 |
+| **LGU settings** | `Lgu:SanggunianName` (e.g. "Sangguniang Panlalawigan"), for the TD's printed note. | Att. 4 note |
+| **Transfer** (new `TransferTaxClearance`, one per transfer transaction) | BIR CAR no. and date; transferor name and TIN; transferee TIN; capital gains tax, documentary stamp tax and transfer tax paid (amount, OR no. and date each). | Annex A (BLGF MC 18-2004) |
+
+### 10.2 Editing descriptive fields
+
+Today Property, Land, Building and Machinery can only be created, not
+corrected. Step 3 adds **update endpoints for descriptive fields only**
+(not area, classification or anything that is valued):
+- a reason is required;
+- the audit log keeps the old and new values (it already does on every save);
+- an issued FAAS or TD keeps what it printed (frozen snapshot).
+
+Valued fields keep changing only through new rows, as now.
+
+### 10.3 Not in this step
+
+- **Floor plan and photograph attachments.** They need document upload.
+  The `Document` metadata table exists, but no storage service does yet.
+  They come with the document storage work.
+- **Deriving replacement cost from the conversion factor.** The factor is
+  recorded and printed only; RCN stays an entered figure.
+  DOMAIN VERIFICATION REQUIRED before any derivation.
+
+### 10.4 Open for review
+
+1. Descriptive fields are corrected in place, with a required reason and
+   the audit log, rather than versioned. Agree?
+2. Seed the manual's structural parts and materials lists (p.150–152) as
+   starting reference data, labelled "MRPAAO 2004" and editable. They are
+   descriptors, not values. Agree?
+3. Record the conversion factor only (no derivation)?
+4. Defer attachments to document storage?
+
+**DOMAIN VERIFICATION REQUIRED:** the title kinds in use locally; the CAR
+fields the LAM or BIR currently require on a TD.
+
+---
+
+## 11. Step 3 — implementation status (2026-09-25)
+
+The four §10.4 questions were taken as recommended, since the user said
+"next step" without answering:
+- descriptive fields are corrected in place, with a reason and the audit log;
+- the manual's lists are seeded;
+- the conversion factor is recorded only;
+- attachments are deferred.
+
+**Data:** migration `DescriptiveFields` (additive).
+- New columns on `Property` (boundaries, title kind and date),
+  `Buildings` (permit, CCT, certificate and occupancy dates) and
+  `MachineryUnits` (year installed, year of initial operation, conversion
+  factor).
+- New tables: `BuildingFloors`, `BuildingMaterials` and
+  `TransferTaxClearances` (one per transaction), plus the lookups
+  `TitleTypes`, `StructuralParts` and `StructuralMaterials` (materials
+  carry their part).
+- Setting `Lgu:SanggunianName`, passed to every form as
+  `lgu.sanggunianName`.
+
+**Seed:** 4 title kinds (OCT, TCT, CLOA, CCT) and the manual's checklist
+(16 structure parts, 66 materials; p.150–152), inserted by the migration
+and skipped when a code exists. The description reads "MRPAAO 2004
+(superseded) … starting list, editable".
+- DOMAIN VERIFICATION REQUIRED: the manual's two-column print makes
+  Foundation vs. Columns ambiguous. It was read as Foundation {reinforced
+  concrete, plain concrete}, Columns {steel, reinforced concrete, wood}.
+
+**API** (`DescriptionsController`; each returns the record as it now
+stands):
+- `PUT /api/properties/{id}/description`
+- `PUT /api/buildings/{id}/description`
+- `POST /api/buildings/{id}/floors|materials`
+- `PUT /api/machinery/{id}/description`
+- `PUT /api/transactions/{id}/tax-clearance` (transfers only, before
+  approval)
+- `GET /api/reference/title-types|structural-parts|structural-materials`
+
+Corrections require a reason, which is stored as the audit log's reason
+with the old and new values. The rules:
+- valued fields are never edited here;
+- floors cannot exceed the total floor area, and a floor number is unique;
+- a checklist entry is a catalogue material of that part, or "Others
+  (specify)", never both.
+
+**FAAS and TD data:**
+- The appraisal record carries the boundaries, title kind and date, the
+  building's descriptive dates, floors and materials, and the machinery
+  years and conversion factor.
+- The property form data carries boundaries and title.
+- The TD form data carries `transferClearance` when the TD was issued
+  under a transfer.
+
+**UI:**
+- Property profile: "Edit description" (title and boundaries shown in
+  Basic Information).
+- Building: a descriptive summary with "Edit description", plus floor-area
+  and structural-materials tables with add dialogs (materials filtered by
+  part).
+- Machinery: "Edit" per machine.
+- Transfer drawer: a "BIR clearance (CAR)" row with Record/Edit.
+
+**Verified:**
+- 4 integration tests (`DescriptiveFieldsTests`):
+  - a property correction refused without a reason, then audited with the
+    reason and on the appraisal record;
+  - floor and material rules;
+  - a transfer clearance recorded and present in its TD's form data;
+  - a clearance refused on a non-transfer.
+- Full suite passes (101 domain, 37 application, 131 integration).
+- Production frontend build and lint pass.
+- In the browser on `DEMO-BILL-AE94B8` (API on http://localhost:5221):
+  - "Edit description" saved title kind TCT, number T-DEMO-123 and two
+    boundaries, and Basic Information shows them;
+  - the transfer drawer shows the clearance row;
+  - no console errors.
+
+**Not in this step:** attachments (document storage); a correction path
+for floors and materials (add-only, like the step 2 rows).
 

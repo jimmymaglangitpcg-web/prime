@@ -1080,9 +1080,30 @@ its rules kept configurable. **Step 1 done, uncommitted:**
   machinery-to-building links;
 - per-unit parties and unit transfers.
 
-Migration `FaasIdentityAndUnits` is applied locally only. Next: step 2
-(multi-row appraisal and assessment). Plan items A9 (building
-depreciation) and A10 (LAM checklist) remain.
+Migration `FaasIdentityAndUnits` is applied locally only. Step 1 is
+committed (`c5b3f8d`, not pushed).
+
+**Step 2 done (2026-09-25, uncommitted):** multi-row appraisal and
+assessment (plan §9).
+- Valuation and assessment lines, a level per (classification, use), and
+  billing per line.
+- Land strips, trees and plants, and SMV adjustment factors by code.
+- Building use portions and additional items.
+- Several machines per machinery unit.
+
+Four migrations are applied locally only. Known gap: level brackets can't
+be entered through the level API.
+
+**Step 3 done (2026-09-25, uncommitted):** descriptive fields (plan §11).
+- Boundaries, title kind and date.
+- Building permit, certificates, floors and a structural materials
+  checklist seeded from the manual.
+- Machinery years and conversion factor.
+- The transfer's BIR clearance.
+- Corrections in place with a reason and the audit log.
+
+Migration `DescriptiveFields` is applied locally only. Next: step 4
+(transaction code and posting stamp). Plan items A9 and A10 remain.
 
 Candidates, in roadmap order:
 

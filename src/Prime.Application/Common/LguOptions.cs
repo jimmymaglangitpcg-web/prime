@@ -13,6 +13,8 @@ public sealed class LguOptions
     public string? Office { get; set; }
     public string? Province { get; set; }
     public string? Address { get; set; }
+    /// <summary>The local legislature for the TD's printed note, e.g. "Sangguniang Panlalawigan" (MRPAAO Att. 4).</summary>
+    public string? SanggunianName { get; set; }
 
     /// <summary>IANA time zone of the LGU, e.g. "Asia/Manila". Defines "today" for business dates (<c>IClock</c>).</summary>
     public string? TimeZone { get; set; }

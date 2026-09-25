@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '../lib/apiClient';
-import type { BuildingDto, CreateBuildingRequest } from '../lib/types';
+import type { BuildingDto, CreateBuildingRequest, AddBuildingComponentRequest, AddBuildingUsePortionRequest } from '../lib/types';
 
 export function useBuildingByRpu(rpuId: string | undefined) {
   return useQuery({
@@ -21,3 +21,19 @@ export function useCreateBuilding(propertyId: string) {
     },
   });
 }
+
+function useAddBuildingRow<T>(path: string, buildingId: string, rpuId: string, propertyId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: T) => apiPost<BuildingDto>(`/api/buildings/${buildingId}/${path}`, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rpus', rpuId, 'building'] });
+      queryClient.invalidateQueries({ queryKey: ['properties', propertyId] });
+    },
+  });
+}
+
+export const useAddBuildingUsePortion = (buildingId: string, rpuId: string, propertyId: string) =>
+  useAddBuildingRow<AddBuildingUsePortionRequest>('use-portions', buildingId, rpuId, propertyId);
+export const useAddBuildingComponent = (buildingId: string, rpuId: string, propertyId: string) =>
+  useAddBuildingRow<AddBuildingComponentRequest>('components', buildingId, rpuId, propertyId);

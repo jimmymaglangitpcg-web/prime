@@ -17,8 +17,8 @@ public sealed record AssessmentDto(
     Guid ValuationId,
     int AssessmentYear,
     decimal MarketValue,
-    Guid AssessmentLevelId,
-    decimal AssessmentPercentage,
+    Guid? AssessmentLevelId,
+    decimal? AssessmentPercentage,
     decimal AssessedValue,
     WorkflowStatus Status,
     DateOnly EffectiveDate,
@@ -28,4 +28,10 @@ public sealed record AssessmentDto(
     string? FaasNumber,
     Guid? ApprovedBy,
     DateTimeOffset? ApprovedAt,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<AssessmentLineDto> Lines);
+
+/// <summary>A FAAS "Property Assessment" row (docs/analysis/mrpaao-forms-model.md §8.2).</summary>
+public sealed record AssessmentLineDto(
+    Guid Id, int Sequence, Guid ClassificationId, string ClassificationName, Guid ActualUseId, string ActualUseName,
+    decimal MarketValue, Guid AssessmentLevelId, decimal AssessmentPercentage, decimal AssessedValue);

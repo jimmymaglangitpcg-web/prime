@@ -21,6 +21,8 @@ public sealed class SmvScheduleConfiguration : IEntityTypeConfiguration<SmvSched
         builder.HasOne(x => x.ActualUse).WithMany().HasForeignKey(x => x.ActualUseId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.PropertyType).WithMany().HasForeignKey(x => x.PropertyTypeId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Zone).WithMany().HasForeignKey(x => x.ZoneId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ImprovementKind).WithMany().HasForeignKey(x => x.ImprovementKindId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.ImprovementKindId);
 
         // Effective-date composite index — docs/DATABASE.md §4.
         builder.HasIndex(x => new { x.ClassificationId, x.ActualUseId, x.PropertyTypeId, x.ZoneId, x.EffectiveDate });

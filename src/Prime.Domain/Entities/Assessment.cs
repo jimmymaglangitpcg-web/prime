@@ -1,4 +1,5 @@
 using Prime.Domain.Common;
+using Prime.Domain.Entities.Reference;
 using Prime.Domain.Enums;
 
 namespace Prime.Domain.Entities;
@@ -31,10 +32,18 @@ public sealed class Assessment : AuditableEntity
     public int AssessmentYear { get; set; }
     public decimal MarketValue { get; set; }
 
-    public Guid AssessmentLevelId { get; set; }
+    /// <summary>
+    /// The level applied when the assessment has one line; null for a
+    /// mixed-use assessment, whose <see cref="Lines"/> carry a level each.
+    /// </summary>
+    public Guid? AssessmentLevelId { get; set; }
     public AssessmentLevel? AssessmentLevel { get; set; }
-    public decimal AssessmentPercentage { get; set; }
+    public decimal? AssessmentPercentage { get; set; }
+    /// <summary>Σ of the lines' assessed values.</summary>
     public decimal AssessedValue { get; set; }
+
+    /// <summary>The FAAS "Property Assessment" rows (docs/analysis/mrpaao-forms-model.md §8.2).</summary>
+    public List<AssessmentLine> Lines { get; set; } = [];
 
     public WorkflowStatus Status { get; set; } = WorkflowStatus.Draft;
     public DateOnly EffectiveDate { get; set; }
@@ -59,4 +68,28 @@ public sealed class Assessment : AuditableEntity
     public string? FaasNumber { get; set; }
     public Guid? ApprovedBy { get; set; }
     public DateTimeOffset? ApprovedAt { get; set; }
+}
+
+/// <summary>
+/// One FAAS "Property Assessment" row: the valuation lines of one
+/// classification and actual use, their market value, the level applied
+/// (frozen, like the assessment's) and the assessed value.
+/// </summary>
+public sealed class AssessmentLine : Entity
+{
+    public Guid AssessmentId { get; set; }
+    public int Sequence { get; set; }
+
+    public Guid ClassificationId { get; set; }
+    public Classification? Classification { get; set; }
+    public Guid ActualUseId { get; set; }
+    public ActualUse? ActualUse { get; set; }
+    public Guid PropertyTypeId { get; set; }
+    public PropertyType? PropertyType { get; set; }
+
+    public decimal MarketValue { get; set; }
+    public Guid AssessmentLevelId { get; set; }
+    public AssessmentLevel? AssessmentLevel { get; set; }
+    public decimal AssessmentPercentage { get; set; }
+    public decimal AssessedValue { get; set; }
 }

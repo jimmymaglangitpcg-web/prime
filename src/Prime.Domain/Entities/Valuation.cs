@@ -1,4 +1,5 @@
 using Prime.Domain.Common;
+using Prime.Domain.Entities.Reference;
 using Prime.Domain.Enums;
 
 namespace Prime.Domain.Entities;
@@ -38,4 +39,46 @@ public sealed class Valuation : AuditableEntity
 
     public DateOnly EffectiveDate { get; set; }
     public DateTimeOffset ComputedAt { get; set; }
+
+    /// <summary>
+    /// The appraisal rows (docs/analysis/mrpaao-forms-model.md §8.2):
+    /// <see cref="ComputedMarketValue"/> is their sum. Valuations made before
+    /// lines existed were given one line carrying the same values.
+    /// </summary>
+    public List<ValuationLine> Lines { get; set; } = [];
+}
+
+/// <summary>
+/// One FAAS appraisal row: what was valued, under which classification and
+/// actual use, from which schedule rate, with its own breakdown. Immutable
+/// like its <see cref="Valuation"/>. A null classification or actual use is
+/// taken from the unit's Tax Declaration when the line is assessed (buildings
+/// and machinery carry none of their own yet).
+/// </summary>
+public sealed class ValuationLine : Entity
+{
+    public Guid ValuationId { get; set; }
+    public int Sequence { get; set; }
+
+    public ValuationLineSource Source { get; set; }
+    /// <summary>The row valued (Land, Building, Machinery …); no FK, since it spans tables.</summary>
+    public Guid? SourceId { get; set; }
+    public string? Description { get; set; }
+
+    public Guid? ClassificationId { get; set; }
+    public Classification? Classification { get; set; }
+    public Guid? SubClassificationId { get; set; }
+    public SubClassification? SubClassification { get; set; }
+    public Guid? ActualUseId { get; set; }
+    public ActualUse? ActualUse { get; set; }
+
+    /// <summary>Area, floor area or count; with <see cref="Unit"/> and <see cref="UnitValue"/> when the row is rate-based.</summary>
+    public decimal? Quantity { get; set; }
+    public string? Unit { get; set; }
+    public decimal? UnitValue { get; set; }
+    public Guid? SmvScheduleId { get; set; }
+    public SmvSchedule? SmvSchedule { get; set; }
+
+    public decimal MarketValue { get; set; }
+    public string BreakdownJson { get; set; } = "{}";
 }

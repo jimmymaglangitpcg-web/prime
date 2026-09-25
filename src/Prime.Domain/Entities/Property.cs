@@ -31,5 +31,19 @@ public sealed class PropertyEntity : AuditableEntity
     public string? TitleNumber { get; set; }
     public string? TaxMapNumber { get; set; }
 
+    /// <summary>The kind of title (OCT, TCT, CLOA, CCT …) and its date of entry (MRPAAO Att. 1, 4).</summary>
+    public Guid? TitleTypeId { get; set; }
+    public TitleType? TitleType { get; set; }
+    public DateOnly? TitleDate { get; set; }
+
+    /// <summary>
+    /// Boundaries as the FAAS and TD state them (MRPAAO p.146): the adjoining
+    /// assessor's lot and survey lot numbers, owners, streets or rivers.
+    /// </summary>
+    public string? BoundaryNorth { get; set; }
+    public string? BoundaryEast { get; set; }
+    public string? BoundarySouth { get; set; }
+    public string? BoundaryWest { get; set; }
+
     public RecordStatus Status { get; set; } = RecordStatus.Active;
 }

@@ -76,3 +76,23 @@ public sealed class PropertyType : LookupEntity;
 /// collection reporting (§41). docs/BILLING.md §3.1.
 /// </summary>
 public sealed class TaxType : LookupEntity;
+
+/// <summary>
+/// Kinds of land improvement other than buildings — trees, plants and the
+/// like (MRPAAO Att. 1 "Other Improvements"). The list comes from the LGU's
+/// SMV; none is built in.
+/// </summary>
+public sealed class ImprovementKind : LookupEntity;
+
+/// <summary>Kinds of land title (OCT, TCT, CLOA, CCT …) for the FAAS and TD (MRPAAO Att. 1, 4).</summary>
+public sealed class TitleType : LookupEntity;
+
+/// <summary>Structure parts of the FAAS structural materials checklist (MRPAAO p.150–152): foundation, columns, roofing …</summary>
+public sealed class StructuralPart : LookupEntity;
+
+/// <summary>A material for one structure part (MRPAAO p.150–152), e.g. roofing — G.I. sheet.</summary>
+public sealed class StructuralMaterial : LookupEntity
+{
+    public Guid StructuralPartId { get; set; }
+    public StructuralPart? StructuralPart { get; set; }
+}

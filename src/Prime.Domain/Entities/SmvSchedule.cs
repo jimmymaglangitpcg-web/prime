@@ -27,6 +27,13 @@ public sealed class SmvSchedule : AuditableEntity
     public Guid? ZoneId { get; set; }
     public Zone? Zone { get; set; }
 
+    /// <summary>
+    /// Set for a land improvement's rate (trees, plants — unit such as "per
+    /// tree"); null for land and building rates (docs/analysis/mrpaao-forms-model.md §8.3).
+    /// </summary>
+    public Guid? ImprovementKindId { get; set; }
+    public ImprovementKind? ImprovementKind { get; set; }
+
     public string Unit { get; set; } = "per sqm";
     public decimal MarketValue { get; set; }
     public decimal? MinimumValue { get; set; }

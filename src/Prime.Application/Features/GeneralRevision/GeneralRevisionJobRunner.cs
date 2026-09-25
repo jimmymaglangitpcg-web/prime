@@ -67,7 +67,7 @@ public sealed class GeneralRevisionJobRunner(
             return;
         }
 
-        var valuationResult = await ComputeValuationAsync(rpu, cancellationToken);
+        var valuationResult = await valuationService.ComputeForRpuAsync(rpu.Id, cancellationToken);
         if (valuationResult.IsFailure)
         {
             job.FailedCount++;
@@ -92,33 +92,6 @@ public sealed class GeneralRevisionJobRunner(
         if (assessmentResult.IsFailure)
         {
             job.FailedCount++;
-        }
-    }
-
-    private async Task<Result<ValuationDto>> ComputeValuationAsync(RealPropertyUnit rpu, CancellationToken cancellationToken)
-    {
-        switch (rpu.RpuType)
-        {
-            case RpuType.Land:
-                var land = await db.Lands.FirstOrDefaultAsync(x => x.RpuId == rpu.Id, cancellationToken);
-                return land is null
-                    ? Result.Failure<ValuationDto>("LAND_NOT_FOUND", "No Land record exists for this RPU.")
-                    : await valuationService.ComputeForLandAsync(land.Id, cancellationToken);
-
-            case RpuType.Building:
-                var building = await db.Buildings.FirstOrDefaultAsync(x => x.RpuId == rpu.Id, cancellationToken);
-                return building is null
-                    ? Result.Failure<ValuationDto>("BUILDING_NOT_FOUND", "No Building record exists for this RPU.")
-                    : await valuationService.ComputeForBuildingAsync(building.Id, cancellationToken);
-
-            case RpuType.Machinery:
-                var machinery = await db.MachineryUnits.FirstOrDefaultAsync(x => x.RpuId == rpu.Id, cancellationToken);
-                return machinery is null
-                    ? Result.Failure<ValuationDto>("MACHINERY_NOT_FOUND", "No Machinery record exists for this RPU.")
-                    : await valuationService.ComputeForMachineryAsync(machinery.Id, cancellationToken);
-
-            default:
-                return Result.Failure<ValuationDto>("UNSUPPORTED_RPU_TYPE", $"RPU type '{rpu.RpuType}' is not yet valuable.");
         }
     }
 }

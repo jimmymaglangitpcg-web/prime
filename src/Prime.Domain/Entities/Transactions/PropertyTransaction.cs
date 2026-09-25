@@ -79,6 +79,9 @@ public sealed class PropertyTransaction : AuditableEntity
     public List<PropertyTransactionParty> NewParties { get; set; } = [];
     public List<PropertyTransactionTdCancellation> TdCancellations { get; set; } = [];
     public List<PropertyTransactionProperty> RelatedProperties { get; set; } = [];
+
+    /// <summary>For a transfer: the BIR clearance and taxes paid (MRPAAO Annex A; BLGF MC 18-2004).</summary>
+    public TransferTaxClearance? TaxClearance { get; set; }
 }
 
 /// <summary>A prerequisite copied from the type when the transaction is opened, then marked satisfied with evidence.</summary>
@@ -132,3 +135,30 @@ public sealed class PropertyTransactionProperty : Entity
     public PropertyEntity? Property { get; set; }
     public TransactionPropertyRole Role { get; set; }
 }
+
+/// <summary>
+/// The Certificate Authorizing Registration and taxes paid on a transfer,
+/// recorded at the back of the new TD (MRPAAO Annex A: BLGF MC 18-2004
+/// relaying RR 24-02). DOMAIN VERIFICATION REQUIRED: the fields the LAM and
+/// the BIR currently require.
+/// </summary>
+public sealed class TransferTaxClearance : AuditableEntity
+{
+    public Guid PropertyTransactionId { get; set; }
+    public string? CarNumber { get; set; }
+    public DateOnly? CarDate { get; set; }
+    public string? TransferorName { get; set; }
+    public string? TransferorTin { get; set; }
+    public string? TransfereeTin { get; set; }
+    public decimal? CapitalGainsTax { get; set; }
+    public string? CapitalGainsTaxReceipt { get; set; }
+    public DateOnly? CapitalGainsTaxDate { get; set; }
+    public decimal? DocumentaryStampTax { get; set; }
+    public string? DocumentaryStampTaxReceipt { get; set; }
+    public DateOnly? DocumentaryStampTaxDate { get; set; }
+    public decimal? TransferTax { get; set; }
+    public string? TransferTaxReceipt { get; set; }
+    public DateOnly? TransferTaxDate { get; set; }
+    public string? Remarks { get; set; }
+}
+

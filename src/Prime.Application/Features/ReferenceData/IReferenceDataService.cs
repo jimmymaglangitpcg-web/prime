@@ -23,5 +23,14 @@ public interface IReferenceDataService
     Task<IReadOnlyList<LookupDto>> GetStructuralTypesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LookupDto>> GetMachineryTypesAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LookupDto>> GetTaxTypesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LookupDto>> GetImprovementKindsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LookupDto>> GetBuildingComponentTypesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LookupDto>> GetTitleTypesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LookupDto>> GetStructuralPartsAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<StructuralMaterialDto>> GetStructuralMaterialsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LookupDto>> GetAnnotationTypesAsync(CancellationToken cancellationToken = default);
 }
+
+/// <summary>A material of the structural checklist, with the structure part it belongs to.</summary>
+public sealed record StructuralMaterialDto(Guid Id, string Code, string Name, Guid StructuralPartId, int SortOrder);
+

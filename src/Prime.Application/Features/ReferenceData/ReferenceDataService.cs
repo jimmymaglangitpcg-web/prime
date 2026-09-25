@@ -72,6 +72,22 @@ public sealed class ReferenceDataService(IApplicationDbContext db) : IReferenceD
     public Task<IReadOnlyList<LookupDto>> GetTaxTypesAsync(CancellationToken cancellationToken = default) =>
         GetLookupAsync(db.TaxTypes, cancellationToken);
 
+    public Task<IReadOnlyList<LookupDto>> GetImprovementKindsAsync(CancellationToken cancellationToken = default) =>
+        GetLookupAsync(db.ImprovementKinds, cancellationToken);
+
+    public Task<IReadOnlyList<LookupDto>> GetBuildingComponentTypesAsync(CancellationToken cancellationToken = default) =>
+        GetLookupAsync(db.BuildingComponentTypes, cancellationToken);
+
+    public Task<IReadOnlyList<LookupDto>> GetTitleTypesAsync(CancellationToken cancellationToken = default) =>
+        GetLookupAsync(db.TitleTypes, cancellationToken);
+
+    public Task<IReadOnlyList<LookupDto>> GetStructuralPartsAsync(CancellationToken cancellationToken = default) =>
+        GetLookupAsync(db.StructuralParts, cancellationToken);
+
+    public async Task<IReadOnlyList<StructuralMaterialDto>> GetStructuralMaterialsAsync(CancellationToken cancellationToken = default) =>
+        await db.StructuralMaterials.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.SortOrder).ThenBy(x => x.Name)
+            .Select(x => new StructuralMaterialDto(x.Id, x.Code, x.Name, x.StructuralPartId, x.SortOrder)).ToListAsync(cancellationToken);
+
     public Task<IReadOnlyList<LookupDto>> GetAnnotationTypesAsync(CancellationToken cancellationToken = default) =>
         GetLookupAsync(db.AnnotationTypes, cancellationToken);
 

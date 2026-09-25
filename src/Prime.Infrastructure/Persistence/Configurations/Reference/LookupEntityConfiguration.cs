@@ -40,3 +40,16 @@ public sealed class MachineryTypeConfiguration : LookupEntityConfiguration<Machi
 public sealed class OwnershipTypeConfiguration : LookupEntityConfiguration<OwnershipType>;
 public sealed class DocumentTypeConfiguration : LookupEntityConfiguration<DocumentType>;
 public sealed class PropertyTypeConfiguration : LookupEntityConfiguration<PropertyType>;
+public sealed class ImprovementKindConfiguration : LookupEntityConfiguration<ImprovementKind>;
+public sealed class TitleTypeConfiguration : LookupEntityConfiguration<TitleType>;
+public sealed class StructuralPartConfiguration : LookupEntityConfiguration<StructuralPart>;
+
+public sealed class StructuralMaterialConfiguration : LookupEntityConfiguration<StructuralMaterial>
+{
+    public override void Configure(EntityTypeBuilder<StructuralMaterial> builder)
+    {
+        base.Configure(builder);
+        builder.HasOne(x => x.StructuralPart).WithMany().HasForeignKey(x => x.StructuralPartId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.StructuralPartId);
+    }
+}

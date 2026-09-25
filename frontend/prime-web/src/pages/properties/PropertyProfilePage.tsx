@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Alert, Button, Card, Descriptions, Skeleton, Tabs, Tag, Typography } from 'antd';
-import { GlobalOutlined } from '@ant-design/icons';
+import { EditOutlined, GlobalOutlined } from '@ant-design/icons';
+import { PropertyDescriptionModal } from './modals/DescriptionModals';
 import { usePropertyProfile } from '../../api/properties';
 import { OwnersSection } from './sections/OwnersSection';
 import { ParcelsSection } from './sections/ParcelsSection';
@@ -22,6 +24,7 @@ export function PropertyProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: profile, isLoading, isError, error } = usePropertyProfile(id);
+  const [editing, setEditing] = useState(false);
 
   if (isLoading) {
     return <Skeleton active />;
@@ -45,7 +48,8 @@ export function PropertyProfilePage() {
       </div>
 
       <Card style={{ marginBottom: 24 }}>
-        <Descriptions title="Basic Information" bordered column={2} size="small">
+        <Descriptions title="Basic Information" bordered column={2} size="small"
+          extra={<Button size="small" icon={<EditOutlined />} onClick={() => setEditing(true)}>Edit description</Button>}>
           <Descriptions.Item label="Status">
             <Tag>{property.status}</Tag>
           </Descriptions.Item>
@@ -59,10 +63,18 @@ export function PropertyProfilePage() {
           <Descriptions.Item label="Lot Number">{property.lotNumber ?? '—'}</Descriptions.Item>
           <Descriptions.Item label="Block Number">{property.blockNumber ?? '—'}</Descriptions.Item>
           <Descriptions.Item label="Survey Number">{property.surveyNumber ?? '—'}</Descriptions.Item>
-          <Descriptions.Item label="Title Number">{property.titleNumber ?? '—'}</Descriptions.Item>
-          <Descriptions.Item label="Tax Map Number">{property.taxMapNumber ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="Title">
+            {[property.titleTypeName, property.titleNumber].filter(Boolean).join(' No. ') || '—'}{property.titleDate ? ` (dated ${property.titleDate})` : ''}
+          </Descriptions.Item>
+          <Descriptions.Item label="Tax Map Number" span="filled">{property.taxMapNumber ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="Boundaries" span={2}>
+            {property.boundaryNorth || property.boundaryEast || property.boundarySouth || property.boundaryWest
+              ? `N: ${property.boundaryNorth ?? '—'} · E: ${property.boundaryEast ?? '—'} · S: ${property.boundarySouth ?? '—'} · W: ${property.boundaryWest ?? '—'}`
+              : '—'}
+          </Descriptions.Item>
         </Descriptions>
       </Card>
+      {editing && <PropertyDescriptionModal property={property} onClose={() => setEditing(false)} />}
 
       <Card>
         <Tabs

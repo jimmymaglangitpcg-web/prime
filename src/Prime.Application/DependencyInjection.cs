@@ -47,6 +47,8 @@ public static class DependencyInjection
         services.AddScoped<INoticeService, NoticeService>();
         services.AddScoped<IFormDataProvider, NoticeFormDataProvider>();
         services.AddScoped<IAppraisalRecordService, AppraisalRecordService>();
+        services.AddScoped<Features.Smv.IAdjustmentFactorService, Features.Smv.AdjustmentFactorService>();
+        services.AddScoped<Features.Descriptions.IDescriptionService, Features.Descriptions.DescriptionService>();
         services.AddScoped<IFormDataProvider, AppraisalRecordFormDataProvider>();
         services.AddScoped<IFormDataProvider, StatementOfAccountFormDataProvider>();
         services.AddScoped<IFormDataProvider, TaxBillFormDataProvider>();

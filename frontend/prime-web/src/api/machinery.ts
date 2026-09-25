@@ -21,3 +21,12 @@ export function useCreateMachinery(propertyId: string) {
     },
   });
 }
+
+/** Every machine of a machinery RPU (one FAAS row each; docs/analysis/mrpaao-forms-model.md §8.3). */
+export function useMachineryUnitsByRpu(rpuId: string | undefined) {
+  return useQuery({
+    queryKey: ['rpus', rpuId, 'machinery', 'units'],
+    queryFn: () => apiGet<MachineryDto[]>(`/api/rpus/${rpuId}/machinery-units`),
+    enabled: !!rpuId,
+  });
+}

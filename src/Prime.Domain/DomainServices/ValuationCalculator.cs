@@ -29,12 +29,15 @@ public static class ValuationCalculator
     /// </summary>
     public static readonly IReadOnlyList<string> BreakdownOrder =
     [
-        "Area", "TotalFloorArea", "Rate", "LocationFactor", "CompletionPercentage",
+        "Area", "TotalFloorArea", "FloorArea", "Quantity", "Rate", "LocationFactor", "CompletionPercentage",
         "IsBrandNew", "AcquisitionCost", "InstallationCost", "OtherCost", "TotalAcquisitionCost",
         "ReplacementCost", "EconomicLifeYears", "RemainingLifeYears", "RemainingFraction", "DepreciatedValue",
         "MinimumRemainingValuePercent", "MinimumRemainingValue", "MinimumApplied",
-        "BaseValue", "ValueBeforeClamp", "MinimumValue", "MaximumValue", "MarketValue",
+        "BaseValue", "AdditionalItemsCost", "TotalConstructionCost", "AdjustmentPercent", "ValueAdjustment", "ValueBeforeClamp", "MinimumValue", "MaximumValue", "MarketValue",
     ];
+
+    /// <summary>Breakdown key prefix for one adjustment factor's percent, e.g. "Adjustment:CORNER".</summary>
+    public const string AdjustmentKeyPrefix = "Adjustment:";
 
     /// <summary>
     /// MarketValue = Area × SMV rate × LocationFactor, clamped to the
@@ -62,6 +65,107 @@ public static class ValuationCalculator
         AddClampBoundsIfPresent(breakdown, schedule.MinimumValue, schedule.MaximumValue);
 
         return new ValuationCalculationResult(ValuationMethod.SmvBased, marketValue, breakdown);
+    }
+
+    /// <summary>
+    /// One land strip (MRPAAO Att. 1): base value = area × SMV rate; value
+    /// adjustment = base value × Σ adjustment percents / 100 (the factors add —
+    /// DOMAIN VERIFICATION REQUIRED whether they compound); then the legacy
+    /// <c>LocationFactor</c> multiplier when the land still carries one; then
+    /// the schedule's minimum/maximum. Each factor's percent is kept in the
+    /// breakdown under <see cref="AdjustmentKeyPrefix"/> + its code.
+    /// </summary>
+    public static ValuationCalculationResult CalculateLandStrip(decimal area, SmvSchedule schedule, decimal? locationFactor,
+        IReadOnlyList<LandAdjustmentInput> adjustments)
+    {
+        var rate = schedule.MarketValue;
+        var baseValue = area * rate;
+        var breakdown = new Dictionary<string, decimal> { ["Area"] = area, ["Rate"] = rate, ["BaseValue"] = baseValue };
+        var value = baseValue;
+        if (adjustments.Count > 0)
+        {
+            var percent = adjustments.Sum(a => a.Percent);
+            var valueAdjustment = baseValue * percent / 100m;
+            foreach (var a in adjustments)
+            {
+                breakdown[AdjustmentKeyPrefix + a.Code] = a.Percent;
+            }
+            breakdown["AdjustmentPercent"] = percent;
+            breakdown["ValueAdjustment"] = valueAdjustment;
+            value += valueAdjustment;
+        }
+        if (locationFactor is { } factor)
+        {
+            breakdown["LocationFactor"] = factor;
+            value *= factor;
+        }
+        var marketValue = ClampToRange(value, schedule.MinimumValue, schedule.MaximumValue);
+        breakdown["ValueBeforeClamp"] = value;
+        breakdown["MarketValue"] = marketValue;
+        AddClampBoundsIfPresent(breakdown, schedule.MinimumValue, schedule.MaximumValue);
+        return new ValuationCalculationResult(ValuationMethod.SmvBased, marketValue, breakdown);
+    }
+
+    /// <summary>
+    /// Trees, plants and other land improvements (MRPAAO Att. 1): market value
+    /// = number × the SMV rate for their kind, within the schedule's limits.
+    /// </summary>
+    public static ValuationCalculationResult CalculateImprovement(decimal quantity, SmvSchedule schedule)
+    {
+        var rate = schedule.MarketValue;
+        var baseValue = quantity * rate;
+        var marketValue = ClampToRange(baseValue, schedule.MinimumValue, schedule.MaximumValue);
+        var breakdown = new Dictionary<string, decimal>
+        {
+            ["Quantity"] = quantity, ["Rate"] = rate, ["BaseValue"] = baseValue, ["ValueBeforeClamp"] = baseValue, ["MarketValue"] = marketValue,
+        };
+        AddClampBoundsIfPresent(breakdown, schedule.MinimumValue, schedule.MaximumValue);
+        return new ValuationCalculationResult(ValuationMethod.SmvBased, marketValue, breakdown);
+    }
+
+    /// <summary>
+    /// One use portion of a building (MRPAAO Att. 2 "Property Appraisal"):
+    /// building core = floor area × the SMV rate; + the cost of its
+    /// additional items = total construction cost; × completion; then the
+    /// schedule's limits. Depreciation is not applied (plan A9: no
+    /// configured table yet — DOMAIN VERIFICATION REQUIRED).
+    /// </summary>
+    public static ValuationCalculationResult CalculateBuildingPortion(decimal floorArea, SmvSchedule schedule, decimal additionalItemsCost,
+        decimal completionPercentage)
+    {
+        var rate = schedule.MarketValue;
+        var core = floorArea * rate;
+        var constructionCost = core + additionalItemsCost;
+        var value = constructionCost * completionPercentage / 100m;
+        var marketValue = ClampToRange(value, schedule.MinimumValue, schedule.MaximumValue);
+        var breakdown = new Dictionary<string, decimal>
+        {
+            ["FloorArea"] = floorArea, ["Rate"] = rate, ["BaseValue"] = core, ["AdditionalItemsCost"] = additionalItemsCost,
+            ["TotalConstructionCost"] = constructionCost, ["CompletionPercentage"] = completionPercentage,
+            ["ValueBeforeClamp"] = value, ["MarketValue"] = marketValue,
+        };
+        AddClampBoundsIfPresent(breakdown, schedule.MinimumValue, schedule.MaximumValue);
+        return new ValuationCalculationResult(ValuationMethod.SmvBased, marketValue, breakdown);
+    }
+
+    /// <summary>
+    /// Spreads <paramref name="cost"/> over portions in proportion to their
+    /// floor area, to the centavo; the last portion takes the remainder so
+    /// the shares add up exactly.
+    /// </summary>
+    public static IReadOnlyList<decimal> SpreadByArea(decimal cost, IReadOnlyList<decimal> areas)
+    {
+        var total = areas.Sum();
+        var shares = new List<decimal>(areas.Count);
+        for (var i = 0; i < areas.Count - 1; i++)
+        {
+            shares.Add(total == 0 ? 0 : Math.Round(cost * areas[i] / total, 2, MidpointRounding.AwayFromZero));
+        }
+        if (areas.Count > 0)
+        {
+            shares.Add(cost - shares.Sum());
+        }
+        return shares;
     }
 
     /// <summary>
@@ -217,3 +321,6 @@ public static class ValuationCalculator
         }
     }
 }
+
+/// <summary>One adjustment factor as applied: its code, name and the percent in force.</summary>
+public sealed record LandAdjustmentInput(string Code, string Name, decimal Percent);

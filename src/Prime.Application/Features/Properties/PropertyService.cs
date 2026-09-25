@@ -172,7 +172,8 @@ public sealed class PropertyService(IApplicationDbContext db, IValidator<CreateP
         .Include(p => p.Province)
         .Include(p => p.Municipality)
         .Include(p => p.Barangay)
-        .Include(p => p.Zone);
+        .Include(p => p.Zone)
+        .Include(p => p.TitleType);
 
     private static PropertyDto ProjectToDto(PropertyEntity p) => new(
         p.Id,
@@ -193,5 +194,12 @@ public sealed class PropertyService(IApplicationDbContext db, IValidator<CreateP
         p.TitleNumber,
         p.TaxMapNumber,
         p.Status,
-        p.CreatedAt);
+        p.CreatedAt,
+        p.TitleTypeId,
+        p.TitleType == null ? null : p.TitleType.Name,
+        p.TitleDate,
+        p.BoundaryNorth,
+        p.BoundaryEast,
+        p.BoundarySouth,
+        p.BoundaryWest);
 }

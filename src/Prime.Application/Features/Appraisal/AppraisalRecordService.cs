@@ -11,7 +11,9 @@ namespace Prime.Application.Features.Appraisal;
 
 public sealed record AppraisalPropertyDto(
     Guid Id, string Pin, string? Street, string? Sitio, string? LotNumber, string? BlockNumber, string? SurveyNumber,
-    string? TitleNumber, string? TaxMapNumber, string Barangay, string Municipality, string Province);
+    string? TitleNumber, string? TaxMapNumber, string Barangay, string Municipality, string Province,
+    string? TitleType = null, DateOnly? TitleDate = null,
+    string? BoundaryNorth = null, string? BoundaryEast = null, string? BoundarySouth = null, string? BoundaryWest = null);
 
 public sealed record AppraisalPartyDto(string Name, PropertyPartyRole Role, string RoleLabel, decimal SharePercent, string? Address);
 
@@ -25,29 +27,55 @@ public sealed record AppraisalLandDto(
 
 public sealed record AppraisalBuildingComponentDto(string ComponentType, string? Description, decimal? Quantity, decimal? UnitCost, decimal? Cost);
 
+public sealed record AppraisalBuildingFloorDto(int FloorNumber, decimal Area);
+
+public sealed record AppraisalBuildingMaterialDto(string StructuralPart, string Material, int? FloorNumber);
+
 public sealed record AppraisalBuildingDto(
     Guid Id, string BuildingType, string StructuralType, string ActualUse, int NumberOfStoreys, decimal FloorArea, decimal TotalFloorArea,
     int? YearConstructed, int? YearCompleted, string Condition, decimal CompletionPercentage,
-    IReadOnlyList<AppraisalBuildingComponentDto> Components);
+    IReadOnlyList<AppraisalBuildingComponentDto> Components,
+    string? BuildingPermitNumber = null, DateOnly? BuildingPermitDate = null, string? CondominiumCertificateNumber = null,
+    DateOnly? CertificateOfCompletionDate = null, DateOnly? CertificateOfOccupancyDate = null, DateOnly? DateConstructed = null,
+    DateOnly? DateOccupied = null, IReadOnlyList<AppraisalBuildingFloorDto>? Floors = null,
+    IReadOnlyList<AppraisalBuildingMaterialDto>? Materials = null);
 
 public sealed record AppraisalMachineryDto(
     Guid Id, string MachineryType, string? Description, string? Brand, string? Model, string? SerialNumber, decimal? Capacity,
     string? CapacityUnit, DateOnly? DateAcquired, decimal AcquisitionCost, decimal? InstallationCost, decimal? OtherCost, bool IsBrandNew,
-    decimal? ReplacementCost, int? EconomicLifeYears, int? RemainingLifeYears);
+    decimal? ReplacementCost, int? EconomicLifeYears, int? RemainingLifeYears,
+    int? YearInstalled = null, int? YearOfInitialOperation = null, decimal? ConversionFactor = null);
 
 public sealed record AppraisalSmvDto(Guid Id, string OrdinanceNumber, DateOnly OrdinanceDate, DateOnly EffectivityDate, int RevisionYear, string? Description);
 
 public sealed record AppraisalBreakdownLineDto(string Key, decimal Value);
 
+/// <summary>One FAAS appraisal row, with its own schedule rate and breakdown (docs/analysis/mrpaao-forms-model.md §8.2).</summary>
+public sealed record AppraisalValuationLineDto(
+    int Sequence, ValuationLineSource Source, string? Description, string? Classification, string? SubClassification, string? ActualUse,
+    decimal? Quantity, string? Unit, decimal? UnitValue, decimal MarketValue, IReadOnlyList<AppraisalBreakdownLineDto> Breakdown);
+
 public sealed record AppraisalValuationDto(
     Guid Id, ValuationMethod Method, decimal MarketValue, DateOnly EffectiveDate, DateTimeOffset ComputedAt,
-    AppraisalSmvDto? Smv, string? ScheduleUnit, decimal? ScheduleRate, IReadOnlyList<AppraisalBreakdownLineDto> Breakdown);
+    AppraisalSmvDto? Smv, string? ScheduleUnit, decimal? ScheduleRate, IReadOnlyList<AppraisalBreakdownLineDto> Breakdown,
+    IReadOnlyList<AppraisalValuationLineDto> Lines);
 
+/// <summary>One FAAS "Property Assessment" row, with the level row it used (frozen percent, bracket, ordinance).</summary>
+public sealed record AppraisalAssessmentLineDto(
+    int Sequence, string Classification, string ActualUse, string PropertyType, decimal MarketValue, decimal AssessmentLevelPercent,
+    decimal LevelLowerValue, decimal? LevelUpperValue, string LevelOrdinanceNumber, DateOnly? LevelOrdinanceDate, decimal AssessedValue);
+
+/// <summary>
+/// The assessment totals. The single-row fields (classification … level
+/// ordinance) are the principal line's — the largest by market value;
+/// <see cref="AssessmentLevelPercent"/> is null when the lines carry
+/// different levels. <see cref="Lines"/> are the FAAS rows.
+/// </summary>
 public sealed record AppraisalAssessmentDto(
     int Year, DateOnly EffectiveDate, string Classification, string ActualUse, string PropertyType,
-    decimal MarketValue, decimal AssessmentLevelPercent, decimal LevelLowerValue, decimal? LevelUpperValue,
+    decimal MarketValue, decimal? AssessmentLevelPercent, decimal LevelLowerValue, decimal? LevelUpperValue,
     string LevelOrdinanceNumber, DateOnly? LevelOrdinanceDate, decimal AssessedValue,
-    Guid? RevisionReference, string? Remarks);
+    Guid? RevisionReference, string? Remarks, IReadOnlyList<AppraisalAssessmentLineDto> Lines);
 
 public sealed record AppraisalPreviousDto(Guid AssessmentId, string? FaasNumber, int Year, DateOnly EffectiveDate, decimal MarketValue,
     decimal AssessedValue, decimal AssessedValueChange);
@@ -70,7 +98,7 @@ public sealed record AppraisalRecordDto(
     AppraisalPropertyDto Property,
     DateOnly PartiesAsOf, IReadOnlyList<AppraisalPartyDto> Parties,
     AppraisalRpuDto Rpu, AppraisalTaxDeclarationDto? TaxDeclaration,
-    AppraisalLandDto? Land, AppraisalBuildingDto? Building, AppraisalMachineryDto? Machinery,
+    AppraisalLandDto? Land, AppraisalBuildingDto? Building, AppraisalMachineryDto? Machinery, IReadOnlyList<AppraisalMachineryDto> MachineryUnits,
     AppraisalValuationDto Valuation, AppraisalAssessmentDto Assessment, AppraisalPreviousDto? Previous,
     string? RecordedBy, DateTimeOffset RecordedAt, IReadOnlyList<AppraisalSignatureDto> Signatures,
     IReadOnlyList<AppraisalNoticeDto> Notices);
@@ -95,20 +123,27 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
             .Include(x => x.Rpu)
             .Include(x => x.Valuation).ThenInclude(v => v!.Smv)
             .Include(x => x.Valuation).ThenInclude(v => v!.SmvSchedule)
-            .Include(x => x.AssessmentLevel).ThenInclude(l => l!.Classification)
-            .Include(x => x.AssessmentLevel).ThenInclude(l => l!.ActualUse)
-            .Include(x => x.AssessmentLevel).ThenInclude(l => l!.PropertyType)
+            .Include(x => x.Valuation).ThenInclude(v => v!.Lines).ThenInclude(l => l.Classification)
+            .Include(x => x.Valuation).ThenInclude(v => v!.Lines).ThenInclude(l => l.SubClassification)
+            .Include(x => x.Valuation).ThenInclude(v => v!.Lines).ThenInclude(l => l.ActualUse)
+            .Include(x => x.Lines).ThenInclude(l => l.Classification)
+            .Include(x => x.Lines).ThenInclude(l => l.ActualUse)
+            .Include(x => x.Lines).ThenInclude(l => l.PropertyType)
+            .Include(x => x.Lines).ThenInclude(l => l.AssessmentLevel)
             .FirstOrDefaultAsync(x => x.Id == assessmentId, ct);
         if (a is null)
         {
             return Result.Failure<AppraisalRecordDto>("ASSESSMENT_NOT_FOUND", "No Assessment was found with the given id.");
         }
         var valuation = a.Valuation!;
-        var level = a.AssessmentLevel!;
+        var assessmentLines = a.Lines.OrderBy(l => l.Sequence).ToList();
+        var principal = assessmentLines.OrderByDescending(l => l.MarketValue).ThenBy(l => l.Sequence).First();
+        var level = principal.AssessmentLevel!;
 
         var property = await db.Properties.AsNoTracking().Where(p => p.Id == a.PropertyId).Select(p => new AppraisalPropertyDto(
             p.Id, p.PropertyIdentificationNumber, p.Street, p.Sitio, p.LotNumber, p.BlockNumber, p.SurveyNumber, p.TitleNumber,
-            p.TaxMapNumber, p.Barangay!.Name, p.Municipality!.Name, p.Province!.Name)).FirstAsync(ct);
+            p.TaxMapNumber, p.Barangay!.Name, p.Municipality!.Name, p.Province!.Name,
+            p.TitleType == null ? null : p.TitleType.Name, p.TitleDate, p.BoundaryNorth, p.BoundaryEast, p.BoundarySouth, p.BoundaryWest)).FirstAsync(ct);
 
         // The parties in whose name the property was declared on the assessment's effective date (LGC §§204–205).
         var eff = a.EffectiveDate;
@@ -122,6 +157,7 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
         AppraisalLandDto? land = null;
         AppraisalBuildingDto? building = null;
         AppraisalMachineryDto? machinery = null;
+        List<AppraisalMachineryDto> machineryUnits = [];
         switch (valuation.SourceType)
         {
             case ValuationSourceType.Land:
@@ -134,20 +170,33 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
                 var b = await db.Buildings.AsNoTracking()
                     .Include(x => x.BuildingType).Include(x => x.StructuralType).Include(x => x.ActualUse).Include(x => x.Condition)
                     .Include(x => x.Components).ThenInclude(c => c.ComponentType)
+                    .Include(x => x.Floors)
+                    .Include(x => x.Materials).ThenInclude(m => m.StructuralPart)
+                    .Include(x => x.Materials).ThenInclude(m => m.StructuralMaterial)
                     .FirstOrDefaultAsync(x => x.Id == valuation.SourceId, ct);
                 if (b is not null)
                 {
                     building = new AppraisalBuildingDto(b.Id, b.BuildingType!.Name, b.StructuralType!.Name, b.ActualUse!.Name, b.NumberOfStoreys,
                         b.FloorArea, b.TotalFloorArea, b.YearConstructed, b.YearCompleted, b.Condition!.Name, b.CompletionPercentage,
                         b.Components.OrderBy(c => c.ComponentType!.Name).ThenBy(c => c.CreatedAt)
-                            .Select(c => new AppraisalBuildingComponentDto(c.ComponentType!.Name, c.Description, c.Quantity, c.UnitCost, c.Cost)).ToList());
+                            .Select(c => new AppraisalBuildingComponentDto(c.ComponentType!.Name, c.Description, c.Quantity, c.UnitCost, c.Cost)).ToList(),
+                        b.BuildingPermitNumber, b.BuildingPermitDate, b.CondominiumCertificateNumber, b.CertificateOfCompletionDate,
+                        b.CertificateOfOccupancyDate, b.DateConstructed, b.DateOccupied,
+                        b.Floors.OrderBy(f => f.FloorNumber).Select(f => new AppraisalBuildingFloorDto(f.FloorNumber, f.Area)).ToList(),
+                        b.Materials.OrderBy(m => m.StructuralPart!.SortOrder).ThenBy(m => m.FloorNumber)
+                            .Select(m => new AppraisalBuildingMaterialDto(m.StructuralPart!.Name, m.StructuralMaterial?.Name ?? m.OtherSpecify!, m.FloorNumber)).ToList());
                 }
                 break;
             case ValuationSourceType.Machinery:
-                machinery = await db.MachineryUnits.AsNoTracking().Where(x => x.Id == valuation.SourceId).Select(x => new AppraisalMachineryDto(
+                // Every machine this valuation valued (one line each), in line order.
+                var machineIds = valuation.Lines.OrderBy(l => l.Sequence).Select(l => l.SourceId).OfType<Guid>().ToList();
+                var found = await db.MachineryUnits.AsNoTracking().Where(x => machineIds.Contains(x.Id)).Select(x => new AppraisalMachineryDto(
                     x.Id, x.MachineryType!.Name, x.Description, x.Brand, x.Model, x.SerialNumber, x.Capacity, x.CapacityUnit, x.DateAcquired,
-                    x.AcquisitionCost, x.InstallationCost, x.OtherCost, x.IsBrandNew, x.ReplacementCost, x.EconomicLifeYears, x.RemainingLifeYears))
-                    .FirstOrDefaultAsync(ct);
+                    x.AcquisitionCost, x.InstallationCost, x.OtherCost, x.IsBrandNew, x.ReplacementCost, x.EconomicLifeYears, x.RemainingLifeYears,
+                    x.YearInstalled, x.YearOfInitialOperation, x.ConversionFactor))
+                    .ToListAsync(ct);
+                machineryUnits = machineIds.Select(id => found.FirstOrDefault(m => m.Id == id)).OfType<AppraisalMachineryDto>().ToList();
+                machinery = machineryUnits.FirstOrDefault();
                 break;
         }
 
@@ -174,15 +223,21 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
             eff, parties,
             new AppraisalRpuDto(a.RpuId, a.Rpu!.RpuNumber, a.Rpu.RpuType),
             taxDeclaration,
-            land, building, machinery,
+            land, building, machinery, machineryUnits,
             new AppraisalValuationDto(valuation.Id, valuation.ValuationMethod, valuation.ComputedMarketValue, valuation.EffectiveDate,
                 valuation.ComputedAt,
                 valuation.Smv is { } smv ? new AppraisalSmvDto(smv.Id, smv.OrdinanceNumber, smv.OrdinanceDate, smv.EffectivityDate, smv.RevisionYear, smv.Description) : null,
                 valuation.SmvSchedule?.Unit, valuation.SmvSchedule?.MarketValue,
-                Breakdown(valuation.BreakdownJson)),
-            new AppraisalAssessmentDto(a.AssessmentYear, a.EffectiveDate, level.Classification!.Name, level.ActualUse!.Name, level.PropertyType!.Name,
+                Breakdown(valuation.BreakdownJson),
+                valuation.Lines.OrderBy(l => l.Sequence).Select(l => new AppraisalValuationLineDto(l.Sequence, l.Source, l.Description,
+                    l.Classification?.Name, l.SubClassification?.Name, l.ActualUse?.Name, l.Quantity, l.Unit, l.UnitValue, l.MarketValue,
+                    Breakdown(l.BreakdownJson))).ToList()),
+            new AppraisalAssessmentDto(a.AssessmentYear, a.EffectiveDate, principal.Classification!.Name, principal.ActualUse!.Name, principal.PropertyType!.Name,
                 a.MarketValue, a.AssessmentPercentage, level.LowerValue, level.UpperValue, level.OrdinanceNumber, level.OrdinanceDate,
-                a.AssessedValue, a.RevisionReference, a.Remarks),
+                a.AssessedValue, a.RevisionReference, a.Remarks,
+                assessmentLines.Select(l => new AppraisalAssessmentLineDto(l.Sequence, l.Classification!.Name, l.ActualUse!.Name, l.PropertyType!.Name,
+                    l.MarketValue, l.AssessmentPercentage, l.AssessmentLevel!.LowerValue, l.AssessmentLevel.UpperValue,
+                    l.AssessmentLevel.OrdinanceNumber, l.AssessmentLevel.OrdinanceDate, l.AssessedValue)).ToList()),
             previous is null ? null : new AppraisalPreviousDto(previous.Id, previous.FaasNumber, previous.AssessmentYear, previous.EffectiveDate,
                 previous.MarketValue, previous.AssessedValue, a.AssessedValue - previous.AssessedValue),
             a.CreatedBy is { } creator ? userNames.GetValueOrDefault(creator) ?? "(unknown user)" : null, a.CreatedAt, signatures,

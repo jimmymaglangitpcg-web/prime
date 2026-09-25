@@ -47,7 +47,7 @@ public sealed class BillService(
         }
 
         var rulesAsOf = RulesAsOfDate(request.TaxYear);
-        var assessment = await db.Assessments.Include(x => x.Valuation)
+        var assessment = await db.Assessments.Include(x => x.Valuation).Include(x => x.Lines)
             .Where(x => x.RpuId == rpu.Id && x.Status == WorkflowStatus.Posted && x.EffectiveDate <= rulesAsOf)
             .OrderByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
@@ -86,10 +86,13 @@ public sealed class BillService(
             ? []
             : await InForce(db.TaxIncreaseCapRules.Include(x => x.Smv), rulesAsOf).Where(x => x.SmvId == smvId).ToListAsync(cancellationToken);
 
+        // Each assessment line is taxed at the rate for its own classification (docs/analysis/mrpaao-forms-model.md §8.4).
+        var principal = assessment.Lines.OrderByDescending(l => l.MarketValue).ThenBy(l => l.Sequence).First();
         var input = new BillingCalculationInput
         {
             AssessedValue = assessment.AssessedValue,
-            ClassificationId = taxDeclaration.ClassificationId,
+            ClassificationId = principal.ClassificationId,
+            Lines = assessment.Lines.OrderBy(l => l.Sequence).Select(l => new BillingAssessmentLine(l.ClassificationId, l.AssessedValue)).ToList(),
             TaxYear = request.TaxYear,
             AsOfDate = request.AsOfDate,
             // Tax types are billed in their configured order (the calculator keeps input order).
@@ -120,7 +123,7 @@ public sealed class BillService(
             AsOfDate = request.AsOfDate,
             RulesAsOfDate = rulesAsOf,
             AssessedValue = assessment.AssessedValue,
-            ClassificationId = taxDeclaration.ClassificationId,
+            ClassificationId = principal.ClassificationId,
             DiscountStackingAllowed = stacking,
             Notes = result.Notes.Count == 0 ? null : string.Join(Environment.NewLine, result.Notes),
             TaxTypes = result.TaxTypes.Select(t => new TaxBillTaxType
@@ -133,6 +136,10 @@ public sealed class BillService(
                 CapBaselineTax = t.CapBaselineTax,
                 CapLimit = t.CapLimit,
                 AnnualTax = t.AnnualTax,
+                Lines = t.Lines.Select(l => new TaxBillTaxTypeLine
+                {
+                    ClassificationId = l.ClassificationId, AssessedValue = l.AssessedValue, TaxRateId = l.TaxRateId, RatePercent = l.RatePercent, Tax = l.Tax,
+                }).ToList(),
             }).ToList(),
             Details = result.Lines.Select((l, i) => new TaxBillDetail
             {
@@ -329,6 +336,7 @@ public sealed class BillService(
     private IQueryable<TaxBill> WithDetails() => db.TaxBills
         .Include(x => x.Rpu).Include(x => x.TaxDeclaration)
         .Include(x => x.TaxTypes).ThenInclude(t => t.TaxType)
+        .Include(x => x.TaxTypes).ThenInclude(t => t.Lines)
         .Include(x => x.Details).ThenInclude(d => d.TaxType);
 
     private async Task<TaxBillDto> MapAsync(Guid billId, CancellationToken ct) =>
@@ -342,7 +350,8 @@ public sealed class BillService(
         b.Status, b.CreatedAt, b.CreatedBy, b.PostedAt, b.PostedBy, b.CancelledAt, b.CancellationReason, b.SupersededByBillId,
         b.Details.Sum(d => d.Amount),
         b.TaxTypes.OrderBy(t => t.TaxType!.SortOrder).ThenBy(t => t.TaxType!.Code).Select(t => new TaxBillTaxTypeDto(t.TaxTypeId, t.TaxType!.Code, t.TaxType.Name, t.TaxRateId, t.RatePercent,
-            t.ComputedAnnualTax, t.CapRuleId, t.CapBaselineTax, t.CapLimit, t.AnnualTax)).ToList(),
+            t.ComputedAnnualTax, t.CapRuleId, t.CapBaselineTax, t.CapLimit, t.AnnualTax,
+            t.Lines.OrderByDescending(l => l.AssessedValue).ThenBy(l => l.Tax).Select(l => new TaxBillTaxTypeLineDto(l.ClassificationId, l.AssessedValue, l.TaxRateId, l.RatePercent, l.Tax)).ToList())).ToList(),
         b.Details.OrderBy(d => d.LineNumber).Select(d => new TaxBillDetailDto(d.LineNumber, d.InstallmentSequence, d.DueDate,
             d.TaxTypeId, d.TaxType!.Code, d.Component, d.RuleId, d.RatePercent, d.BaseAmount, d.Amount, d.Months, d.Explanation)).ToList());
 }

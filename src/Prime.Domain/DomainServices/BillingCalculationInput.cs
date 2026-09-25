@@ -12,11 +12,21 @@ namespace Prime.Domain.DomainServices;
 /// </summary>
 public sealed record BillingCalculationInput
 {
-    /// <summary>Assessed value from the posted assessment. Must not be negative.</summary>
+    /// <summary>Assessed value from the posted assessment. Must not be negative; equals Σ <see cref="Lines"/> when lines are given.</summary>
     public required decimal AssessedValue { get; init; }
 
-    /// <summary>The property's classification; selects classification-specific tax rates.</summary>
+    /// <summary>The property's classification; selects classification-specific tax rates when no <see cref="Lines"/> are given.</summary>
     public Guid? ClassificationId { get; init; }
+
+    /// <summary>
+    /// The assessment's lines (docs/analysis/mrpaao-forms-model.md §8.4): each
+    /// is taxed at the rate for its own classification. Empty: one line of
+    /// <see cref="AssessedValue"/> and <see cref="ClassificationId"/>.
+    /// </summary>
+    public IReadOnlyList<BillingAssessmentLine> Lines { get; init; } = [];
+
+    internal IReadOnlyList<BillingAssessmentLine> EffectiveLines =>
+        Lines.Count > 0 ? Lines : [new BillingAssessmentLine(ClassificationId, AssessedValue)];
 
     public required int TaxYear { get; init; }
 
@@ -40,6 +50,9 @@ public sealed record BillingCalculationInput
     /// </summary>
     public IReadOnlyList<CapBaselineTax> CapBaselines { get; init; } = [];
 }
+
+/// <summary>One assessment line to tax: its classification and assessed value.</summary>
+public sealed record BillingAssessmentLine(Guid? ClassificationId, decimal AssessedValue);
 
 /// <summary>The tax a cap is measured against, for one tax type and baseline kind.</summary>
 public sealed record CapBaselineTax(Guid TaxTypeId, TaxIncreaseCapBaseline Baseline, decimal Amount);

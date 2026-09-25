@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '../lib/apiClient';
-import type { BarangayDto, LookupDto, MunicipalityDto, ProvinceDto } from '../lib/types';
+import type { BarangayDto, LookupDto, MunicipalityDto, ProvinceDto, StructuralMaterialDto } from '../lib/types';
 
 export function useProvinces() {
   return useQuery({
@@ -47,3 +47,15 @@ export const useConditions = () => useLookup('conditions');
 export const useBuildingTypes = () => useLookup('building-types');
 export const useStructuralTypes = () => useLookup('structural-types');
 export const useMachineryTypes = () => useLookup('machinery-types');
+export const useImprovementKinds = () => useLookup('improvement-kinds');
+export const useBuildingComponentTypes = () => useLookup('building-component-types');
+export const useTitleTypes = () => useLookup('title-types');
+export const useStructuralParts = () => useLookup('structural-parts');
+
+export function useStructuralMaterials() {
+  return useQuery({
+    queryKey: ['reference', 'structural-materials'],
+    queryFn: () => apiGet<StructuralMaterialDto[]>('/api/reference/structural-materials'),
+    staleTime: 5 * 60 * 1000,
+  });
+}

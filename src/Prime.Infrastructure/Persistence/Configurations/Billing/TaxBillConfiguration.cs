@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Prime.Domain.Entities;
 using Prime.Domain.Entities.Billing;
+using Prime.Domain.Entities.Reference;
 
 namespace Prime.Infrastructure.Persistence.Configurations.Billing;
 
@@ -67,6 +68,21 @@ public sealed class TaxBillTaxTypeConfiguration : IEntityTypeConfiguration<TaxBi
         builder.HasOne<TaxIncreaseCapRule>().WithMany().HasForeignKey(x => x.CapRuleId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => new { x.TaxBillId, x.TaxTypeId }).IsUnique();
+        builder.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.TaxBillTaxTypeId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class TaxBillTaxTypeLineConfiguration : IEntityTypeConfiguration<TaxBillTaxTypeLine>
+{
+    public void Configure(EntityTypeBuilder<TaxBillTaxTypeLine> builder)
+    {
+        builder.ToTable("TaxBillTaxTypeLines", t => t.HasCheckConstraint("CK_TaxBillTaxTypeLines_Values", "\"AssessedValue\" >= 0 AND \"Tax\" >= 0"));
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.AssessedValue).HasPrecision(18, 2);
+        builder.Property(x => x.RatePercent).HasPrecision(9, 6);
+        builder.Property(x => x.Tax).HasPrecision(18, 2);
+        builder.HasOne<Classification>().WithMany().HasForeignKey(x => x.ClassificationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<TaxRate>().WithMany().HasForeignKey(x => x.TaxRateId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

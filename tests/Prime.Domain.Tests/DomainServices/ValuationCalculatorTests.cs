@@ -296,4 +296,66 @@ public class ValuationCalculatorTests
         breakdowns.SelectMany(b => b.Keys).Distinct().ShouldAllBe(key => ValuationCalculator.BreakdownOrder.Contains(key));
         ValuationCalculator.BreakdownOrder[^1].ShouldBe("MarketValue");
     }
+
+    // --- Land strips and improvements (docs/analysis/mrpaao-forms-model.md §8.3; DEMO values) ---
+
+    [Fact]
+    public void CalculateLandStrip_AdjustmentsAdd_AndEachIsRecorded()
+    {
+        var result = ValuationCalculator.CalculateLandStrip(100m, Schedule(1_000m), null,
+            [new LandAdjustmentInput("CORNER", "DEMO corner", 10m), new LandAdjustmentInput("SUNKEN", "DEMO sunken", -5m)]);
+
+        result.MarketValue.ShouldBe(105_000m); // 100,000 + 5%
+        result.Breakdown["AdjustmentPercent"].ShouldBe(5m);
+        result.Breakdown["ValueAdjustment"].ShouldBe(5_000m);
+        result.Breakdown[ValuationCalculator.AdjustmentKeyPrefix + "CORNER"].ShouldBe(10m);
+        result.Breakdown[ValuationCalculator.AdjustmentKeyPrefix + "SUNKEN"].ShouldBe(-5m);
+        result.Breakdown.ContainsKey("LocationFactor").ShouldBeFalse();
+    }
+
+    [Fact]
+    public void CalculateLandStrip_LegacyLocationFactor_AppliesAfterAdjustments_ThenScheduleLimits()
+    {
+        var result = ValuationCalculator.CalculateLandStrip(100m, Schedule(1_000m, max: 120_000m), 1.2m,
+            [new LandAdjustmentInput("CORNER", "DEMO corner", 10m)]);
+
+        result.Breakdown["ValueBeforeClamp"].ShouldBe(132_000m); // 110,000 × 1.2
+        result.MarketValue.ShouldBe(120_000m);
+    }
+
+    [Fact]
+    public void CalculateLandStrip_NoAdjustments_IsAreaTimesRate() =>
+        ValuationCalculator.CalculateLandStrip(250m, Schedule(800m), null, []).MarketValue.ShouldBe(200_000m);
+
+    [Fact]
+    public void CalculateImprovement_IsNumberTimesRate()
+    {
+        var result = ValuationCalculator.CalculateImprovement(40m, Schedule(1_500m));
+
+        result.MarketValue.ShouldBe(60_000m);
+        result.Breakdown["Quantity"].ShouldBe(40m);
+        result.Method.ShouldBe(ValuationMethod.SmvBased);
+    }
+
+    // --- Building use portions (docs/analysis/mrpaao-forms-model.md §8.3; DEMO values) ---
+
+    [Fact]
+    public void CalculateBuildingPortion_CorePlusAdditionalItems_TimesCompletion()
+    {
+        var result = ValuationCalculator.CalculateBuildingPortion(40m, Schedule(8_000m), 9_000m, 50m);
+
+        result.Breakdown["BaseValue"].ShouldBe(320_000m);
+        result.Breakdown["TotalConstructionCost"].ShouldBe(329_000m);
+        result.MarketValue.ShouldBe(164_500m);
+    }
+
+    [Fact]
+    public void SpreadByArea_RoundsToCentavos_AndTheLastTakesTheRemainder()
+    {
+        var shares = ValuationCalculator.SpreadByArea(100m, [1m, 1m, 1m]);
+
+        shares.ShouldBe([33.33m, 33.33m, 33.34m]);
+        shares.Sum().ShouldBe(100m);
+    }
 }
+

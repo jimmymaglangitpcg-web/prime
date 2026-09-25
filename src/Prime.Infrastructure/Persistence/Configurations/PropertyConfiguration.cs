@@ -11,6 +11,12 @@ public sealed class PropertyConfiguration : IEntityTypeConfiguration<PropertyEnt
         builder.ToTable("Property");
         builder.HasKey(x => x.Id);
 
+        builder.Property(x => x.BoundaryNorth).HasMaxLength(500);
+        builder.Property(x => x.BoundaryEast).HasMaxLength(500);
+        builder.Property(x => x.BoundarySouth).HasMaxLength(500);
+        builder.Property(x => x.BoundaryWest).HasMaxLength(500);
+        builder.HasOne(x => x.TitleType).WithMany().HasForeignKey(x => x.TitleTypeId).OnDelete(DeleteBehavior.Restrict);
+
         builder.Property(x => x.PropertyIdentificationNumber).HasMaxLength(50).IsRequired();
         builder.HasIndex(x => x.PropertyIdentificationNumber).IsUnique();
 

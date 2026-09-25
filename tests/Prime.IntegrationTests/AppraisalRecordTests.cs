@@ -95,7 +95,8 @@ public class AppraisalRecordTests(WebApplicationFactory<Program> factory) : ICla
         lines["Area"].ShouldBe(500m);
         lines["Rate"].ShouldBe(1000m);
         lines["MarketValue"].ShouldBe(500_000m);
-        r.Valuation.Breakdown.Select(l => l.Key).ShouldBe(["Area", "Rate", "LocationFactor", "BaseValue", "ValueBeforeClamp", "MarketValue"]);
+        // No location factor entered, so none is shown (step 2b: the strip calculation lists only factors that apply).
+        r.Valuation.Breakdown.Select(l => l.Key).ShouldBe(["Area", "Rate", "BaseValue", "ValueBeforeClamp", "MarketValue"]);
 
         r.Assessment.AssessmentLevelPercent.ShouldBe(20m);
         r.Assessment.LevelLowerValue.ShouldBe(0m);

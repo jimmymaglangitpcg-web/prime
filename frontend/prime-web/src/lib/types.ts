@@ -83,6 +83,14 @@ export interface PropertyDto {
   taxMapNumber: string | null;
   status: RecordStatus;
   createdAt: string;
+  /** Descriptive fields (docs/analysis/mrpaao-forms-model.md §10). */
+  titleTypeId: string | null;
+  titleTypeName: string | null;
+  titleDate: string | null;
+  boundaryNorth: string | null;
+  boundaryEast: string | null;
+  boundarySouth: string | null;
+  boundaryWest: string | null;
 }
 
 /** Capacity in which property is declared (LGC §§204–205). */
@@ -442,6 +450,39 @@ export interface LandDto {
   assessedValue: number | null;
   status: RecordStatus;
   createdAt: string;
+  /** Appraisal rows (docs/analysis/mrpaao-forms-model.md §8.3). */
+  strips: LandStripDto[];
+  improvements: LandImprovementDto[];
+  adjustments: LandAdjustmentDto[];
+}
+
+export interface LandStripDto {
+  id: string; sequence: number; classificationId: string; classificationName: string; subClassificationId: string | null;
+  subClassificationName: string | null; actualUseId: string; actualUseName: string; zoneId: string | null; zoneName: string | null; area: number;
+}
+
+export interface LandImprovementDto {
+  id: string; sequence: number; improvementKindId: string; improvementKindName: string; quantity: number; isProductive: boolean | null;
+  classificationId: string | null; classificationName: string | null; actualUseId: string | null; actualUseName: string | null; description: string | null;
+}
+
+export interface LandAdjustmentDto { id: string; factorCode: string; landStripId: string | null; stripSequence: number | null; remarks: string | null }
+
+export interface AddLandStripRequest {
+  classificationId: string; subClassificationId: string | null; actualUseId: string; zoneId: string | null; area: number;
+}
+
+export interface AddLandImprovementRequest {
+  improvementKindId: string; quantity: number; isProductive: boolean | null; classificationId: string | null; actualUseId: string | null; description: string | null;
+}
+
+export interface AddLandAdjustmentRequest { factorCode: string; landStripId: string | null; remarks: string | null }
+
+/** A market value adjustment factor of an SMV ordinance (LGU data). */
+export interface AdjustmentFactorDto {
+  id: string; smvId: string; smvOrdinanceNumber: string; code: string; name: string; percent: number; classificationId: string | null;
+  classificationName: string | null; description: string | null; legalBasis: string; effectiveDate: string; endDate: string | null;
+  status: WorkflowStatus; createdAt: string;
 }
 
 // --- Building -----------------------------------------------------------
@@ -484,6 +525,34 @@ export interface BuildingDto {
   assessedValue: number | null;
   status: RecordStatus;
   createdAt: string;
+  /** Mixed use: floor area per classification and use (docs/analysis/mrpaao-forms-model.md §8.3). */
+  usePortions: BuildingUsePortionDto[];
+  components: BuildingComponentDto[];
+  buildingPermitNumber: string | null;
+  buildingPermitDate: string | null;
+  condominiumCertificateNumber: string | null;
+  certificateOfCompletionDate: string | null;
+  certificateOfOccupancyDate: string | null;
+  dateConstructed: string | null;
+  dateOccupied: string | null;
+  floors: { id: string; floorNumber: number; area: number }[] | null;
+  materials: { id: string; structuralPartId: string; structuralPartName: string; structuralMaterialId: string | null; materialName: string; floorNumber: number | null }[] | null;
+}
+
+export interface BuildingUsePortionDto {
+  id: string; sequence: number; classificationId: string; classificationName: string; actualUseId: string; actualUseName: string; floorArea: number;
+}
+
+export interface BuildingComponentDto {
+  id: string; componentTypeId: string; componentTypeName: string; description: string | null; quantity: number | null; unitCost: number | null;
+  cost: number | null; isAdditionalItem: boolean; buildingUsePortionId: string | null;
+}
+
+export interface AddBuildingUsePortionRequest { classificationId: string; actualUseId: string; floorArea: number }
+
+export interface AddBuildingComponentRequest {
+  componentTypeId: string; description: string | null; quantity: number | null; unitCost: number | null; cost: number | null;
+  isAdditionalItem: boolean; buildingUsePortionId: string | null;
 }
 
 // --- Machinery -----------------------------------------------------------
@@ -505,6 +574,9 @@ export interface CreateMachineryRequest {
   replacementCost?: number | null;
   economicLifeYears?: number | null;
   remainingLifeYears?: number | null;
+  /** Null: the unit's Tax Declaration's. */
+  classificationId?: string | null;
+  actualUseId?: string | null;
 }
 
 export interface MachineryDto {
@@ -532,6 +604,13 @@ export interface MachineryDto {
   assessedValue: number | null;
   status: RecordStatus;
   createdAt: string;
+  classificationId: string | null;
+  classificationName: string | null;
+  actualUseId: string | null;
+  actualUseName: string | null;
+  yearInstalled: number | null;
+  yearOfInitialOperation: number | null;
+  conversionFactor: number | null;
 }
 
 // --- Billing (Phase 8; docs/BILLING.md §4–§6) ---
@@ -555,6 +634,8 @@ export interface TaxBillTaxTypeDto {
   capBaselineTax: number | null;
   capLimit: number | null;
   annualTax: number;
+  /** The tax each assessment line bears, at its classification's rate. */
+  lines: { classificationId: string | null; assessedValue: number; taxRateId: string; ratePercent: number; tax: number }[];
 }
 
 export interface TaxBillDetailDto {
@@ -850,6 +931,7 @@ export interface PropertyTransactionDto {
   cancelledTaxDeclarations: TransactionTdDto[];
   relatedProperties: { propertyId: string; propertyIdentificationNumber: string; role: 'Source' | 'Result' }[];
   transferRpuId: string | null;
+  taxClearance: TransferTaxClearanceDto | null;
 }
 
 // --- Notices of Assessment (LGC §§223, 226; docs/FORMS-REVISION-PLAN.md A6) ---
@@ -903,13 +985,29 @@ export interface NoticeDto {
   cancellationReason: string | null;
 }
 
+/** A FAAS "Property Assessment" row (docs/analysis/mrpaao-forms-model.md §8.2). */
+export interface AssessmentLineDto {
+  id: string;
+  sequence: number;
+  classificationId: string;
+  classificationName: string;
+  actualUseId: string;
+  actualUseName: string;
+  marketValue: number;
+  assessmentLevelId: string;
+  assessmentPercentage: number;
+  assessedValue: number;
+}
+
 export interface AssessmentSummaryDto {
   id: string;
   rpuId: string;
   assessmentYear: number;
   marketValue: number;
   assessedValue: number;
-  assessmentPercentage: number;
+  /** Null for a mixed-use assessment: its lines carry a level each. */
+  assessmentPercentage: number | null;
+  lines: AssessmentLineDto[];
   status: WorkflowStatus;
   effectiveDate: string;
   previousAssessmentId: string | null;
@@ -953,11 +1051,22 @@ export interface AppraisalRecordDto {
     smv: { id: string; ordinanceNumber: string; ordinanceDate: string; effectivityDate: string; revisionYear: number; description: string | null } | null;
     scheduleUnit: string | null; scheduleRate: number | null;
     breakdown: { key: string; value: number }[];
+    /** The FAAS appraisal rows, each with its own rate and breakdown. */
+    lines: {
+      sequence: number; source: string; description: string | null; classification: string | null; subClassification: string | null;
+      actualUse: string | null; quantity: number | null; unit: string | null; unitValue: number | null; marketValue: number;
+      breakdown: { key: string; value: number }[];
+    }[];
   };
   assessment: {
+    /** Single-row fields are the principal (largest) line's; the level percent is null when lines differ. */
     year: number; effectiveDate: string; classification: string; actualUse: string; propertyType: string; marketValue: number;
-    assessmentLevelPercent: number; levelLowerValue: number; levelUpperValue: number | null; levelOrdinanceNumber: string;
+    assessmentLevelPercent: number | null; levelLowerValue: number; levelUpperValue: number | null; levelOrdinanceNumber: string;
     levelOrdinanceDate: string | null; assessedValue: number; revisionReference: string | null; remarks: string | null;
+    lines: {
+      sequence: number; classification: string; actualUse: string; propertyType: string; marketValue: number; assessmentLevelPercent: number;
+      levelLowerValue: number; levelUpperValue: number | null; levelOrdinanceNumber: string; levelOrdinanceDate: string | null; assessedValue: number;
+    }[];
   };
   previous: { assessmentId: string; faasNumber: string | null; year: number; effectiveDate: string; marketValue: number; assessedValue: number; assessedValueChange: number } | null;
   recordedBy: string | null;
@@ -965,3 +1074,38 @@ export interface AppraisalRecordDto {
   signatures: { label: string; name: string; position: string | null; signedAt: string }[];
   notices: { id: string; number: string | null; status: NoticeStatus; issuedAt: string | null; receivedDate: string | null; appealDeadline: string | null }[];
 }
+
+// --- Descriptive fields (docs/analysis/mrpaao-forms-model.md §10) ---
+
+export interface UpdatePropertyDescriptionRequest {
+  street: string | null; sitio: string | null; lotNumber: string | null; blockNumber: string | null; surveyNumber: string | null;
+  titleNumber: string | null; titleTypeId: string | null; titleDate: string | null; taxMapNumber: string | null;
+  boundaryNorth: string | null; boundaryEast: string | null; boundarySouth: string | null; boundaryWest: string | null; reason: string;
+}
+
+export interface UpdateBuildingDescriptionRequest {
+  numberOfStoreys: number | null; yearConstructed: number | null; yearCompleted: number | null; buildingPermitNumber: string | null;
+  buildingPermitDate: string | null; condominiumCertificateNumber: string | null; certificateOfCompletionDate: string | null;
+  certificateOfOccupancyDate: string | null; dateConstructed: string | null; dateOccupied: string | null; reason: string;
+}
+
+export interface AddBuildingFloorRequest { floorNumber: number; area: number }
+
+export interface AddBuildingMaterialRequest { structuralPartId: string; structuralMaterialId: string | null; otherSpecify: string | null; floorNumber: number | null }
+
+export interface UpdateMachineryDescriptionRequest {
+  description: string | null; brand: string | null; model: string | null; serialNumber: string | null; capacity: number | null;
+  capacityUnit: string | null; yearInstalled: number | null; yearOfInitialOperation: number | null; conversionFactor: number | null; reason: string;
+}
+
+export interface TransferTaxClearanceDto {
+  carNumber: string | null; carDate: string | null; transferorName: string | null; transferorTin: string | null; transfereeTin: string | null;
+  capitalGainsTax: number | null; capitalGainsTaxReceipt: string | null; capitalGainsTaxDate: string | null;
+  documentaryStampTax: number | null; documentaryStampTaxReceipt: string | null; documentaryStampTaxDate: string | null;
+  transferTax: number | null; transferTaxReceipt: string | null; transferTaxDate: string | null; remarks: string | null;
+}
+
+export type SetTransferTaxClearanceRequest = TransferTaxClearanceDto;
+
+export interface StructuralMaterialDto { id: string; code: string; name: string; structuralPartId: string; sortOrder: number }
+

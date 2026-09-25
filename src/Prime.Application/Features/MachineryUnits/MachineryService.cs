@@ -26,9 +26,14 @@ public sealed class MachineryService(IApplicationDbContext db, IValidator<Create
         {
             return Result.Failure<MachineryDto>("RPU_TYPE_MISMATCH", "The specified RPU is not a Machinery RPU.");
         }
-        if (await db.MachineryUnits.AnyAsync(x => x.RpuId == request.RpuId, cancellationToken))
+        // A machinery RPU may hold several machines (MRPAAO Att. 3: one row per machine).
+        if (request.ClassificationId is { } c && !await db.Classifications.AnyAsync(x => x.Id == c, cancellationToken))
         {
-            return Result.Failure<MachineryDto>("MACHINERY_ALREADY_EXISTS_FOR_RPU", "A Machinery record already exists for this RPU.");
+            return Result.Failure<MachineryDto>("CLASSIFICATION_NOT_FOUND", "The specified classification does not exist.");
+        }
+        if (request.ActualUseId is { } u && !await db.ActualUses.AnyAsync(x => x.Id == u, cancellationToken))
+        {
+            return Result.Failure<MachineryDto>("ACTUAL_USE_NOT_FOUND", "The specified actual use does not exist.");
         }
         if (!await db.MachineryTypes.AnyAsync(x => x.Id == request.MachineryTypeId, cancellationToken))
         {
@@ -40,6 +45,8 @@ public sealed class MachineryService(IApplicationDbContext db, IValidator<Create
             RpuId = request.RpuId,
             PropertyId = rpu.PropertyId,
             MachineryTypeId = request.MachineryTypeId,
+            ClassificationId = request.ClassificationId,
+            ActualUseId = request.ActualUseId,
             Description = request.Description,
             Brand = request.Brand,
             Model = request.Model,
@@ -71,12 +78,20 @@ public sealed class MachineryService(IApplicationDbContext db, IValidator<Create
             : Result.Success(dto);
     }
 
+    /// <summary>The unit's first machine (the endpoint predates several machines per unit); see <see cref="ListByRpuAsync"/>.</summary>
     public async Task<Result<MachineryDto>> GetByRpuAsync(Guid rpuId, CancellationToken cancellationToken = default)
     {
-        var entity = await IncludeReferences(db.MachineryUnits).SingleOrDefaultAsync(x => x.RpuId == rpuId, cancellationToken);
+        var entity = await IncludeReferences(db.MachineryUnits).Where(x => x.RpuId == rpuId)
+            .OrderBy(x => x.CreatedAt).FirstOrDefaultAsync(cancellationToken);
         return entity is null
             ? Result.Failure<MachineryDto>("MACHINERY_NOT_FOUND", "No Machinery record was found for this RPU.")
             : Result.Success(ProjectToDto(entity));
+    }
+
+    public async Task<Result<IReadOnlyList<MachineryDto>>> ListByRpuAsync(Guid rpuId, CancellationToken cancellationToken = default)
+    {
+        var rows = await IncludeReferences(db.MachineryUnits).Where(x => x.RpuId == rpuId).OrderBy(x => x.CreatedAt).ToListAsync(cancellationToken);
+        return Result.Success<IReadOnlyList<MachineryDto>>(rows.Select(ProjectToDto).ToList());
     }
 
     private async Task<MachineryDto?> MapToDto(Guid id, CancellationToken cancellationToken)
@@ -86,7 +101,9 @@ public sealed class MachineryService(IApplicationDbContext db, IValidator<Create
     }
 
     private static IQueryable<Machinery> IncludeReferences(IQueryable<Machinery> query) => query
-        .Include(x => x.MachineryType);
+        .Include(x => x.MachineryType)
+        .Include(x => x.Classification)
+        .Include(x => x.ActualUse);
 
     private static MachineryDto ProjectToDto(Machinery x) => new(
         x.Id,
@@ -112,5 +129,12 @@ public sealed class MachineryService(IApplicationDbContext db, IValidator<Create
         x.MarketValue,
         x.AssessedValue,
         x.Status,
-        x.CreatedAt);
+        x.CreatedAt,
+        x.ClassificationId,
+        x.Classification?.Name,
+        x.ActualUseId,
+        x.ActualUse?.Name,
+        x.YearInstalled,
+        x.YearOfInitialOperation,
+        x.ConversionFactor);
 }

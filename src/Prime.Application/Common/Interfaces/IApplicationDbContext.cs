@@ -30,6 +30,19 @@ public interface IApplicationDbContext
     DbSet<PropertyTaxpayer> PropertyTaxpayers { get; }
     DbSet<Parcel> Parcels { get; }
     DbSet<TaxType> TaxTypes { get; }
+    DbSet<ImprovementKind> ImprovementKinds { get; }
+    DbSet<BuildingComponentType> BuildingComponentTypes { get; }
+    DbSet<LandStrip> LandStrips { get; }
+    DbSet<BuildingUsePortion> BuildingUsePortions { get; }
+    DbSet<BuildingFloor> BuildingFloors { get; }
+    DbSet<BuildingMaterial> BuildingMaterials { get; }
+    DbSet<TitleType> TitleTypes { get; }
+    DbSet<StructuralPart> StructuralParts { get; }
+    DbSet<StructuralMaterial> StructuralMaterials { get; }
+    DbSet<TransferTaxClearance> TransferTaxClearances { get; }
+    DbSet<LandImprovement> LandImprovements { get; }
+    DbSet<LandAdjustment> LandAdjustments { get; }
+    DbSet<AdjustmentFactor> AdjustmentFactors { get; }
     DbSet<TaxRate> TaxRates { get; }
     DbSet<PaymentSchedule> PaymentSchedules { get; }
     DbSet<DiscountRule> DiscountRules { get; }
@@ -38,6 +51,7 @@ public interface IApplicationDbContext
     DbSet<TaxIncreaseCapRule> TaxIncreaseCapRules { get; }
     DbSet<TaxBill> TaxBills { get; }
     DbSet<TaxBillTaxType> TaxBillTaxTypes { get; }
+    DbSet<TaxBillTaxTypeLine> TaxBillTaxTypeLines { get; }
     DbSet<TaxBillDetail> TaxBillDetails { get; }
     DbSet<NumberingScheme> NumberingSchemes { get; }
     DbSet<NumberSequence> NumberSequences { get; }
@@ -87,7 +101,9 @@ public interface IApplicationDbContext
     DbSet<SmvSchedule> SmvSchedules { get; }
     DbSet<AssessmentLevel> AssessmentLevels { get; }
     DbSet<Valuation> Valuations { get; }
+    DbSet<ValuationLine> ValuationLines { get; }
     DbSet<Assessment> Assessments { get; }
+    DbSet<AssessmentLine> AssessmentLines { get; }
     DbSet<GeneralRevisionJob> GeneralRevisionJobs { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

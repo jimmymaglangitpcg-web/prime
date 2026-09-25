@@ -68,6 +68,14 @@ export function apiGet<T>(path: string, query?: Record<string, string | number |
   return apiFetch<T>(`${path}${qs && qs !== '?' ? qs : ''}`);
 }
 
+export function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return apiFetch<T>(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
 export function apiPost<T>(path: string, body: unknown): Promise<T> {
   return apiFetch<T>(path, {
     method: 'POST',

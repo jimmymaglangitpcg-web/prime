@@ -1,6 +1,6 @@
 import { Alert, Button, Checkbox, DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd';
 import { useCreateMachinery } from '../../../api/machinery';
-import { useMachineryTypes } from '../../../api/referenceData';
+import { useActualUses, useClassifications, useMachineryTypes } from '../../../api/referenceData';
 import type { CreateMachineryRequest } from '../../../lib/types';
 import { ApiRequestError } from '../../../lib/apiClient';
 
@@ -17,6 +17,8 @@ export function AddMachineryModal({
 }) {
   const [form] = Form.useForm();
   const { data: machineryTypes } = useMachineryTypes();
+  const { data: classifications = [] } = useClassifications();
+  const { data: uses = [] } = useActualUses();
   const createMachinery = useCreateMachinery(propertyId);
   const isBrandNew: boolean = Form.useWatch('isBrandNew', form) ?? false;
 
@@ -26,7 +28,7 @@ export function AddMachineryModal({
   }
 
   return (
-    <Modal title="Add Machinery" open={open} onCancel={handleClose} footer={null} destroyOnHidden width={600}>
+    <Modal title="Add machine" open={open} onCancel={handleClose} footer={null} destroyOnHidden width={600}>
       {createMachinery.isError && (
         <Alert
           type="error"
@@ -60,12 +62,21 @@ export function AddMachineryModal({
             replacementCost: values.isBrandNew ? null : values.replacementCost,
             economicLifeYears: values.economicLifeYears,
             remainingLifeYears: values.remainingLifeYears,
+            classificationId: values.classificationId ?? null,
+            actualUseId: values.actualUseId ?? null,
           };
           createMachinery.mutate(request, { onSuccess: handleClose });
         }}
       >
         <Form.Item name="machineryTypeId" label="Machinery Type" rules={[{ required: true, message: 'Select a machinery type' }]}>
           <Select options={machineryTypes?.map((m) => ({ value: m.id, label: m.name }))} />
+        </Form.Item>
+
+        <Form.Item name="classificationId" label="Classification (optional)" extra="Leave both empty to assess under the unit's Tax Declaration.">
+          <Select allowClear options={classifications.map((x) => ({ value: x.id, label: x.name }))} />
+        </Form.Item>
+        <Form.Item name="actualUseId" label="Actual use (optional)">
+          <Select allowClear options={uses.map((x) => ({ value: x.id, label: x.name }))} />
         </Form.Item>
 
         <Form.Item name="description" label="Description (optional)">

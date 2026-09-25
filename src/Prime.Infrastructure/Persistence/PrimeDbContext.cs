@@ -48,6 +48,18 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<PropertyTaxpayer> PropertyTaxpayers => Set<PropertyTaxpayer>();
     public DbSet<Parcel> Parcels => Set<Parcel>();
     public DbSet<TaxType> TaxTypes => Set<TaxType>();
+    public DbSet<ImprovementKind> ImprovementKinds => Set<ImprovementKind>();
+    public DbSet<LandStrip> LandStrips => Set<LandStrip>();
+    public DbSet<BuildingUsePortion> BuildingUsePortions => Set<BuildingUsePortion>();
+    public DbSet<BuildingFloor> BuildingFloors => Set<BuildingFloor>();
+    public DbSet<BuildingMaterial> BuildingMaterials => Set<BuildingMaterial>();
+    public DbSet<TitleType> TitleTypes => Set<TitleType>();
+    public DbSet<StructuralPart> StructuralParts => Set<StructuralPart>();
+    public DbSet<StructuralMaterial> StructuralMaterials => Set<StructuralMaterial>();
+    public DbSet<TransferTaxClearance> TransferTaxClearances => Set<TransferTaxClearance>();
+    public DbSet<LandImprovement> LandImprovements => Set<LandImprovement>();
+    public DbSet<LandAdjustment> LandAdjustments => Set<LandAdjustment>();
+    public DbSet<AdjustmentFactor> AdjustmentFactors => Set<AdjustmentFactor>();
     public DbSet<TaxRate> TaxRates => Set<TaxRate>();
     public DbSet<PaymentSchedule> PaymentSchedules => Set<PaymentSchedule>();
     public DbSet<DiscountRule> DiscountRules => Set<DiscountRule>();
@@ -56,6 +68,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<TaxIncreaseCapRule> TaxIncreaseCapRules => Set<TaxIncreaseCapRule>();
     public DbSet<TaxBill> TaxBills => Set<TaxBill>();
     public DbSet<TaxBillTaxType> TaxBillTaxTypes => Set<TaxBillTaxType>();
+    public DbSet<TaxBillTaxTypeLine> TaxBillTaxTypeLines => Set<TaxBillTaxTypeLine>();
     public DbSet<TaxBillDetail> TaxBillDetails => Set<TaxBillDetail>();
     public DbSet<NumberingScheme> NumberingSchemes => Set<NumberingScheme>();
     public DbSet<NumberSequence> NumberSequences => Set<NumberSequence>();
@@ -89,7 +102,9 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<SmvSchedule> SmvSchedules => Set<SmvSchedule>();
     public DbSet<AssessmentLevel> AssessmentLevels => Set<AssessmentLevel>();
     public DbSet<Valuation> Valuations => Set<Valuation>();
+    public DbSet<ValuationLine> ValuationLines => Set<ValuationLine>();
     public DbSet<Assessment> Assessments => Set<Assessment>();
+    public DbSet<AssessmentLine> AssessmentLines => Set<AssessmentLine>();
     public DbSet<GeneralRevisionJob> GeneralRevisionJobs => Set<GeneralRevisionJob>();
 
     // Identity / authorization (CLAUDE.md §47; Supabase Auth owns credentials)

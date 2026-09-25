@@ -28,6 +28,7 @@ public sealed class AssessmentService(
     INumberingService numbering,
     IClock clock,
     IOptions<FaasOptions> faas,
+    IOptions<AssessmentOptions> options,
     ILogger<AssessmentService> logger) : IAssessmentService
 {
     public async Task<Result<AssessmentDto>> CreateAsync(CreateAssessmentRequest request, CancellationToken cancellationToken = default)
@@ -38,7 +39,7 @@ public sealed class AssessmentService(
             return Result.Failure<AssessmentDto>("VALIDATION_FAILED", string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)));
         }
 
-        var valuation = await db.Valuations.FirstOrDefaultAsync(x => x.Id == request.ValuationId, cancellationToken);
+        var valuation = await db.Valuations.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == request.ValuationId, cancellationToken);
         if (valuation is null)
         {
             return Result.Failure<AssessmentDto>("VALUATION_NOT_FOUND", "No Valuation was found with the given id.");
@@ -50,10 +51,20 @@ public sealed class AssessmentService(
             return Result.Failure<AssessmentDto>("PREVIOUS_ASSESSMENT_NOT_FOUND", "The specified previous assessment does not exist.");
         }
 
-        var subject = await ResolveSubjectAsync(valuation.SourceType, valuation.SourceId, valuation.RpuId, cancellationToken);
-        if (subject is null)
+        var lines = valuation.Lines.OrderBy(x => x.Sequence).ToList();
+        if (lines.Count == 0)
         {
-            return Result.Failure<AssessmentDto>("TAX_DECLARATION_NOT_FOUND", "A Tax Declaration (for its classification/actual use) is required before this can be assessed.");
+            return Result.Failure<AssessmentDto>("VALUATION_HAS_NO_LINES", "The valuation has no appraisal lines to assess.");
+        }
+        // A line without its own classification or actual use takes the unit's Tax Declaration's.
+        Domain.Entities.TaxDeclaration? taxDeclaration = null;
+        if (lines.Any(l => l.ClassificationId is null || l.ActualUseId is null))
+        {
+            taxDeclaration = await TaxDeclarationLookup.GetCurrentAsync(db, valuation.RpuId, cancellationToken);
+            if (taxDeclaration is null)
+            {
+                return Result.Failure<AssessmentDto>("TAX_DECLARATION_NOT_FOUND", "A Tax Declaration (for its classification/actual use) is required before this can be assessed.");
+            }
         }
 
         var propertyTypeCode = valuation.SourceType switch
@@ -69,14 +80,38 @@ public sealed class AssessmentService(
             return Result.Failure<AssessmentDto>("PROPERTY_TYPE_NOT_CONFIGURED", $"No PropertyType with code '{propertyTypeCode}' is configured.");
         }
 
-        var assessmentLevel = await ResolveAssessmentLevelAsync(
-            subject.Value.ClassificationId, subject.Value.ActualUseId, propertyType.Id, valuation.ComputedMarketValue, request.EffectiveDate, cancellationToken);
-        if (assessmentLevel is null)
+        // The FAAS "Property Assessment" rows: valuation lines grouped by (classification, actual use),
+        // each with its own level (docs/analysis/mrpaao-forms-model.md §8.2).
+        var groups = lines
+            .GroupBy(l => (Classification: l.ClassificationId ?? taxDeclaration!.ClassificationId, ActualUse: l.ActualUseId ?? taxDeclaration!.ActualUseId))
+            .ToList();
+        var unitMarketValue = lines.Sum(l => l.MarketValue);
+        var assessmentLines = new List<Domain.Entities.AssessmentLine>();
+        foreach (var group in groups)
         {
-            return Result.Failure<AssessmentDto>("ASSESSMENT_LEVEL_NOT_FOUND", "No approved assessment level matches this valuation's classification/actual use/market-value bracket as of the effective date.");
+            var marketValue = group.Sum(l => l.MarketValue);
+            var bracketValue = options.Value.LevelBracketBasis == LevelBracketBasis.Unit ? unitMarketValue : marketValue;
+            var level = await ResolveAssessmentLevelAsync(group.Key.Classification, group.Key.ActualUse, propertyType.Id, bracketValue, request.EffectiveDate, cancellationToken);
+            if (level is null)
+            {
+                var names = await db.Classifications.Where(x => x.Id == group.Key.Classification).Select(x => x.Name).FirstOrDefaultAsync(cancellationToken)
+                    + " / " + await db.ActualUses.Where(x => x.Id == group.Key.ActualUse).Select(x => x.Name).FirstOrDefaultAsync(cancellationToken);
+                return Result.Failure<AssessmentDto>("ASSESSMENT_LEVEL_NOT_FOUND",
+                    $"No approved assessment level matches {names} ({propertyType.Name}) for a market value of {bracketValue:#,0.00} as of the effective date.");
+            }
+            assessmentLines.Add(new Domain.Entities.AssessmentLine
+            {
+                Sequence = assessmentLines.Count + 1,
+                ClassificationId = group.Key.Classification,
+                ActualUseId = group.Key.ActualUse,
+                PropertyTypeId = propertyType.Id,
+                MarketValue = marketValue,
+                AssessmentLevelId = level.Id,
+                AssessmentPercentage = level.AssessmentPercentage,
+                AssessedValue = Math.Round(marketValue * level.AssessmentPercentage / 100m, 2, MidpointRounding.AwayFromZero),
+            });
         }
-
-        var assessedValue = Math.Round(valuation.ComputedMarketValue * assessmentLevel.AssessmentPercentage / 100m, 2, MidpointRounding.AwayFromZero);
+        var single = assessmentLines.Count == 1 ? assessmentLines[0] : null;
 
         var assessment = new Domain.Entities.Assessment
         {
@@ -84,21 +119,22 @@ public sealed class AssessmentService(
             PropertyId = valuation.PropertyId,
             ValuationId = valuation.Id,
             AssessmentYear = request.AssessmentYear,
-            MarketValue = valuation.ComputedMarketValue,
-            AssessmentLevelId = assessmentLevel.Id,
-            AssessmentPercentage = assessmentLevel.AssessmentPercentage,
-            AssessedValue = assessedValue,
+            MarketValue = assessmentLines.Sum(l => l.MarketValue),
+            AssessmentLevelId = single?.AssessmentLevelId,
+            AssessmentPercentage = single?.AssessmentPercentage,
+            AssessedValue = assessmentLines.Sum(l => l.AssessedValue),
             Status = WorkflowStatus.Draft,
             EffectiveDate = request.EffectiveDate,
             PreviousAssessmentId = request.PreviousAssessmentId,
             RevisionReference = request.RevisionReference,
             Remarks = request.Remarks,
+            Lines = assessmentLines,
         };
 
         db.Assessments.Add(assessment);
         await db.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(ToDto(assessment));
+        return Result.Success(await MapAsync(assessment.Id, cancellationToken));
     }
 
     public async Task<Result<AssessmentDto>> SubmitForReviewAsync(Guid assessmentId, CancellationToken cancellationToken = default)
@@ -116,7 +152,7 @@ public sealed class AssessmentService(
         assessment.Status = WorkflowStatus.PendingReview;
         await db.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(ToDto(assessment));
+        return Result.Success(await MapAsync(assessment.Id, cancellationToken));
     }
 
     public async Task<Result<AssessmentDto>> ApproveAsync(Guid assessmentId, CancellationToken cancellationToken = default)
@@ -174,7 +210,7 @@ public sealed class AssessmentService(
             return Result.Failure<AssessmentDto>("APPROVAL_STEP_CONFLICT", "This approval step was signed by someone else at the same time. Reload and try again.");
         }
 
-        return Result.Success(ToDto(assessment));
+        return Result.Success(await MapAsync(assessment.Id, cancellationToken));
     }
 
     public async Task<Result<AssessmentDto>> RejectAsync(Guid assessmentId, string reason, CancellationToken cancellationToken = default)
@@ -193,7 +229,7 @@ public sealed class AssessmentService(
         currentUser.Reason = reason;
         await db.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(ToDto(assessment));
+        return Result.Success(await MapAsync(assessment.Id, cancellationToken));
     }
 
     public async Task<Result<AssessmentDto>> PostAsync(Guid assessmentId, CancellationToken cancellationToken = default)
@@ -225,7 +261,7 @@ public sealed class AssessmentService(
             await transaction.CommitAsync(cancellationToken);
         }
 
-        return Result.Success(ToDto(assessment));
+        return Result.Success(await MapAsync(assessment.Id, cancellationToken));
     }
 
     public async Task<Result<AssessmentDto>> GetByIdAsync(Guid assessmentId, CancellationToken cancellationToken = default)
@@ -233,7 +269,7 @@ public sealed class AssessmentService(
         var assessment = await db.Assessments.FirstOrDefaultAsync(x => x.Id == assessmentId, cancellationToken);
         return assessment is null
             ? Result.Failure<AssessmentDto>("ASSESSMENT_NOT_FOUND", "No Assessment was found with the given id.")
-            : Result.Success(ToDto(assessment));
+            : Result.Success(await MapAsync(assessment.Id, cancellationToken));
     }
 
     public async Task<Result<IReadOnlyList<AssessmentDto>>> ListByRpuAsync(Guid rpuId, DateOnly? asOfDate, CancellationToken cancellationToken = default)
@@ -244,27 +280,8 @@ public sealed class AssessmentService(
             query = query.Where(x => x.EffectiveDate <= asOfDate);
         }
 
-        var assessments = await query.OrderByDescending(x => x.EffectiveDate).ToListAsync(cancellationToken);
+        var assessments = await WithLines(query).AsNoTracking().OrderByDescending(x => x.EffectiveDate).ToListAsync(cancellationToken);
         return Result.Success<IReadOnlyList<AssessmentDto>>(assessments.Select(ToDto).ToList());
-    }
-
-    /// <summary>
-    /// Land carries its own Classification/ActualUse; Building/Machinery
-    /// don't, so they're resolved from the RPU's current Tax Declaration —
-    /// same gap and same fix as ValuationService.ComputeForBuildingAsync.
-    /// Returns null when a Building/Machinery has no Tax Declaration yet.
-    /// </summary>
-    private async Task<(Guid ClassificationId, Guid ActualUseId)?> ResolveSubjectAsync(
-        ValuationSourceType sourceType, Guid sourceId, Guid rpuId, CancellationToken cancellationToken)
-    {
-        if (sourceType == ValuationSourceType.Land)
-        {
-            var land = await db.Lands.FirstOrDefaultAsync(x => x.Id == sourceId, cancellationToken);
-            return land is null ? null : (land.ClassificationId, land.ActualUseId);
-        }
-
-        var taxDeclaration = await TaxDeclarationLookup.GetCurrentAsync(db, rpuId, cancellationToken);
-        return taxDeclaration is null ? null : (taxDeclaration.ClassificationId, taxDeclaration.ActualUseId);
     }
 
     private async Task<Domain.Entities.AssessmentLevel?> ResolveAssessmentLevelAsync(
@@ -281,6 +298,13 @@ public sealed class AssessmentService(
                 && (x.UpperValue == null || x.UpperValue >= marketValue))
             .FirstOrDefaultAsync(cancellationToken);
     }
+
+    private static IQueryable<Domain.Entities.Assessment> WithLines(IQueryable<Domain.Entities.Assessment> query) => query
+        .Include(x => x.Lines).ThenInclude(l => l.Classification)
+        .Include(x => x.Lines).ThenInclude(l => l.ActualUse);
+
+    private async Task<AssessmentDto> MapAsync(Guid id, CancellationToken ct) =>
+        ToDto(await WithLines(db.Assessments).AsNoTracking().SingleAsync(x => x.Id == id, ct));
 
     private static AssessmentDto ToDto(Domain.Entities.Assessment x) => new(
         x.Id,
@@ -300,5 +324,7 @@ public sealed class AssessmentService(
         x.FaasNumber,
         x.ApprovedBy,
         x.ApprovedAt,
-        x.CreatedAt);
+        x.CreatedAt,
+        x.Lines.OrderBy(l => l.Sequence).Select(l => new AssessmentLineDto(l.Id, l.Sequence, l.ClassificationId, l.Classification!.Name,
+            l.ActualUseId, l.ActualUse!.Name, l.MarketValue, l.AssessmentLevelId, l.AssessmentPercentage, l.AssessedValue)).ToList());
 }

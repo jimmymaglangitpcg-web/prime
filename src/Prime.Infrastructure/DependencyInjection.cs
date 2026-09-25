@@ -72,6 +72,8 @@ public static class DependencyInjection
         services.AddOptions<BillingOptions>().Bind(configuration.GetSection(BillingOptions.SectionName));
 
         // MRPAAO forms model (docs/analysis/mrpaao-forms-model.md §6): FAAS = TD + its assessment; unit PIN postscripts.
+        services.AddOptions<Prime.Application.Features.Assessments.AssessmentOptions>()
+            .Bind(configuration.GetSection(Prime.Application.Features.Assessments.AssessmentOptions.SectionName));
         services.AddOptions<Prime.Application.Features.TaxDeclarations.FaasOptions>()
             .Bind(configuration.GetSection(Prime.Application.Features.TaxDeclarations.FaasOptions.SectionName));
         services.AddOptions<Prime.Application.Features.RealPropertyUnits.UnitPinOptions>()

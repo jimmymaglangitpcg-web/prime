@@ -44,7 +44,11 @@ public sealed record TaxBillTaxTypeDto(
     Guid? CapRuleId,
     decimal? CapBaselineTax,
     decimal? CapLimit,
-    decimal AnnualTax);
+    decimal AnnualTax,
+    IReadOnlyList<TaxBillTaxTypeLineDto> Lines);
+
+/// <summary>The tax one assessment line bears for this tax type, at its classification's rate.</summary>
+public sealed record TaxBillTaxTypeLineDto(Guid? ClassificationId, decimal AssessedValue, Guid TaxRateId, decimal RatePercent, decimal Tax);
 
 public sealed record TaxBillDetailDto(
     int LineNumber,

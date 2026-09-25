@@ -14,6 +14,11 @@ public class MachineryController(IMachineryService machineryService) : ApiContro
     public async Task<ActionResult<MachineryDto>> GetById(Guid id, CancellationToken cancellationToken) =>
         HandleResult(await machineryService.GetByIdAsync(id, cancellationToken));
 
+    /// <summary>Every machine of a machinery RPU (docs/analysis/mrpaao-forms-model.md §8.3).</summary>
+    [HttpGet("~/api/rpus/{rpuId:guid}/machinery-units")]
+    public async Task<ActionResult<IReadOnlyList<MachineryDto>>> ListByRpu(Guid rpuId, CancellationToken cancellationToken) =>
+        HandleResult(await machineryService.ListByRpuAsync(rpuId, cancellationToken));
+
     [HttpGet("~/api/rpus/{rpuId:guid}/machinery")]
     public async Task<ActionResult<MachineryDto>> GetByRpu(Guid rpuId, CancellationToken cancellationToken) =>
         HandleResult(await machineryService.GetByRpuAsync(rpuId, cancellationToken));

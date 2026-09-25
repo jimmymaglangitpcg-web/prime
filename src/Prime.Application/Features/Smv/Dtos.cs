@@ -30,7 +30,8 @@ public sealed record CreateSmvScheduleRequest(
     decimal MarketValue,
     decimal? MinimumValue,
     decimal? MaximumValue,
-    DateOnly EffectiveDate);
+    DateOnly EffectiveDate,
+    Guid? ImprovementKindId = null);
 
 public sealed record SmvScheduleDto(
     Guid Id,
@@ -43,6 +44,8 @@ public sealed record SmvScheduleDto(
     string PropertyTypeName,
     Guid? ZoneId,
     string? ZoneName,
+    Guid? ImprovementKindId,
+    string? ImprovementKindName,
     string Unit,
     decimal MarketValue,
     decimal? MinimumValue,

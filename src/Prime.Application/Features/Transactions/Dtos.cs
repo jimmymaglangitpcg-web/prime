@@ -59,4 +59,13 @@ public sealed record PropertyTransactionDto(
     IReadOnlyList<TransactionTdDto> IssuedTaxDeclarations,
     IReadOnlyList<TransactionTdDto> CancelledTaxDeclarations,
     IReadOnlyList<TransactionPropertyDto> RelatedProperties,
-    Guid? TransferRpuId);
+    Guid? TransferRpuId,
+    TransferTaxClearanceDto? TaxClearance = null);
+
+/// <summary>The BIR clearance and taxes paid on a transfer (MRPAAO Annex A).</summary>
+public sealed record TransferTaxClearanceDto(
+    string? CarNumber, DateOnly? CarDate, string? TransferorName, string? TransferorTin, string? TransfereeTin,
+    decimal? CapitalGainsTax, string? CapitalGainsTaxReceipt, DateOnly? CapitalGainsTaxDate,
+    decimal? DocumentaryStampTax, string? DocumentaryStampTaxReceipt, DateOnly? DocumentaryStampTaxDate,
+    decimal? TransferTax, string? TransferTaxReceipt, DateOnly? TransferTaxDate, string? Remarks);
+

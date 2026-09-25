@@ -66,6 +66,12 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
             IsCornerLot = request.IsCornerLot,
             Zoning = request.Zoning,
         };
+        // The first appraisal strip is the land as registered (docs/analysis/mrpaao-forms-model.md §8.3).
+        land.Strips.Add(new Domain.Entities.LandStrip
+        {
+            Sequence = 1, ClassificationId = land.ClassificationId, SubClassificationId = land.SubClassificationId,
+            ActualUseId = land.ActualUseId, Area = land.Area,
+        });
 
         db.Lands.Add(land);
         await db.SaveChangesAsync(cancellationToken);
@@ -90,6 +96,120 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
             : Result.Success(ProjectToDto(entity));
     }
 
+    public async Task<Result<LandDto>> AddStripAsync(Guid landId, AddLandStripRequest request, CancellationToken cancellationToken = default)
+    {
+        var land = await db.Lands.Include(x => x.Strips).FirstOrDefaultAsync(x => x.Id == landId, cancellationToken);
+        if (land is null)
+        {
+            return NotFound();
+        }
+        if (await LandParts.StripProblemAsync(db, request, cancellationToken) is { } problem)
+        {
+            return LandParts.Fail<LandDto>("VALIDATION_FAILED", problem);
+        }
+        if (land.Strips.Count == 0)
+        {
+            // A land recorded without strips keeps its registered area as strip 1.
+            Track(land.Strips, db.LandStrips, new Domain.Entities.LandStrip
+            {
+                Sequence = 1, ClassificationId = land.ClassificationId, SubClassificationId = land.SubClassificationId,
+                ActualUseId = land.ActualUseId, ZoneId = null, Area = land.Area,
+            });
+        }
+        Track(land.Strips, db.LandStrips, new Domain.Entities.LandStrip
+        {
+            Sequence = land.Strips.Max(x => x.Sequence) + 1,
+            ClassificationId = request.ClassificationId, SubClassificationId = request.SubClassificationId,
+            ActualUseId = request.ActualUseId, ZoneId = request.ZoneId, Area = request.Area,
+        });
+        LandParts.MirrorPrincipal(land);
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success((await MapToDto(landId, cancellationToken))!);
+    }
+
+    public async Task<Result<LandDto>> AddImprovementAsync(Guid landId, AddLandImprovementRequest request, CancellationToken cancellationToken = default)
+    {
+        var land = await db.Lands.Include(x => x.Improvements).FirstOrDefaultAsync(x => x.Id == landId, cancellationToken);
+        if (land is null)
+        {
+            return NotFound();
+        }
+        if (request.Quantity <= 0 || request.Description?.Length > 500)
+        {
+            return LandParts.Fail<LandDto>("VALIDATION_FAILED", "The number must be greater than zero; description max 500.");
+        }
+        if (!await db.ImprovementKinds.AnyAsync(x => x.Id == request.ImprovementKindId && x.IsActive, cancellationToken))
+        {
+            return LandParts.Fail<LandDto>("IMPROVEMENT_KIND_NOT_FOUND", "The specified improvement kind does not exist or is inactive.");
+        }
+        if (request.ClassificationId is { } c && !await db.Classifications.AnyAsync(x => x.Id == c, cancellationToken))
+        {
+            return LandParts.Fail<LandDto>("CLASSIFICATION_NOT_FOUND", "The specified classification does not exist.");
+        }
+        if (request.ActualUseId is { } u && !await db.ActualUses.AnyAsync(x => x.Id == u, cancellationToken))
+        {
+            return LandParts.Fail<LandDto>("ACTUAL_USE_NOT_FOUND", "The specified actual use does not exist.");
+        }
+        Track(land.Improvements, db.LandImprovements, new Domain.Entities.LandImprovement
+        {
+            Sequence = land.Improvements.Count == 0 ? 1 : land.Improvements.Max(x => x.Sequence) + 1,
+            ImprovementKindId = request.ImprovementKindId, Quantity = request.Quantity, IsProductive = request.IsProductive,
+            ClassificationId = request.ClassificationId, ActualUseId = request.ActualUseId,
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success((await MapToDto(landId, cancellationToken))!);
+    }
+
+    /// <summary>
+    /// Names an adjustment factor by code for the whole land or one strip. The code must exist
+    /// in the approved catalogue; its percentage is taken at valuation from the version in force.
+    /// </summary>
+    public async Task<Result<LandDto>> AddAdjustmentAsync(Guid landId, AddLandAdjustmentRequest request, CancellationToken cancellationToken = default)
+    {
+        var land = await db.Lands.Include(x => x.Strips).Include(x => x.Adjustments).FirstOrDefaultAsync(x => x.Id == landId, cancellationToken);
+        if (land is null)
+        {
+            return NotFound();
+        }
+        var code = request.FactorCode?.Trim() ?? "";
+        if (code.Length is 0 or > 20 || request.Remarks?.Length > 500)
+        {
+            return LandParts.Fail<LandDto>("VALIDATION_FAILED", "factorCode is required (max 20); remarks max 500.");
+        }
+        if (request.LandStripId is { } stripId && land.Strips.All(x => x.Id != stripId))
+        {
+            return LandParts.Fail<LandDto>("LAND_STRIP_NOT_FOUND", "The strip does not belong to this land.");
+        }
+        if (!await db.AdjustmentFactors.AnyAsync(x => x.Code == code && x.Status == WorkflowStatus.Approved, cancellationToken))
+        {
+            return LandParts.Fail<LandDto>("ADJUSTMENT_FACTOR_UNKNOWN", $"No approved adjustment factor has the code '{code}'.");
+        }
+        if (land.Adjustments.Any(x => x.FactorCode == code && x.LandStripId == request.LandStripId))
+        {
+            return LandParts.Fail<LandDto>("LAND_ADJUSTMENT_DUPLICATE", $"'{code}' already applies here.");
+        }
+        Track(land.Adjustments, db.LandAdjustments, new Domain.Entities.LandAdjustment
+        {
+            FactorCode = code, LandStripId = request.LandStripId,
+            Remarks = string.IsNullOrWhiteSpace(request.Remarks) ? null : request.Remarks.Trim(),
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success((await MapToDto(landId, cancellationToken))!);
+    }
+
+    /// <summary>
+    /// Adds a new row to a loaded land's collection. Entity keys are set on construction, so the
+    /// row is registered as Added explicitly; EF would otherwise take it for an existing row.
+    /// </summary>
+    private static void Track<T>(List<T> collection, Microsoft.EntityFrameworkCore.DbSet<T> set, T row) where T : class
+    {
+        set.Add(row);
+        collection.Add(row);
+    }
+
+    private static Result<LandDto> NotFound() => LandParts.Fail<LandDto>("LAND_NOT_FOUND", "No Land record was found with the given id.");
+
     private async Task<LandDto?> MapToDto(Guid id, CancellationToken cancellationToken)
     {
         var entity = await IncludeReferences(db.Lands).SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -98,7 +218,15 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
 
     private static IQueryable<Domain.Entities.Land> IncludeReferences(IQueryable<Domain.Entities.Land> query) => query
         .Include(x => x.Classification)
-        .Include(x => x.ActualUse);
+        .Include(x => x.ActualUse)
+        .Include(x => x.Strips).ThenInclude(s => s.Classification)
+        .Include(x => x.Strips).ThenInclude(s => s.SubClassification)
+        .Include(x => x.Strips).ThenInclude(s => s.ActualUse)
+        .Include(x => x.Strips).ThenInclude(s => s.Zone)
+        .Include(x => x.Improvements).ThenInclude(i => i.ImprovementKind)
+        .Include(x => x.Improvements).ThenInclude(i => i.Classification)
+        .Include(x => x.Improvements).ThenInclude(i => i.ActualUse)
+        .Include(x => x.Adjustments);
 
     private static LandDto ProjectToDto(Domain.Entities.Land x) => new(
         x.Id,
@@ -120,5 +248,8 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
         x.MarketValue,
         x.AssessedValue,
         x.Status,
-        x.CreatedAt);
+        x.CreatedAt,
+        x.Strips.OrderBy(s => s.Sequence).Select(LandParts.ToDto).ToList(),
+        x.Improvements.OrderBy(i => i.Sequence).Select(LandParts.ToDto).ToList(),
+        x.Adjustments.OrderBy(a => a.FactorCode).Select(a => LandParts.ToDto(a, x.Strips)).ToList());
 }

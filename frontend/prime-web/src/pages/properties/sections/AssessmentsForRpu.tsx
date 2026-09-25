@@ -31,7 +31,10 @@ export function AssessmentsForRpu({ rpuId }: { rpuId: string }) {
           { title: 'Year', dataIndex: 'assessmentYear' },
           { title: 'Effective', dataIndex: 'effectiveDate' },
           { title: 'Market value', dataIndex: 'marketValue', align: 'right', render: formatMoney },
-          { title: 'Level', dataIndex: 'assessmentPercentage', align: 'right', render: (v: number) => `${plain.format(v)}%` },
+          {
+            title: 'Level', dataIndex: 'assessmentPercentage', align: 'right',
+            render: (v: number | null, a) => (v === null ? <Tag>{a.lines.length} rows</Tag> : `${plain.format(v)}%`),
+          },
           { title: 'Assessed value', dataIndex: 'assessedValue', align: 'right', render: formatMoney },
           { title: 'Status', dataIndex: 'status', render: statusTag },
           {
@@ -163,7 +166,42 @@ function AppraisalRecordView({ r }: { r: AppraisalRecordDto }) {
           { title: 'Value', dataIndex: 'value', align: 'right', render: (v: number, line) => (line.key === 'MarketValue' ? <strong>{formatMoney(v)}</strong> : plain.format(v)) },
         ]} />
 
+      {r.valuation.lines.length > 1 && (
+        <>
+          <Typography.Text strong style={{ display: 'block', marginTop: 12 }}>Appraisal rows</Typography.Text>
+          <Table size="small" rowKey="sequence" dataSource={r.valuation.lines} pagination={false} scroll={{ x: 'max-content' }}
+            columns={[
+              { title: '#', dataIndex: 'sequence', width: 40 },
+              { title: 'Item', render: (_, l) => l.description ?? l.source },
+              { title: 'Classification', render: (_, l) => [l.classification, l.subClassification].filter(Boolean).join(' / ') || '—' },
+              { title: 'Actual use', dataIndex: 'actualUse', render: dash },
+              { title: 'Quantity', align: 'right', render: (_, l) => (l.quantity === null ? '—' : `${plain.format(l.quantity)} ${l.unit ?? ''}`) },
+              { title: 'Unit value', dataIndex: 'unitValue', align: 'right', render: (v: number | null) => (v === null ? '—' : formatMoney(v)) },
+              { title: 'Market value', dataIndex: 'marketValue', align: 'right', render: formatMoney },
+            ]} />
+        </>
+      )}
+
       {section('Assessment')}
+      <Table size="small" rowKey="sequence" dataSource={r.assessment.lines} pagination={false} scroll={{ x: 'max-content' }} style={{ marginBottom: 8 }}
+        columns={[
+          { title: 'Actual use', dataIndex: 'actualUse' },
+          { title: 'Classification', dataIndex: 'classification' },
+          { title: 'Market value', dataIndex: 'marketValue', align: 'right', render: formatMoney },
+          {
+            title: 'Level', align: 'right',
+            render: (_, l) => `${plain.format(l.assessmentLevelPercent)}% (${formatMoney(l.levelLowerValue)} – ${l.levelUpperValue !== null ? formatMoney(l.levelUpperValue) : 'up'}; Ord. ${l.levelOrdinanceNumber})`,
+          },
+          { title: 'Assessed value', dataIndex: 'assessedValue', align: 'right', render: formatMoney },
+        ]}
+        summary={() => r.assessment.lines.length > 1 && (
+          <Table.Summary.Row>
+            <Table.Summary.Cell index={0} colSpan={2}><strong>Total</strong></Table.Summary.Cell>
+            <Table.Summary.Cell index={1} align="right"><strong>{formatMoney(r.assessment.marketValue)}</strong></Table.Summary.Cell>
+            <Table.Summary.Cell index={2} />
+            <Table.Summary.Cell index={3} align="right"><strong>{formatMoney(r.assessment.assessedValue)}</strong></Table.Summary.Cell>
+          </Table.Summary.Row>
+        )} />
       <Descriptions size="small" bordered column={{ xs: 1, md: 2 }}>
         <Descriptions.Item label="Year / effective">{r.assessment.year} / {r.assessment.effectiveDate}</Descriptions.Item>
         <Descriptions.Item label="Property type">{r.assessment.propertyType}</Descriptions.Item>
@@ -171,7 +209,9 @@ function AppraisalRecordView({ r }: { r: AppraisalRecordDto }) {
         <Descriptions.Item label="Actual use">{r.assessment.actualUse}</Descriptions.Item>
         <Descriptions.Item label="Market value">{formatMoney(r.assessment.marketValue)}</Descriptions.Item>
         <Descriptions.Item label="Assessment level">
-          {plain.format(r.assessment.assessmentLevelPercent)}% (bracket {formatMoney(r.assessment.levelLowerValue)} – {r.assessment.levelUpperValue !== null ? formatMoney(r.assessment.levelUpperValue) : 'and above'})
+          {r.assessment.assessmentLevelPercent === null
+            ? 'Per row (above)'
+            : `${plain.format(r.assessment.assessmentLevelPercent)}% (bracket ${formatMoney(r.assessment.levelLowerValue)} – ${r.assessment.levelUpperValue !== null ? formatMoney(r.assessment.levelUpperValue) : 'and above'})`}
         </Descriptions.Item>
         <Descriptions.Item label="Level ordinance">{r.assessment.levelOrdinanceNumber}{r.assessment.levelOrdinanceDate ? ` (${r.assessment.levelOrdinanceDate})` : ''}</Descriptions.Item>
         <Descriptions.Item label="Assessed value"><strong>{formatMoney(r.assessment.assessedValue)}</strong></Descriptions.Item>

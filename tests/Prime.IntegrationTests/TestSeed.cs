@@ -12,14 +12,17 @@ internal static class TestSeed
     /// services look it up by code, so any usable database carries exactly
     /// one and a test must not insert a second (IX_PropertyTypes_Code).
     /// </summary>
-    public static async Task<PropertyType> LandPropertyTypeAsync(PrimeDbContext db)
+    public static Task<PropertyType> LandPropertyTypeAsync(PrimeDbContext db) => PropertyTypeAsync(db, "LAND", "DEMO_Land");
+
+    /// <summary>The property type with <paramref name="code"/>, reused when present (see <see cref="LandPropertyTypeAsync"/>).</summary>
+    public static async Task<PropertyType> PropertyTypeAsync(PrimeDbContext db, string code, string demoName)
     {
-        var existing = await db.PropertyTypes.FirstOrDefaultAsync(x => x.Code == "LAND");
+        var existing = await db.PropertyTypes.FirstOrDefaultAsync(x => x.Code == code);
         if (existing is not null)
         {
             return existing;
         }
-        var created = new PropertyType { Code = "LAND", Name = "DEMO_Land" };
+        var created = new PropertyType { Code = code, Name = demoName };
         db.PropertyTypes.Add(created);
         return created;
     }

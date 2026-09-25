@@ -539,6 +539,7 @@ public sealed class TransactionService(
             .Include(x => x.NewParties).ThenInclude(p => p.Taxpayer)
             .Include(x => x.TdCancellations).ThenInclude(c => c.TaxDeclaration)
             .Include(x => x.RelatedProperties).ThenInclude(r => r.Property)
+            .Include(x => x.TaxClearance)
             .SingleAsync(x => x.Id == id, ct);
         var issued = await db.TaxDeclarations.AsNoTracking().Where(x => x.PropertyTransactionId == id)
             .OrderBy(x => x.TaxDeclarationNumber)
@@ -559,7 +560,10 @@ public sealed class TransactionService(
             tx.TdCancellations.Select(c => new TransactionTdDto(c.TaxDeclarationId, c.TaxDeclaration!.TaxDeclarationNumber,
                 c.TaxDeclaration.PropertyId, c.TaxDeclaration.Status)).ToList(),
             tx.RelatedProperties.Select(r => new TransactionPropertyDto(r.PropertyId, r.Property!.PropertyIdentificationNumber, r.Role)).ToList(),
-            tx.TransferRpuId);
+            tx.TransferRpuId,
+            tx.TaxClearance is { } c ? new TransferTaxClearanceDto(c.CarNumber, c.CarDate, c.TransferorName, c.TransferorTin, c.TransfereeTin,
+                c.CapitalGainsTax, c.CapitalGainsTaxReceipt, c.CapitalGainsTaxDate, c.DocumentaryStampTax, c.DocumentaryStampTaxReceipt,
+                c.DocumentaryStampTaxDate, c.TransferTax, c.TransferTaxReceipt, c.TransferTaxDate, c.Remarks) : null);
     }
 
     private static Result<PropertyTransactionDto> NotFound() => Fail("PROPERTY_TRANSACTION_NOT_FOUND", "No property transaction was found with the given id.");

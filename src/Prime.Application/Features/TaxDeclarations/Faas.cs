@@ -88,7 +88,9 @@ internal static class FaasTaxDeclarations
         {
             return "A Tax Declaration already declares this assessment.";
         }
-        var level = await db.AssessmentLevels.Where(x => x.Id == assessment.AssessmentLevelId)
+        // The TD's own classification and actual use are its principal line's — the largest by market value.
+        var level = await db.AssessmentLines.Where(x => x.AssessmentId == assessment.Id)
+            .OrderByDescending(x => x.MarketValue).ThenBy(x => x.Sequence)
             .Select(x => new { x.ClassificationId, x.ActualUseId }).FirstAsync(ct);
         var context = await NumberContexts.ForPropertyAsync(db, assessment.PropertyId, assessment.EffectiveDate.Year, ct);
         var number = await numbering.GenerateIfConfiguredAsync(NumberedDocumentKind.TaxDeclaration, context, today, ct);

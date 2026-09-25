@@ -22,5 +22,31 @@ public sealed class ValuationConfiguration : IEntityTypeConfiguration<Valuation>
 
         builder.HasIndex(x => x.RpuId);
         builder.HasIndex(x => new { x.SourceType, x.SourceId, x.ComputedAt });
+        builder.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.ValuationId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public sealed class ValuationLineConfiguration : IEntityTypeConfiguration<ValuationLine>
+{
+    public void Configure(EntityTypeBuilder<ValuationLine> builder)
+    {
+        builder.ToTable("ValuationLines", t =>
+        {
+            t.HasCheckConstraint("CK_ValuationLines_Sequence", "\"Sequence\" >= 1");
+            t.HasCheckConstraint("CK_ValuationLines_MarketValue", "\"MarketValue\" >= 0");
+        });
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Source).HasConversion<string>().HasMaxLength(30);
+        builder.Property(x => x.Description).HasMaxLength(500);
+        builder.Property(x => x.Quantity).HasPrecision(18, 4);
+        builder.Property(x => x.Unit).HasMaxLength(50);
+        builder.Property(x => x.UnitValue).HasPrecision(18, 2);
+        builder.Property(x => x.MarketValue).HasPrecision(18, 2);
+        builder.Property(x => x.BreakdownJson).HasColumnType("jsonb");
+        builder.HasOne(x => x.Classification).WithMany().HasForeignKey(x => x.ClassificationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.SubClassification).WithMany().HasForeignKey(x => x.SubClassificationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ActualUse).WithMany().HasForeignKey(x => x.ActualUseId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.SmvSchedule).WithMany().HasForeignKey(x => x.SmvScheduleId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => new { x.ValuationId, x.Sequence }).IsUnique();
     }
 }

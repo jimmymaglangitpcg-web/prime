@@ -58,6 +58,7 @@ public sealed class PropertyTransactionConfiguration : IEntityTypeConfiguration<
         builder.HasMany(x => x.NewParties).WithOne().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(x => x.TdCancellations).WithOne().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(x => x.RelatedProperties).WithOne().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.TaxClearance).WithOne().HasForeignKey<TransferTaxClearance>(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => x.TransactionNumber).IsUnique();
         builder.HasIndex(x => new { x.PropertyId, x.EffectiveDate });
         builder.HasIndex(x => x.Status);
@@ -117,5 +118,27 @@ public sealed class PropertyTransactionPropertyConfiguration : IEntityTypeConfig
         builder.Property(x => x.Role).HasConversion<string>().HasMaxLength(20);
         builder.HasOne(x => x.Property).WithMany().HasForeignKey(x => x.PropertyId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => new { x.PropertyTransactionId, x.PropertyId }).IsUnique();
+    }
+}
+
+public sealed class TransferTaxClearanceConfiguration : IEntityTypeConfiguration<TransferTaxClearance>
+{
+    public void Configure(EntityTypeBuilder<TransferTaxClearance> builder)
+    {
+        builder.ToTable("TransferTaxClearances", t => t.HasCheckConstraint("CK_TransferTaxClearances_Amounts",
+            "COALESCE(\"CapitalGainsTax\", 0) >= 0 AND COALESCE(\"DocumentaryStampTax\", 0) >= 0 AND COALESCE(\"TransferTax\", 0) >= 0"));
+        builder.HasKey(x => x.Id);
+        builder.HasIndex(x => x.PropertyTransactionId).IsUnique();
+        builder.Property(x => x.CarNumber).HasMaxLength(100);
+        builder.Property(x => x.TransferorName).HasMaxLength(300);
+        builder.Property(x => x.TransferorTin).HasMaxLength(20);
+        builder.Property(x => x.TransfereeTin).HasMaxLength(20);
+        builder.Property(x => x.CapitalGainsTax).HasPrecision(18, 2);
+        builder.Property(x => x.DocumentaryStampTax).HasPrecision(18, 2);
+        builder.Property(x => x.TransferTax).HasPrecision(18, 2);
+        builder.Property(x => x.CapitalGainsTaxReceipt).HasMaxLength(100);
+        builder.Property(x => x.DocumentaryStampTaxReceipt).HasMaxLength(100);
+        builder.Property(x => x.TransferTaxReceipt).HasMaxLength(100);
+        builder.Property(x => x.Remarks).HasMaxLength(1000);
     }
 }

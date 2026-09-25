@@ -18,7 +18,9 @@ public sealed record CreateMachineryRequest(
     int? EconomicLifeYears,
     int? RemainingLifeYears,
     bool IsBrandNew = false,
-    decimal? ReplacementCost = null);
+    decimal? ReplacementCost = null,
+    Guid? ClassificationId = null,
+    Guid? ActualUseId = null);
 
 public sealed record MachineryDto(
     Guid Id,
@@ -44,4 +46,11 @@ public sealed record MachineryDto(
     decimal? MarketValue,
     decimal? AssessedValue,
     RecordStatus Status,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    Guid? ClassificationId,
+    string? ClassificationName,
+    Guid? ActualUseId,
+    string? ActualUseName,
+    int? YearInstalled = null,
+    int? YearOfInitialOperation = null,
+    decimal? ConversionFactor = null);

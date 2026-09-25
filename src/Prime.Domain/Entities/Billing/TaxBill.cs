@@ -79,6 +79,24 @@ public sealed class TaxBillTaxType : Entity
     public decimal? CapBaselineTax { get; set; }
     public decimal? CapLimit { get; set; }
     public decimal AnnualTax { get; set; }
+
+    /// <summary>
+    /// The tax on each assessment line, at the rate for its classification
+    /// (docs/analysis/mrpaao-forms-model.md §8.4). <see cref="ComputedAnnualTax"/>
+    /// is their sum; <see cref="TaxRateId"/>/<see cref="RatePercent"/> are the
+    /// principal line's.
+    /// </summary>
+    public List<TaxBillTaxTypeLine> Lines { get; set; } = [];
+}
+
+public sealed class TaxBillTaxTypeLine : Entity
+{
+    public Guid TaxBillTaxTypeId { get; set; }
+    public Guid? ClassificationId { get; set; }
+    public decimal AssessedValue { get; set; }
+    public Guid TaxRateId { get; set; }
+    public decimal RatePercent { get; set; }
+    public decimal Tax { get; set; }
 }
 
 /// <summary>

@@ -1,14 +1,18 @@
 import { useState } from 'react';
-import { Button, Descriptions, Empty, Tag } from 'antd';
+import { Button, Descriptions, Empty, Table, Tag } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
-import type { RpuSummaryDto } from '../../../lib/types';
+import type { MachineryDto, RpuSummaryDto } from '../../../lib/types';
 import { useLandByRpu } from '../../../api/land';
 import { useBuildingByRpu } from '../../../api/buildings';
-import { useMachineryByRpu } from '../../../api/machinery';
+import { useMachineryUnitsByRpu } from '../../../api/machinery';
 import { AddLandModal } from '../modals/AddLandModal';
 import { AddBuildingModal } from '../modals/AddBuildingModal';
 import { AddMachineryModal } from '../modals/AddMachineryModal';
 import { ApiRequestError } from '../../../lib/apiClient';
+import { LandAppraisalRows } from './LandAppraisalRows';
+import { BuildingAppraisalRows } from './BuildingAppraisalRows';
+import { MachineryDescriptionModal } from '../modals/DescriptionModals';
+import { formatMoney } from '../../../lib/format';
 
 // A LAND_NOT_FOUND/BUILDING_NOT_FOUND/MACHINERY_NOT_FOUND response (mapped
 // to HTTP 404 by ApiControllerBase) means "not registered yet" here, since
@@ -41,6 +45,7 @@ function LandDetail({ propertyId, rpuId }: { propertyId: string; rpuId: string }
   }
 
   return (
+    <>
     <Descriptions size="small" column={2} bordered style={{ marginBottom: 8 }}>
       <Descriptions.Item label="Status">
         <Tag>{data.status}</Tag>
@@ -55,6 +60,8 @@ function LandDetail({ propertyId, rpuId }: { propertyId: string; rpuId: string }
       <Descriptions.Item label="Market Value">{data.marketValue ?? 'Not yet valued'}</Descriptions.Item>
       <Descriptions.Item label="Assessed Value">{data.assessedValue ?? 'Not yet assessed'}</Descriptions.Item>
     </Descriptions>
+    <LandAppraisalRows land={data} rpuId={rpuId} propertyId={propertyId} />
+    </>
   );
 }
 
@@ -82,6 +89,7 @@ function BuildingDetail({ propertyId, rpuId }: { propertyId: string; rpuId: stri
   }
 
   return (
+    <>
     <Descriptions size="small" column={2} bordered style={{ marginBottom: 8 }}>
       <Descriptions.Item label="Status">
         <Tag>{data.status}</Tag>
@@ -98,50 +106,42 @@ function BuildingDetail({ propertyId, rpuId }: { propertyId: string; rpuId: stri
       <Descriptions.Item label="Market Value">{data.marketValue ?? 'Not yet valued'}</Descriptions.Item>
       <Descriptions.Item label="Assessed Value">{data.assessedValue ?? 'Not yet assessed'}</Descriptions.Item>
     </Descriptions>
+    <BuildingAppraisalRows building={data} rpuId={rpuId} propertyId={propertyId} />
+    </>
   );
 }
 
+/** The machines of a machinery RPU — one row each on its FAAS (MRPAAO Att. 3). */
 function MachineryDetail({ propertyId, rpuId }: { propertyId: string; rpuId: string }) {
-  const { data, isLoading, isError, error } = useMachineryByRpu(rpuId);
+  const { data = [], isLoading, isError } = useMachineryUnitsByRpu(rpuId);
   const [addOpen, setAddOpen] = useState(false);
+  const [editing, setEditing] = useState<MachineryDto | null>(null);
 
-  if (isLoading) {
-    return null;
-  }
-
-  if (isError && isNotFound(error)) {
-    return (
-      <div style={{ marginBottom: 8 }}>
-        <Button size="small" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
-          Add Machinery
-        </Button>
-        <AddMachineryModal propertyId={propertyId} rpuId={rpuId} open={addOpen} onClose={() => setAddOpen(false)} />
-      </div>
-    );
-  }
-
-  if (isError || !data) {
-    return <Empty description="Could not load Machinery details" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+  if (isError) {
+    return <Empty description="Could not load the machinery" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
 
   return (
-    <Descriptions size="small" column={2} bordered style={{ marginBottom: 8 }}>
-      <Descriptions.Item label="Status">
-        <Tag>{data.status}</Tag>
-      </Descriptions.Item>
-      <Descriptions.Item label="Machinery Type">{data.machineryTypeName}</Descriptions.Item>
-      <Descriptions.Item label="Brand">{data.brand ?? '—'}</Descriptions.Item>
-      <Descriptions.Item label="Model">{data.model ?? '—'}</Descriptions.Item>
-      <Descriptions.Item label="Serial Number">{data.serialNumber ?? '—'}</Descriptions.Item>
-      <Descriptions.Item label="Date Acquired">{data.dateAcquired ?? '—'}</Descriptions.Item>
-      <Descriptions.Item label="Acquisition Cost">{data.acquisitionCost}</Descriptions.Item>
-      <Descriptions.Item label="Brand-new">{data.isBrandNew ? 'Yes' : 'No'}</Descriptions.Item>
-      <Descriptions.Item label="Replacement Cost">{data.isBrandNew ? 'n/a' : (data.replacementCost ?? '—')}</Descriptions.Item>
-      <Descriptions.Item label="Economic Life">{data.economicLifeYears ?? '—'} yrs</Descriptions.Item>
-      <Descriptions.Item label="Remaining Life">{data.remainingLifeYears ?? '—'} yrs</Descriptions.Item>
-      <Descriptions.Item label="Market Value">{data.marketValue ?? 'Not yet valued'}</Descriptions.Item>
-      <Descriptions.Item label="Assessed Value">{data.assessedValue ?? 'Not yet assessed'}</Descriptions.Item>
-    </Descriptions>
+    <div style={{ marginBottom: 8 }}>
+      <Button size="small" icon={<PlusOutlined />} onClick={() => setAddOpen(true)} style={{ marginBottom: 6 }}>
+        Add machine
+      </Button>
+      <Table<MachineryDto> size="small" rowKey="id" loading={isLoading} dataSource={data} pagination={false} scroll={{ x: 'max-content' }}
+        locale={{ emptyText: 'No machines recorded' }}
+        columns={[
+          { title: 'Type', dataIndex: 'machineryTypeName' },
+          { title: 'Brand / model / serial', render: (_, m) => [m.brand, m.model, m.serialNumber].map((v) => v ?? '—').join(' / ') },
+          { title: 'Acquired', dataIndex: 'dateAcquired', render: (v: string | null) => v ?? '—' },
+          { title: 'Condition', dataIndex: 'isBrandNew', render: (v: boolean) => (v ? 'Brand new' : 'Not brand new') },
+          { title: 'Economic / remaining life', render: (_, m) => `${m.economicLifeYears ?? '—'} / ${m.remainingLifeYears ?? '—'} yrs` },
+          { title: 'Assessed under', render: (_, m) => (m.actualUseName ? `${m.classificationName ?? ''} / ${m.actualUseName}` : 'Tax Declaration’s use') },
+          { title: 'Installed / operating since', render: (_, m) => `${m.yearInstalled ?? '—'} / ${m.yearOfInitialOperation ?? '—'}` },
+          { title: 'Market value', dataIndex: 'marketValue', align: 'right', render: (v: number | null) => (v === null ? 'Not yet valued' : formatMoney(v)) },
+          { title: '', render: (_, m) => <Button size="small" onClick={() => setEditing(m)}>Edit</Button> },
+        ]} />
+      {editing && <MachineryDescriptionModal machine={editing} rpuId={rpuId} onClose={() => setEditing(null)} />}
+      <AddMachineryModal propertyId={propertyId} rpuId={rpuId} open={addOpen} onClose={() => setAddOpen(false)} />
+    </div>
   );
 }
 

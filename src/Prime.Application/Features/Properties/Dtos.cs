@@ -35,7 +35,14 @@ public sealed record PropertyDto(
     string? TitleNumber,
     string? TaxMapNumber,
     RecordStatus Status,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    Guid? TitleTypeId = null,
+    string? TitleTypeName = null,
+    DateOnly? TitleDate = null,
+    string? BoundaryNorth = null,
+    string? BoundaryEast = null,
+    string? BoundarySouth = null,
+    string? BoundaryWest = null);
 
 /// <summary>
 /// CLAUDE.md §50 Property Profile — sections that have real data by Phase

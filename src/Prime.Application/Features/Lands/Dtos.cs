@@ -36,4 +36,7 @@ public sealed record LandDto(
     decimal? MarketValue,
     decimal? AssessedValue,
     RecordStatus Status,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<LandStripDto> Strips,
+    IReadOnlyList<LandImprovementDto> Improvements,
+    IReadOnlyList<LandAdjustmentDto> Adjustments);

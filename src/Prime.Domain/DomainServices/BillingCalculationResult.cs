@@ -30,7 +30,15 @@ public sealed record BillingTaxTypeResult(
     Guid? CapRuleId,
     decimal? CapBaselineTax,
     decimal? CapLimit,
-    decimal AnnualTax);
+    decimal AnnualTax,
+    IReadOnlyList<BillingTaxTypeLine> Lines);
+
+/// <summary>
+/// The tax one assessment line bears for one tax type: its assessed value ×
+/// the rate for its classification, rounded. The tax type's computed annual
+/// tax is the sum of its lines (docs/analysis/mrpaao-forms-model.md §8.4).
+/// </summary>
+public sealed record BillingTaxTypeLine(Guid? ClassificationId, decimal AssessedValue, Guid TaxRateId, decimal RatePercent, decimal Tax);
 
 /// <summary>
 /// One bill line. <see cref="RuleId"/> identifies the rule of the table

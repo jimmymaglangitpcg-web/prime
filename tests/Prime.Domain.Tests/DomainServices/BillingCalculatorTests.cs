@@ -541,4 +541,80 @@ public class BillingCalculatorTests
                 PenaltyRules = [Approved(new PenaltyRule { FixedAmount = 10m })],
             })
             .ShouldNotBeNull().ShouldContain("must name a tax type");
+
+    // --- Assessment lines (docs/analysis/mrpaao-forms-model.md §8.4) ---
+
+    private static BillingCalculationInput Lines(DateOnly asOf, TaxRate[] rates, params (Guid Classification, decimal AssessedValue)[] lines) => new()
+    {
+        AssessedValue = lines.Sum(l => l.AssessedValue),
+        ClassificationId = lines[0].Classification,
+        Lines = lines.Select(l => new BillingAssessmentLine(l.Classification, l.AssessedValue)).ToList(),
+        TaxYear = 2026,
+        AsOfDate = asOf,
+        TaxRates = rates,
+        PaymentSchedule = Annual(),
+    };
+
+    [Fact]
+    public void Calculate_Lines_EachTaxedAtItsClassificationsRate_AndSummedPerTaxType()
+    {
+        // DEMO: a general basic rate for every line, and a levy for commercial lines only.
+        var input = Lines(new(2026, 1, 15), [Rate(DemoBasic, 1m), Rate(DemoSef, 2m, DemoCommercial)],
+            (DemoResidential, 60_000m), (DemoCommercial, 40_000m));
+
+        var result = BillingCalculator.Calculate(input, NoStacking);
+
+        var basic = result.TaxTypes.Single(t => t.TaxTypeId == DemoBasic);
+        basic.AssessedValue.ShouldBe(100_000m);
+        basic.ComputedAnnualTax.ShouldBe(1_000m);
+        basic.Lines.Select(l => (l.ClassificationId, l.Tax)).ShouldBe([(DemoResidential, 600m), (DemoCommercial, 400m)]);
+        var levy = result.TaxTypes.Single(t => t.TaxTypeId == DemoSef);
+        levy.AssessedValue.ShouldBe(40_000m); // the residential line bears none of it
+        levy.AnnualTax.ShouldBe(800m);
+        levy.Lines.ShouldHaveSingleItem().ClassificationId.ShouldBe(DemoCommercial);
+        result.Total.ShouldBe(1_800m);
+    }
+
+    [Fact]
+    public void Calculate_Lines_ClassificationSpecificRateWinsPerLine_PrincipalLineNamesTheRate()
+    {
+        var special = Rate(DemoBasic, 2m, DemoCommercial);
+        var input = Lines(new(2026, 1, 15), [Rate(DemoBasic, 1m), special],
+            (DemoResidential, 30_000m), (DemoCommercial, 70_000m));
+
+        var basic = BillingCalculator.Calculate(input, NoStacking).TaxTypes.Single();
+
+        basic.ComputedAnnualTax.ShouldBe(300m + 1_400m);
+        basic.TaxRateId.ShouldBe(special.Id); // the principal (largest) line's rate
+        basic.RatePercent.ShouldBe(2m);
+    }
+
+    [Fact]
+    public void Calculate_Lines_RoundEachLine_ThenSum()
+    {
+        var input = Lines(new(2026, 1, 15), [Rate(DemoBasic, 1m)], (DemoResidential, 0.50m), (DemoCommercial, 0.50m));
+
+        // 0.005 rounds away from zero to 0.01 on each line: 0.02, not Money(0.01) = 0.01.
+        BillingCalculator.Calculate(input, NoStacking).TaxTypes.Single().AnnualTax.ShouldBe(0.02m);
+    }
+
+    [Fact]
+    public void Calculate_Lines_CapAppliesToTheTaxTypesTotal()
+    {
+        var input = Lines(new(2026, 1, 15), [Rate(DemoBasic, 1m)], (DemoResidential, 60_000m), (DemoCommercial, 40_000m)) with
+        {
+            TaxIncreaseCapRules = [Cap(6m)],
+            CapBaselines = [new(DemoBasic, TaxIncreaseCapBaseline.TaxBeforeSmv, 900m)],
+        };
+
+        var basic = BillingCalculator.Calculate(input, NoStacking).TaxTypes.Single();
+
+        basic.ComputedAnnualTax.ShouldBe(1_000m);
+        basic.AnnualTax.ShouldBe(954m);
+    }
+
+    [Fact]
+    public void Validate_LinesNotAddingUpToTheAssessedValue_IsRefused() =>
+        BillingCalculator.Validate(Lines(new(2026, 1, 15), [Rate(DemoBasic, 1m)], (DemoResidential, 100m)) with { AssessedValue = 101m })
+            .ShouldNotBeNull().ShouldContain("differs from the sum of its lines");
 }

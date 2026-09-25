@@ -103,6 +103,10 @@ public sealed class SmvService(
         {
             return Result.Failure<SmvScheduleDto>("ZONE_NOT_FOUND", "The specified zone does not exist.");
         }
+        if (request.ImprovementKindId is not null && !await db.ImprovementKinds.AnyAsync(x => x.Id == request.ImprovementKindId, cancellationToken))
+        {
+            return Result.Failure<SmvScheduleDto>("IMPROVEMENT_KIND_NOT_FOUND", "The specified improvement kind does not exist.");
+        }
 
         // Never overwrite (CLAUDE.md §28): close any currently-open schedule for
         // the same classification/actual use/property type/zone key instead of
@@ -112,6 +116,7 @@ public sealed class SmvService(
                 && x.ActualUseId == request.ActualUseId
                 && x.PropertyTypeId == request.PropertyTypeId
                 && x.ZoneId == request.ZoneId
+                && x.ImprovementKindId == request.ImprovementKindId
                 && x.EndDate == null,
             cancellationToken);
 
@@ -133,6 +138,7 @@ public sealed class SmvService(
             ActualUseId = request.ActualUseId,
             PropertyTypeId = request.PropertyTypeId,
             ZoneId = request.ZoneId,
+            ImprovementKindId = request.ImprovementKindId,
             Unit = request.Unit,
             MarketValue = request.MarketValue,
             MinimumValue = request.MinimumValue,
@@ -194,7 +200,8 @@ public sealed class SmvService(
         .Include(x => x.Classification)
         .Include(x => x.ActualUse)
         .Include(x => x.PropertyType)
-        .Include(x => x.Zone);
+        .Include(x => x.Zone)
+        .Include(x => x.ImprovementKind);
 
     private static SmvDto ToDto(Domain.Entities.Smv smv) => new(
         smv.Id,
@@ -218,6 +225,8 @@ public sealed class SmvService(
         x.PropertyType!.Name,
         x.ZoneId,
         x.Zone?.Name,
+        x.ImprovementKindId,
+        x.ImprovementKind?.Name,
         x.Unit,
         x.MarketValue,
         x.MinimumValue,
