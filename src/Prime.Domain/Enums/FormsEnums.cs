@@ -25,6 +25,12 @@ public enum FormAuthority
     Blgf = 2,
     LguOrdinance = 3,
     Other = 4,
+    /// <summary>
+    /// A layout taken from the 2004/2006 Manual on Real Property Appraisal and
+    /// Assessment Operations — a reference layout of a superseded manual, used
+    /// until the LAM's forms are configured (docs/analysis/mrpaao-forms-model.md).
+    /// </summary>
+    Mrpaao = 5,
 }
 
 /// <summary>The record a form renders. Each has a data provider that builds the form's snapshot.</summary>
@@ -37,6 +43,8 @@ public enum FormSubjectType
     Assessment = 3,
     /// <summary>A property's statement of account; the subject id is the property (docs/FORMS-REVISION-PLAN.md A8).</summary>
     StatementOfAccount = 4,
+    /// <summary>A FAAS as the MRPAAO prints it: a Tax Declaration with the assessment it declares; the subject id is the TD.</summary>
+    Faas = 5,
 }
 
 /// <summary>Records whose approval can follow a configured <c>ApprovalChain</c>.</summary>

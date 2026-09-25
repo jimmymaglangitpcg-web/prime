@@ -12,6 +12,7 @@ const authorityLabel: Record<FormAuthority, string> = {
   Blgf: 'BLGF',
   LguOrdinance: 'LGU ordinance',
   Other: 'Other',
+  Mrpaao: 'MRPAAO 2004 reference layout (superseded manual)',
 };
 
 const errorMessage = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error)?.message ?? 'Not found');

@@ -24,7 +24,10 @@ const workflowStatusColor: Record<string, string> = {
 };
 
 /** TDs of one RPU with their lifecycle (docs/FORMS-REVISION-PLAN.md A4): submit → approve/reject → cancel; annotations; print. */
-function TaxDeclarationsForRpu({ propertyId, rpuId }: { propertyId: string; rpuId: string }) {
+/** The MRPAAO FAAS form for a unit type (Att. 1–3; docs/analysis/mrpaao-forms-model.md §13). */
+const faasFormFor: Partial<Record<RpuSummaryDto['rpuType'], string>> = { Land: 'FAAS_LAND', Building: 'FAAS_BUILDING', Machinery: 'FAAS_MACHINERY' };
+
+function TaxDeclarationsForRpu({ propertyId, rpuId, rpuType }: { propertyId: string; rpuId: string; rpuType: RpuSummaryDto['rpuType'] }) {
   const { data, isLoading } = useTaxDeclarationsByRpu(rpuId);
   const [addOpen, setAddOpen] = useState(false);
   const [annotating, setAnnotating] = useState<TaxDeclarationDto | null>(null);
@@ -74,6 +77,7 @@ function TaxDeclarationsForRpu({ propertyId, rpuId }: { propertyId: string; rpuI
             title: 'FAAS No.',
             render: (_, td) => td.faasNumber ?? <Tooltip title="Declares no assessment yet — it becomes a FAAS once it does">—</Tooltip>,
           },
+          { title: 'Code', dataIndex: 'transactionCode', width: 70, render: (v: string | null) => v ?? '—' },
           { title: 'Revision', dataIndex: 'revisionNumber', width: 90 },
           { title: 'Assessment Year', dataIndex: 'assessmentYear', width: 130 },
           { title: 'Effectivity', dataIndex: 'effectivityDate' },
@@ -103,6 +107,11 @@ function TaxDeclarationsForRpu({ propertyId, rpuId }: { propertyId: string; rpuI
                   <Button size="small" onClick={() => setAnnotating(td)}>Annotations</Button>
                 </Badge>
                 <PrintFormButton formCode="TAX_DECLARATION" subjectId={td.id} issuable={td.status !== 'Rejected' && td.status !== 'Voided'} />
+                {faasFormFor[rpuType] && td.assessmentId && (
+                  // The FAAS is this TD with the assessment it declares; issued once the TD is approved.
+                  <PrintFormButton formCode={faasFormFor[rpuType]!} subjectId={td.id}
+                    issuable={td.status === 'Approved' || td.status === 'Cancelled'} label="FAAS" />
+                )}
               </Space>
             ),
           },
@@ -161,7 +170,7 @@ export function RpuSection({ propertyId, rpus }: { propertyId: string; rpus: Rpu
           expandedRowRender: (rpu) => (
             <>
               <PropertyDetailForRpu propertyId={propertyId} rpu={rpu} />
-              <TaxDeclarationsForRpu propertyId={propertyId} rpuId={rpu.id} />
+              <TaxDeclarationsForRpu propertyId={propertyId} rpuId={rpu.id} rpuType={rpu.rpuType} />
               <AssessmentsForRpu rpuId={rpu.id} />
             </>
           ),

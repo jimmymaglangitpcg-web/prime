@@ -29,7 +29,9 @@ public sealed record AssessmentDto(
     Guid? ApprovedBy,
     DateTimeOffset? ApprovedAt,
     DateTimeOffset CreatedAt,
-    IReadOnlyList<AssessmentLineDto> Lines);
+    IReadOnlyList<AssessmentLineDto> Lines,
+    DateTimeOffset? PostedAt = null,
+    Guid? PostedBy = null);
 
 /// <summary>A FAAS "Property Assessment" row (docs/analysis/mrpaao-forms-model.md §8.2).</summary>
 public sealed record AssessmentLineDto(

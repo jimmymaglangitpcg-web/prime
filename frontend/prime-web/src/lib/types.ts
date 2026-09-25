@@ -351,6 +351,8 @@ export interface CreateTaxDeclarationRequest {
   remarks?: string | null;
   /** Draft the TD under this property transaction (approved with it). */
   propertyTransactionId?: string;
+  /** A transaction code in force (catalogue), when the TD is not drafted under a transaction. */
+  transactionCode?: string;
 }
 
 export interface TaxDeclarationDto {
@@ -384,6 +386,9 @@ export interface TaxDeclarationDto {
   assessmentId: string | null;
   /** Null until the TD declares an assessment. */
   faasNumber: string | null;
+  /** FAAS transaction code (MRPAAO p.145) and its rank; the highest rank wins when several apply. */
+  transactionCode: string | null;
+  transactionRank: number | null;
 }
 
 export interface TaxDeclarationAnnotationDto {
@@ -715,8 +720,8 @@ export type NumberedDocumentKind =
   | 'NoticeOfAssessment'
   | 'OfficialReceipt'
   | 'PropertyTransaction';
-export type FormAuthority = 'PrimeProvisional' | 'Lam' | 'Blgf' | 'LguOrdinance' | 'Other';
-export type FormSubjectType = 'TaxBill' | 'TaxDeclaration' | 'NoticeOfAssessment' | 'Assessment' | 'StatementOfAccount';
+export type FormAuthority = 'PrimeProvisional' | 'Lam' | 'Blgf' | 'LguOrdinance' | 'Other' | 'Mrpaao';
+export type FormSubjectType = 'TaxBill' | 'TaxDeclaration' | 'NoticeOfAssessment' | 'Assessment' | 'StatementOfAccount' | 'Faas';
 export type ApprovalSubjectType = 'Assessment' | 'TaxDeclaration' | 'PropertyTransaction';
 
 interface ConfigurationHeader {
@@ -1013,6 +1018,9 @@ export interface AssessmentSummaryDto {
   previousAssessmentId: string | null;
   faasNumber: string | null;
   remarks: string | null;
+  /** The Record of Assessment entry. */
+  postedAt: string | null;
+  postedBy: string | null;
 }
 
 // --- Appraisal record / FAAS aggregate (docs/FORMS-REVISION-PLAN.md A7) ---
@@ -1031,7 +1039,7 @@ export interface AppraisalRecordDto {
   partiesAsOf: string;
   parties: { name: string; role: PropertyPartyRole; roleLabel: string; sharePercent: number; address: string | null }[];
   rpu: { id: string; number: string; type: RpuType };
-  taxDeclaration: { id: string; number: string; revisionNumber: number; effectivityDate: string; status: WorkflowStatus } | null;
+  taxDeclaration: { id: string; number: string; revisionNumber: number; effectivityDate: string; status: WorkflowStatus; transactionCode: string | null } | null;
   land: {
     id: string; area: number; areaUnit: string; classification: string; actualUse: string; subClassification: string | null; zone: string | null;
     locationFactor: number | null; roadFrontage: number | null; roadType: string | null; isCornerLot: boolean; zoning: string | null;
@@ -1071,6 +1079,8 @@ export interface AppraisalRecordDto {
   previous: { assessmentId: string; faasNumber: string | null; year: number; effectiveDate: string; marketValue: number; assessedValue: number; assessedValueChange: number } | null;
   recordedBy: string | null;
   recordedAt: string;
+  /** Date of entry in the Record of Assessment (when posted) and by whom. */
+  recordEntry: { postedAt: string; postedBy: string | null } | null;
   signatures: { label: string; name: string; position: string | null; signedAt: string }[];
   notices: { id: string; number: string | null; status: NoticeStatus; issuedAt: string | null; receivedDate: string | null; appealDeadline: string | null }[];
 }

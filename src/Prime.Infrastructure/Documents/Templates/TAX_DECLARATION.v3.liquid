@@ -1,0 +1,122 @@
+{% comment %}
+  Tax Declaration of Real Property, after the MRPAAO Attachment 4 (p.236;
+  instructions p.155–157). Superseded manual: reference layout
+  (docs/analysis/mrpaao-forms-model.md §13). The back page carries the BIR
+  clearance of a transfer (MRPAAO Annex A).
+{% endcomment %}
+{% assign m = mrpaao %}
+<style>
+  .src { font-size: 8pt; border: 1px solid #555; padding: 2px 6px; margin-bottom: 6px; }
+  .draft { border: 2px solid #b00; color: #b00; font-weight: bold; text-align: center; padding: 3px; margin-bottom: 6px; }
+  h1 { font-size: 13pt; text-align: center; margin: 4px 0 6px; }
+  .lgu { text-align: center; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 5px; }
+  td, th { border: 1px solid #000; padding: 2px 4px; font-size: 9pt; vertical-align: top; }
+  th { background: #eee; text-align: left; }
+  .num { text-align: right; white-space: nowrap; }
+  .lbl { font-size: 7.5pt; color: #333; display: block; }
+  .box { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; text-align: center; line-height: 11px; font-size: 9pt; }
+  .note { font-size: 8pt; border: 1px solid #000; padding: 3px 5px; }
+  .back { page-break-before: always; }
+</style>
+<div class="src">Layout: MRPAAO 2004, Attachment 4 — superseded by the Local Assessment Manual; reference layout. Form {{ form.code }} v{{ form.version }}.</div>
+{% if td.status == "Cancelled" %}<div class="draft">{% if td.supersededByNumber %}CANCELLED BY TD No. {{ td.supersededByNumber }}{% else %}CANCELLED{% endif %}{% if td.cancelledAt %} on {{ td.cancelledAt | date_ph }}{% endif %}{% if td.cancellationReason %} — {{ td.cancellationReason }}{% endif %}</div>{% endif %}
+{% if td.status == "Draft" or td.status == "PendingReview" %}<div class="draft">{{ td.status | upcase }} — NOT APPROVED</div>{% endif %}
+{% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% endif %}
+<h1>TAX DECLARATION OF REAL PROPERTY</h1>
+
+<table>
+  <tr><td style="width:50%"><span class="lbl">TD No.</span><b>{{ td.number }}</b>{% if m.transactionCode %} &nbsp;({{ m.transactionCode }}){% endif %}</td>
+      <td><span class="lbl">Property Identification No.</span>{{ m.pin | default: property.pin }}</td></tr>
+  {% assign ownerCount = 0 %}{% for o in m.declaredOwners %}{% if o.role == "Owner" or o.role == "UnknownOwner" %}{% assign ownerCount = ownerCount | plus: 1 %}{% endif %}{% endfor %}
+  {% if ownerCount == 0 %}<tr><td colspan="2"><span class="lbl">Owner</span>No owner recorded as of {{ td.effectivityDate | date_ph }}</td></tr>{% endif %}
+  {% for o in m.declaredOwners %}{% if o.role == "Owner" or o.role == "UnknownOwner" %}
+  <tr><td><span class="lbl">Owner</span>{{ o.name }}{% if o.role == "Owner" and o.sharePercent != 100 %} ({{ o.sharePercent | percent }}){% endif %}</td>
+      <td><span class="lbl">TIN / Telephone No.</span>{{ o.tin | default: "—" }} / {{ o.contactNumber | default: "—" }}</td></tr>
+  <tr><td colspan="2"><span class="lbl">Address</span>{{ o.address | default: "—" }}</td></tr>
+  {% endif %}{% endfor %}
+  {% for o in m.declaredOwners %}{% if o.role != "Owner" and o.role != "UnknownOwner" %}
+  <tr><td><span class="lbl">Administrator/Beneficial User ({{ o.roleLabel }})</span>{{ o.name }}</td>
+      <td><span class="lbl">TIN / Telephone No.</span>{{ o.tin | default: "—" }} / {{ o.contactNumber | default: "—" }}</td></tr>
+  {% endif %}{% endfor %}
+  <tr><td colspan="2"><span class="lbl">Location of Property (Number and Street / Barangay/District / Municipality &amp; Province/City)</span>
+      {% if property.street %}{{ property.street }}, {% endif %}{{ property.barangay }}, {{ property.municipality }}, {{ property.province }}</td></tr>
+</table>
+
+<table>
+  <tr><td><span class="lbl">{{ property.titleType | default: "OCT/TCT/CLOA" }} No.</span>{{ property.titleNumber | default: "—" }}</td>
+      <td><span class="lbl">Survey No.</span>{{ property.surveyNumber | default: "—" }}</td></tr>
+  <tr><td><span class="lbl">Dated</span>{% if property.titleDate %}{{ property.titleDate | date_ph }}{% else %}—{% endif %}</td>
+      <td><span class="lbl">Lot No. / Blk. No.</span>{{ property.lotNumber | default: "—" }} / {{ property.blockNumber | default: "—" }}</td></tr>
+  <tr><td colspan="2"><span class="lbl">Boundaries</span>
+      North: {{ property.boundaryNorth | default: "—" }} &nbsp; South: {{ property.boundarySouth | default: "—" }}<br>
+      East: {{ property.boundaryEast | default: "—" }} &nbsp; West: {{ property.boundaryWest | default: "—" }}</td></tr>
+</table>
+
+<table>
+  <tr><td colspan="2"><span class="lbl">KIND OF PROPERTY ASSESSED</span>
+      <span class="box">{% if m.kind.type == "Land" %}X{% endif %}</span> LAND &nbsp;&nbsp;
+      <span class="box">{% if m.kind.type == "Building" %}X{% endif %}</span> BUILDING{% if m.kind.type == "Building" %} — No. of Storeys: {{ m.kind.storeys | default: "—" }}; Brief Description: {{ m.kind.description | default: "—" }}{% endif %} &nbsp;&nbsp;
+      <span class="box">{% if m.kind.type == "Machinery" %}X{% endif %}</span> MACHINERY{% if m.kind.type == "Machinery" %} — Brief Description: {{ m.kind.description | default: "—" }}{% endif %} &nbsp;&nbsp;
+      <span class="box">{% if m.kind.type == "OtherImprovement" %}X{% endif %}</span> OTHERS{% if m.kind.type == "OtherImprovement" %} — Specify: other improvement{% endif %}</td></tr>
+</table>
+
+<table>
+  <tr><th>Classification</th><th class="num">Area</th><th class="num">Market Value</th><th>Actual Use</th><th class="num">Assessment Level</th><th class="num">Assessed Value</th></tr>
+  {% if assessment %}
+  {% for l in assessment.lines %}
+  <tr><td>{{ l.classification }}</td><td class="num">{% if l.area %}{{ l.area | num }} {{ l.areaUnit }}{% else %}—{% endif %}</td>
+      <td class="num">{{ l.marketValue | money }}</td><td>{{ l.actualUse }}</td><td class="num">{{ l.assessmentLevelPercent | percent }}</td>
+      <td class="num">{{ l.assessedValue | money }}</td></tr>
+  {% endfor %}
+  <tr><td><b>Total</b></td><td></td><td class="num"><b>{{ assessment.marketValue | money }}</b></td><td></td><td></td><td class="num"><b>{{ assessment.assessedValue | money }}</b></td></tr>
+  {% else %}
+  <tr><td colspan="6">No assessment is declared yet.</td></tr>
+  {% endif %}
+</table>
+
+<table>
+  <tr><td colspan="2"><span class="lbl">Total Assessed Value (Amount in Words)</span>
+      <b>{% if assessment %}{{ assessment.assessedValue | amount_words }}{% else %}—{% endif %}</b></td></tr>
+  <tr><td style="width:55%">
+      <span class="box">{% if td.taxability == "Taxable" %}X{% endif %}</span> Taxable &nbsp;&nbsp;
+      <span class="box">{% if td.taxability != "Taxable" %}X{% endif %}</span> Exempt</td>
+      <td>Effectivity of Assessment/Reassessment: <b>Q{{ m.effectivityQuarter }}</b> Qtr. <b>{{ m.effectivityYear }}</b> Yr.</td></tr>
+  <tr><td colspan="2">{% comment %} The last signatory is the manual's "Approved by"; earlier approval steps print by their configured labels. {% endcomment %}
+      {% for s in signatories %}{% unless forloop.last %}<span class="lbl">{{ s.label | upcase }}</span>{{ s.name }}{% if s.position %}, {{ s.position }}{% endif %} — {{ s.signedAt | date_ph }}<br>{% endunless %}{% endfor %}
+      <span class="lbl">APPROVED BY — Provincial/City/Municipal Assessor</span><div style="height:26px"></div>
+      {% for s in signatories %}{% if forloop.last %}<b>{{ s.name }}</b>{% if s.position %}, {{ s.position }}{% endif %} — {{ s.signedAt | date_ph }}{% if s.label %} ({{ s.label }}){% endif %}{% endif %}{% else %}—{% endfor %}</td></tr>
+  <tr><td colspan="2">This declaration cancels TD No. <b>{% if m.cancels %}{{ m.cancels.number }}{% else %}—{% endif %}</b>
+      &nbsp; Owner: <b>{% if m.cancels %}{{ m.cancels.owner | default: "—" }}{% else %}—{% endif %}</b>
+      &nbsp; Previous A.V. Php <b>{% if m.cancels and m.cancels.assessedValue %}{{ m.cancels.assessedValue | money }}{% else %}—{% endif %}</b></td></tr>
+  <tr><td colspan="2"><span class="lbl">Memoranda</span>{{ td.remarks | default: "—" }}
+      {% for a in annotations %}<br>{{ a.type }} — {{ a.effectiveDate | date_ph }}: {{ a.text }}{% if a.referenceNumber %} (Ref. {{ a.referenceNumber }}{% if a.referenceDate %}, {{ a.referenceDate | date_ph }}{% endif %}){% endif %}{% if a.lifted %} — lifted {{ a.liftedAt | date_ph }}: {{ a.liftReason }}{% endif %}{% endfor %}</td></tr>
+</table>
+
+<div class="note"><b>Notes:</b> This declaration is for real property taxation purposes only and the valuation indicated herein are based on the
+  schedule of unit market values prepared for the purpose and duly enacted into an Ordinance by the
+  {{ lgu.sanggunianName | default: "Sangguniang ____________" }} under Ordinance No. {% if assessment and assessment.smvOrdinanceNumber %}{{ assessment.smvOrdinanceNumber }}{% else %}__________{% endif %}
+  dated {% if assessment and assessment.smvOrdinanceDate %}{{ assessment.smvOrdinanceDate | date_ph }}{% else %}__________{% endif %}.
+  It does not and cannot by itself alone confer any ownership or legal title to the property.</div>
+<div class="lbl">Issued {{ issue.issuedAt | date_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}. {{ form.legalBasis }}.</div>
+
+{% if transferClearance %}
+<div class="back">
+  <h1>TRANSFER — BIR CERTIFICATE AUTHORIZING REGISTRATION</h1>
+  <table>
+    <tr><td><span class="lbl">CAR No. / Date</span>{{ transferClearance.carNumber | default: "—" }}{% if transferClearance.carDate %} / {{ transferClearance.carDate | date_ph }}{% endif %}</td>
+        <td><span class="lbl">Transferor / TIN</span>{{ transferClearance.transferorName | default: "—" }} / {{ transferClearance.transferorTin | default: "—" }}</td>
+        <td><span class="lbl">Transferee TIN</span>{{ transferClearance.transfereeTin | default: "—" }}</td></tr>
+  </table>
+  <table>
+    <tr><th>Tax paid</th><th class="num">Amount</th><th>OR No.</th><th>Date</th></tr>
+    <tr><td>Capital gains tax</td><td class="num">{% if transferClearance.capitalGainsTax %}{{ transferClearance.capitalGainsTax | money }}{% else %}—{% endif %}</td>
+        <td>{{ transferClearance.capitalGainsTaxReceipt | default: "—" }}</td><td>{% if transferClearance.capitalGainsTaxDate %}{{ transferClearance.capitalGainsTaxDate | date_ph }}{% else %}—{% endif %}</td></tr>
+    <tr><td>Documentary stamp tax</td><td class="num">{% if transferClearance.documentaryStampTax %}{{ transferClearance.documentaryStampTax | money }}{% else %}—{% endif %}</td>
+        <td>{{ transferClearance.documentaryStampTaxReceipt | default: "—" }}</td><td>{% if transferClearance.documentaryStampTaxDate %}{{ transferClearance.documentaryStampTaxDate | date_ph }}{% else %}—{% endif %}</td></tr>
+    <tr><td>Transfer tax</td><td class="num">{% if transferClearance.transferTax %}{{ transferClearance.transferTax | money }}{% else %}—{% endif %}</td>
+        <td>{{ transferClearance.transferTaxReceipt | default: "—" }}</td><td>{% if transferClearance.transferTaxDate %}{{ transferClearance.transferTaxDate | date_ph }}{% else %}—{% endif %}</td></tr>
+  </table>
+  <div class="lbl">MRPAAO Annex A (BLGF MC 18-2004, relaying RR 24-02): CAR details recorded at the back of the new TD. DOMAIN VERIFICATION REQUIRED against the LAM and current BIR rules.</div>
+</div>
+{% endif %}

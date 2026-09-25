@@ -61,6 +61,15 @@ public sealed class TaxDeclaration : AuditableEntity
     public Guid? AssessmentId { get; set; }
     public Assessment? Assessment { get; set; }
 
+    /// <summary>
+    /// The FAAS transaction code (MRPAAO p.145: SD, CS, DC, PC, DP, DT, TR, RC,
+    /// GR as catalogue data) and its rank; when several transactions give rise
+    /// to the FAAS, the highest rank (lowest number) is kept (p.167). Frozen
+    /// when the TD is drafted.
+    /// </summary>
+    public string? TransactionCode { get; set; }
+    public int? TransactionRank { get; set; }
+
     public DateTimeOffset? CancelledAt { get; set; }
     public Guid? CancelledBy { get; set; }
     public string? CancellationReason { get; set; }

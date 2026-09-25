@@ -9,7 +9,12 @@ public sealed class AssessmentConfiguration : IEntityTypeConfiguration<Assessmen
     public void Configure(EntityTypeBuilder<Assessment> builder)
     {
         // One line: its level and percent are on the assessment too; several lines: on the lines only.
-        builder.ToTable(t => t.HasCheckConstraint("CK_Assessments_Level", "(\"AssessmentLevelId\" IS NULL) = (\"AssessmentPercentage\" IS NULL)"));
+        builder.ToTable(t =>
+        {
+            t.HasCheckConstraint("CK_Assessments_Level", "(\"AssessmentLevelId\" IS NULL) = (\"AssessmentPercentage\" IS NULL)");
+            // A posting stamp belongs to a posted assessment (older posted rows may lack one).
+            t.HasCheckConstraint("CK_Assessments_Posted", "\"PostedAt\" IS NULL OR \"Status\" = 'Posted'");
+        });
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.MarketValue).HasPrecision(18, 2);

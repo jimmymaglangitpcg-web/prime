@@ -146,12 +146,18 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
             return null;
         }
 
-        var assessment = await db.Assessments.AsNoTracking()
+        // The assessment the TD declares (the TD with it is the FAAS); for a TD that declares none, the
+        // RPU's latest posted one, as before.
+        var assessments = db.Assessments.AsNoTracking()
             .Include(x => x.Lines).ThenInclude(l => l.Classification)
             .Include(x => x.Lines).ThenInclude(l => l.ActualUse)
-            .Where(x => x.RpuId == td.RpuId && x.Status == WorkflowStatus.Posted)
-            .OrderByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .Include(x => x.Valuation).ThenInclude(v => v!.Smv)
+            .Include(x => x.Valuation).ThenInclude(v => v!.Lines);
+        var assessment = td.AssessmentId is { } declared
+            ? await assessments.FirstOrDefaultAsync(x => x.Id == declared, cancellationToken)
+            : await assessments.Where(x => x.RpuId == td.RpuId && x.Status == WorkflowStatus.Posted)
+                .OrderByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
         var signatories = new List<object>();
         if (assessment is not null)
         {
@@ -201,12 +207,41 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
                 marketValue = assessment.MarketValue,
                 assessmentLevelPercent = assessment.AssessmentPercentage,
                 assessedValue = assessment.AssessedValue,
-                // The TD's rows: classification, actual use, market value, level, assessed value (MRPAAO Att. 4).
+                // The TD's rows: classification, area, market value, actual use, level, assessed value (MRPAAO Att. 4).
                 lines = assessment.Lines.OrderBy(l => l.Sequence).Select(l => new
                 {
                     classification = l.Classification!.Name, actualUse = l.ActualUse!.Name, marketValue = l.MarketValue,
                     assessmentLevelPercent = l.AssessmentPercentage, assessedValue = l.AssessedValue,
+                    area = AreaOf(assessment, td, l.ClassificationId, l.ActualUseId),
+                    areaUnit = assessment.Valuation?.Lines.FirstOrDefault(v => v.Quantity != null && v.Source != ValuationLineSource.LandImprovement)?.Unit,
                 }),
+                smvOrdinanceNumber = assessment.Valuation?.Smv?.OrdinanceNumber,
+                smvOrdinanceDate = assessment.Valuation?.Smv?.OrdinanceDate,
+            },
+            // MRPAAO Att. 4 additions (docs/analysis/mrpaao-forms-model.md §13).
+            mrpaao = new
+            {
+                // The unit's PIN with its postscript, parenthesised when the unit is owned apart from the land.
+                pin = RealPropertyUnits.UnitPin.Compose(
+                    await db.Properties.Where(p => p.Id == td.PropertyId).Select(p => p.PropertyIdentificationNumber).FirstAsync(cancellationToken),
+                    td.Rpu.PinSuffix,
+                    await db.PropertyTaxpayers.AnyAsync(x => x.RpuId == td.RpuId && x.IsCurrent
+                        && (x.Role == PropertyPartyRole.Owner || x.Role == PropertyPartyRole.UnknownOwner), cancellationToken)),
+                effectivityQuarter = (td.EffectivityDate.Month - 1) / 3 + 1,
+                effectivityYear = td.EffectivityDate.Year,
+                transactionCode = td.TransactionCode,
+                kind = await KindAsync(td, cancellationToken),
+                cancels = td.PreviousTaxDeclaration is { } previous ? new
+                {
+                    number = previous.TaxDeclarationNumber,
+                    owner = string.Join("; ", (await PropertyParties.ProjectAsync(await PropertyParties.ScopeAsync(db, previous.PropertyId, previous.RpuId,
+                            x => x.StartDate <= previous.EffectivityDate && (x.EndDate == null || x.EndDate > previous.EffectivityDate), cancellationToken), cancellationToken))
+                        .Where(o => o.Role is PropertyPartyRole.Owner or PropertyPartyRole.UnknownOwner).Select(o => o.TaxpayerDisplayName)),
+                    assessedValue = previous.AssessmentId is { } pa
+                        ? await db.Assessments.Where(x => x.Id == pa).Select(x => (decimal?)x.AssessedValue).FirstOrDefaultAsync(cancellationToken)
+                        : null,
+                } : null,
+                declaredOwners = await DeclaredPartiesAsync(td, cancellationToken),
             },
             signatories,
             // A TD issued under a transfer carries the BIR clearance on its back (MRPAAO Annex A).
@@ -227,6 +262,54 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
             ? $"A {td.Status} Tax Declaration cannot be issued."
             : null;
         return new FormSubjectData(td.TaxDeclarationNumber, data, blocker);
+    }
+
+    /// <summary>The parties declared on the TD's effectivity date (the unit's own, else the property's), with TIN and contact (MRPAAO Att. 4).</summary>
+    private async Task<List<object>> DeclaredPartiesAsync(TaxDeclaration td, CancellationToken ct)
+    {
+        var rows = await PropertyParties.ProjectAsync(await PropertyParties.ScopeAsync(db, td.PropertyId, td.RpuId,
+            x => x.StartDate <= td.EffectivityDate && (x.EndDate == null || x.EndDate > td.EffectivityDate), ct), ct);
+        var ids = rows.Select(o => o.TaxpayerId).OfType<Guid>().ToList();
+        var contact = await db.Taxpayers.Where(t => ids.Contains(t.Id)).ToDictionaryAsync(t => t.Id, t => new { t.Tin, t.ContactNumber }, ct);
+        return rows.Select(o => (object)new
+        {
+            name = o.TaxpayerDisplayName, role = o.Role.ToString(), roleLabel = PropertyParties.RoleLabel(o.Role), address = o.Address,
+            sharePercent = o.OwnershipPercentage,
+            tin = o.TaxpayerId is { } a ? contact.GetValueOrDefault(a)?.Tin : null,
+            contactNumber = o.TaxpayerId is { } b ? contact.GetValueOrDefault(b)?.ContactNumber : null,
+        }).ToList();
+    }
+
+    /// <summary>The area of the valuation lines under one assessment line's classification and use (land and buildings; none for machinery).</summary>
+    private static decimal? AreaOf(Assessment assessment, TaxDeclaration td, Guid classificationId, Guid actualUseId)
+    {
+        var lines = assessment.Valuation?.Lines
+            .Where(v => v.Source is ValuationLineSource.Land or ValuationLineSource.LandStrip or ValuationLineSource.Building or ValuationLineSource.BuildingUsePortion)
+            .Where(v => (v.ClassificationId ?? td.ClassificationId) == classificationId && (v.ActualUseId ?? td.ActualUseId) == actualUseId)
+            .ToList();
+        return lines is { Count: > 0 } ? lines.Sum(v => v.Quantity ?? 0m) : null;
+    }
+
+    /// <summary>MRPAAO Att. 4 "Kind of Property Assessed": land, building (storeys, brief description), machinery (brief description) or others.</summary>
+    private async Task<object> KindAsync(TaxDeclaration td, CancellationToken ct)
+    {
+        var type = td.Rpu!.RpuType;
+        string? description = null;
+        int? storeys = null;
+        if (type == RpuType.Building)
+        {
+            var b = await db.Buildings.Where(x => x.RpuId == td.RpuId)
+                .Select(x => new { x.NumberOfStoreys, Type = x.BuildingType!.Name, Structure = x.StructuralType!.Name }).FirstOrDefaultAsync(ct);
+            storeys = b?.NumberOfStoreys;
+            description = b is null ? null : $"{b.Type}, {b.Structure}";
+        }
+        else if (type == RpuType.Machinery)
+        {
+            var names = await db.MachineryUnits.Where(x => x.RpuId == td.RpuId).OrderBy(x => x.CreatedAt)
+                .Select(x => x.MachineryType!.Name + (x.Brand != null ? " " + x.Brand : "")).ToListAsync(ct);
+            description = names.Count == 0 ? null : string.Join("; ", names);
+        }
+        return new { type = type.ToString(), storeys, description };
     }
 }
 

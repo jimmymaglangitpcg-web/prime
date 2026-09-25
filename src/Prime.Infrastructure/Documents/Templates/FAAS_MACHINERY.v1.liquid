@@ -1,0 +1,125 @@
+{% comment %}
+  FAAS — Machinery, after the MRPAAO Attachment 3 (p.234–235; instructions
+  p.153–155). Superseded manual: reference layout (docs/analysis/mrpaao-forms-model.md
+  §13). One row per machine; rows come prepared from PRIME's records.
+{% endcomment %}
+{% assign f = faas %}{% assign a = appraisal %}{% assign p = a.property %}
+<style>
+  .src { font-size: 8pt; border: 1px solid #555; padding: 2px 6px; margin-bottom: 6px; }
+  .draft { border: 2px solid #b00; color: #b00; font-weight: bold; text-align: center; padding: 3px; margin-bottom: 6px; }
+  h1 { font-size: 12.5pt; text-align: center; margin: 4px 0 6px; }
+  .lgu { text-align: center; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 5px; }
+  td, th { border: 1px solid #000; padding: 2px 4px; font-size: 8.5pt; vertical-align: top; }
+  th { background: #eee; text-align: left; font-weight: bold; }
+  .sec { background: #ddd; font-weight: bold; font-size: 9pt; }
+  .num { text-align: right; white-space: nowrap; }
+  .lbl { font-size: 7.5pt; color: #333; display: block; }
+  .box { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; text-align: center; line-height: 11px; font-size: 9pt; }
+  .sig { height: 34px; }
+</style>
+<div class="src">Layout: MRPAAO 2004, Attachment 3 — superseded by the Local Assessment Manual; reference layout. Form {{ form.code }} v{{ form.version }}.</div>
+{% if f.tdStatus != "Approved" and f.tdStatus != "Cancelled" %}<div class="draft">{{ f.tdStatus | upcase }} — NOT APPROVED</div>{% endif %}
+{% if f.kind != "Machinery" %}<div class="draft">This Tax Declaration is for {{ f.kind }}; use the {{ f.kind | upcase }} FAAS.</div>{% endif %}
+{% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% endif %}
+<h1>REAL PROPERTY FIELD APPRAISAL &amp; ASSESSMENT SHEET — MACHINERY</h1>
+
+<table>
+  <tr><td style="width:34%"><span class="lbl">ARP No.</span>{{ f.number | default: "(unnumbered)" }}</td>
+      <td style="width:33%"><span class="lbl">TRANSACTION CODE</span>{{ f.transactionCode | default: "—" }}</td>
+      <td><span class="lbl">PIN</span>{{ f.pin }}</td></tr>
+</table>
+
+<table>
+  {% for o in f.owners %}
+  <tr><td style="width:50%"><span class="lbl">{% if forloop.first %}OWNER{% endif %}</span>{{ o.name }}</td>
+      <td style="width:25%"><span class="lbl">TIN</span>{{ o.tin | default: "—" }}</td><td><span class="lbl">Tel. No.</span>{{ o.contactNumber | default: "—" }}</td></tr>
+  <tr><td colspan="3"><span class="lbl">Address</span>{{ o.address | default: "—" }}</td></tr>
+  {% else %}
+  <tr><td colspan="3"><span class="lbl">OWNER</span>No party recorded as of {{ f.effectivity.date | date_ph }}</td></tr>
+  {% endfor %}
+  {% for o in f.administrators %}
+  <tr><td><span class="lbl">Administrator ({{ o.roleLabel }})</span>{{ o.name }}</td>
+      <td><span class="lbl">TIN</span>{{ o.tin | default: "—" }}</td><td><span class="lbl">Tel. No.</span>{{ o.contactNumber | default: "—" }}</td></tr>
+  {% endfor %}
+</table>
+
+<table>
+  <tr><td class="sec" colspan="4">PROPERTY LOCATION</td></tr>
+  <tr><td><span class="lbl">No./Street</span>{{ p.street | default: "—" }}</td><td><span class="lbl">Brgy/District</span>{{ p.barangay }}</td>
+      <td><span class="lbl">Municipality</span>{{ p.municipality }}</td><td><span class="lbl">Province/City</span>{{ p.province }}</td></tr>
+  <tr><td colspan="2"><span class="lbl">Land Owner</span>{% if f.landReference %}{{ f.landReference.owner | default: "—" }}{% else %}—{% endif %}</td>
+      <td colspan="2"><span class="lbl">PIN</span>{% if f.landReference %}{{ f.landReference.pin }}{% else %}—{% endif %}</td></tr>
+  <tr><td colspan="2"><span class="lbl">Building Owner</span>{% if f.buildingReference %}{{ f.buildingReference.owner | default: "—" }}{% else %}—{% endif %}</td>
+      <td colspan="2"><span class="lbl">PIN</span>{% if f.buildingReference %}{{ f.buildingReference.pin }}{% else %}—{% endif %}</td></tr>
+</table>
+
+<table>
+  <tr><td class="sec" colspan="9">PROPERTY APPRAISAL</td></tr>
+  <tr><th>Kind of Machinery</th><th>Brand &amp; Model</th><th>Capacity/HP</th><th>Date Acquired</th><th>Condition When Acquired</th>
+      <th class="num">Economic Life: Estimated</th><th class="num">Remaining</th><th>Year Installed</th><th>Year of Initial Operation</th></tr>
+  {% for m in f.machineRows %}
+  <tr><td>{{ m.kind }}</td><td>{{ m.brandModel | default: "—" }}</td><td>{{ m.capacity | default: "—" }}</td>
+      <td>{% if m.dateAcquired %}{{ m.dateAcquired | date_ph }}{% else %}—{% endif %}</td><td>{{ m.condition }}</td>
+      <td class="num">{{ m.economicLife | default: "—" }}</td><td class="num">{{ m.remainingLife | default: "—" }}</td>
+      <td>{{ m.yearInstalled | default: "—" }}</td><td>{{ m.yearOfInitialOperation | default: "—" }}</td></tr>
+  {% endfor %}
+</table>
+
+<table>
+  <tr><th class="num">Original Cost</th><th class="num">Conversion Factor</th><th class="num">RCN</th><th class="num">No. of Years Used</th>
+      <th class="num">Total Depreciation %</th><th class="num">Total Depreciation Value</th><th class="num">Depreciated Value</th><th class="num">Market Value</th></tr>
+  {% for m in f.machineRows %}
+  <tr><td class="num">{{ m.originalCost | money }}</td><td class="num">{{ m.conversionFactor | default: "—" }}</td>
+      <td class="num">{% if m.rcn %}{{ m.rcn | money }}{% else %}—{% endif %}</td><td class="num">{{ m.yearsUsed | default: "—" }}</td>
+      <td class="num">{% if m.depreciationPercent %}{{ m.depreciationPercent | percent }}{% else %}—{% endif %}</td>
+      <td class="num">{% if m.depreciationValue %}{{ m.depreciationValue | money }}{% else %}—{% endif %}</td>
+      <td class="num">{% if m.depreciatedValue %}{{ m.depreciatedValue | money }}{% else %}—{% endif %}</td>
+      <td class="num">{{ m.marketValue | money }}</td></tr>
+  {% endfor %}
+  <tr><td colspan="7" class="num"><b>TOTALS</b></td><td class="num"><b>{{ a.valuation.marketValue | money }}</b></td></tr>
+</table>
+
+<table>
+  <tr><td class="sec" colspan="4">PROPERTY ASSESSMENT</td></tr>
+  <tr><th>Actual Use</th><th class="num">Market Value</th><th class="num">Assessment Level</th><th class="num">Assessed Value</th></tr>
+  {% for l in a.assessment.lines %}
+  <tr><td>{{ l.actualUse }} ({{ l.classification }})</td><td class="num">{{ l.marketValue | money }}</td>
+      <td class="num">{{ l.assessmentLevelPercent | percent }}</td><td class="num">{{ l.assessedValue | money }}</td></tr>
+  {% endfor %}
+  <tr><td class="num"><b>Total</b></td><td class="num"><b>{{ a.assessment.marketValue | money }}</b></td><td></td><td class="num"><b>{{ a.assessment.assessedValue | money }}</b></td></tr>
+  <tr><td colspan="4">
+    <span class="box">{% if f.taxability == "Taxable" %}X{% endif %}</span> Taxable &nbsp;&nbsp;
+    <span class="box">{% if f.taxability != "Taxable" %}X{% endif %}</span> Exempt &nbsp;&nbsp;&nbsp;
+    Effectivity of Assessment/Reassessment: <b>Q{{ f.effectivity.quarter }}</b> Qtr. <b>{{ f.effectivity.year }}</b> Yr.</td></tr>
+</table>
+
+<table>
+  <tr><td style="width:33%"><span class="lbl">APPRAISED/ASSESSED BY</span><div class="sig"></div><b>{{ a.recordedBy | default: "—" }}</b><br>{{ a.recordedAt | date_ph }}</td>
+  {% for s in a.signatures %}
+    <td><span class="lbl">{{ s.label | upcase }}</span><div class="sig"></div><b>{{ s.name }}</b>{% if s.position %}<br>{{ s.position }}{% endif %}<br>{{ s.signedAt | date_ph }}</td>
+  {% else %}
+    <td><span class="lbl">RECOMMENDING APPROVAL</span><div class="sig"></div>—</td>
+    <td><span class="lbl">APPROVED BY — Provincial/City/Municipal Assessor</span><div class="sig"></div>—</td>
+  {% endfor %}
+  </tr>
+</table>
+
+<table>
+  <tr><td><span class="lbl">MEMORANDA</span>{{ f.memoranda | default: "—" }}</td></tr>
+  <tr><td>Date of Entry in the Record of Assessment: <b>{% if a.recordEntry %}{{ a.recordEntry.postedAt | date_ph }}{% else %}—{% endif %}</b>
+      &nbsp; By: <b>{% if a.recordEntry %}{{ a.recordEntry.postedBy | default: "—" }}{% else %}—{% endif %}</b></td></tr>
+</table>
+
+<table>
+  <tr><td class="sec" colspan="4">RECORD OF SUPERSEDED ASSESSMENT</td></tr>
+  {% if f.superseded %}
+  <tr><td><span class="lbl">PIN</span>{{ f.superseded.pin }}</td><td><span class="lbl">ARP No.</span>{{ f.superseded.arpNumber | default: "—" }}</td>
+      <td><span class="lbl">TD No.</span>{{ f.superseded.tdNumber }}</td><td><span class="lbl">Total Assessed Value</span>{% if f.superseded.totalAssessedValue %}{{ f.superseded.totalAssessedValue | money }}{% else %}—{% endif %}</td></tr>
+  <tr><td colspan="2"><span class="lbl">Previous Owner</span>{{ f.superseded.previousOwner | default: "—" }}</td>
+      <td colspan="2"><span class="lbl">Effectivity of Assessment</span>Q{{ f.superseded.effectivity.quarter }} {{ f.superseded.effectivity.year }}</td></tr>
+  {% else %}
+  <tr><td colspan="4">None — first assessment of this unit.</td></tr>
+  {% endif %}
+</table>
+<div class="lbl">Issued {{ issue.issuedAt | date_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}. {{ form.legalBasis }}.</div>

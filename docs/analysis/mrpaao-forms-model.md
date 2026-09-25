@@ -1,7 +1,8 @@
 # PRIME — Forms Model from the MRPAAO (2004/2006)
 
-Status: **steps 1–3 implemented 2026-09-25** (§6–§11; step 1 is commit
-`c5b3f8d`). Steps 4–7 are outlines.
+Status: **steps 1–4 and 5a implemented 2026-09-25** (§6–§13; commits
+`c5b3f8d` step 1, `81ce318` steps 2–3). Step 5b (Notice of Assessment for
+several properties), 6 and 7 are outlines.
 
 Decision (user, 2026-09-25): the forms follow the **Manual on Real
 Property Appraisal and Assessment Operations** (`docs/References/ManualRPAandAO.pdf`,
@@ -864,4 +865,173 @@ with the old and new values. The rules:
 
 **Not in this step:** attachments (document storage); a correction path
 for floors and materials (add-only, like the step 2 rows).
+
+---
+
+## 12. Step 4 — transaction code and Record of Assessment entry (2026-09-25)
+
+Designed and built in one pass after "commit then proceed". The choices
+below follow the manual; each is a setting or catalogue data.
+
+**Transaction code on the FAAS (TD).**
+- `TaxDeclarations.TransactionCode` and `TransactionRank` are frozen when
+  the TD is drafted. The candidates are:
+  - the transaction the TD is drafted under (its code, and its catalogue
+    type's rank);
+  - a code named on the request (it must be a type in force:
+    `TRANSACTION_CODE_NOT_IN_FORCE`);
+  - `Faas:GeneralRevisionTransactionCode` (default "GR") when the declared
+    assessment came from a general revision.
+- **The highest rank wins**: the lowest rank number; unranked codes come
+  last (MRPAAO p.167).
+- The Draft TD prepared on posting (step 1) takes GR for a general-revision
+  assessment. Otherwise it has no code, and the assessor names one on a
+  new TD.
+- The codes and ranks are catalogue data. The MRPAAO list (SD 1 … GR 9)
+  is not seeded as transaction types, because types carry prerequisites
+  and legal bases the LGU must configure.
+
+**Record of Assessment entry.**
+- `Assessments.PostedAt` and `PostedBy` are stamped by `PostAsync`. This
+  is the FAAS "Date of Entry in the Record of Assessment … By".
+- `CK_Assessments_Posted` allows a stamp only on a posted assessment.
+- Assessments posted before this change keep no stamp; their posting time
+  was never recorded, so none is invented.
+- The appraisal record carries `RecordEntry` (date and name) and the TD in
+  force's transaction code.
+
+**Backfill:** TDs drafted under a transaction were given its code and rank.
+
+**UI:** a Code column on TDs; an optional transaction code (types in
+force) on a new TD outside a transaction; an "Entered in ROA" column on
+assessments; the entry and code in the appraisal drawer.
+
+**Verified:**
+- 2 integration tests (`TransactionCodeTests`):
+  - a transfer TD takes TR/7, a named SD/1 outranks it, and an unknown
+    code is refused;
+  - posting a general-revision assessment stamps the entry (user B) and
+    prepares a TD with GR/9, and the appraisal record shows who entered it.
+- Full suite passes (101 domain, 37 application, 133 integration).
+- Production frontend build and lint pass.
+- The browser shows the new columns with no console errors.
+
+Migration `TransactionCodeAndPostingStamp` is applied to the local dev DB
+only.
+
+---
+
+## 13. Step 5a — MRPAAO FAAS and TD layouts (2026-09-25)
+
+Step 5 is split. 5a is the FAAS ×3 and the TD, which need templates and
+data only. 5b is a Notice of Assessment for several properties, which
+changes how notices are stored and gets its own design.
+
+**Authority and seeding.**
+- New `FormAuthority.Mrpaao`: a reference layout of the superseded manual.
+  It has no PROVISIONAL watermark; each form prints a banner naming its
+  attachment and the fact that the manual is superseded by the LAM.
+- `ProvisionalFormSeeder` installs PRIME's built-in versions, provisional
+  and MRPAAO. It never touches a version with any other authority (e.g.
+  the LAM's).
+- A newer built-in version replaces a built-in predecessor that started
+  the same day. The predecessor is marked Cancelled with a remark, never
+  deleted, and forms issued under it keep pointing to it.
+
+**Forms** (templates in `Documents/Templates`):
+
+| Code | Version | Subject | Source |
+|---|---|---|---|
+| `FAAS_LAND` | 1 | `Faas` (a TD) | Att. 1, p.230–231 |
+| `FAAS_BUILDING` | 1 | `Faas` | Att. 2, p.232–233 |
+| `FAAS_MACHINERY` | 1 | `Faas` | Att. 3, p.234–235 |
+| `TAX_DECLARATION` | 3 | TD | Att. 4, p.236 (replaces provisional v2) |
+
+**FAAS data** (`FaasFormDataProvider`). The subject is the TD, and the
+FAAS/ARP number is the TD number (or the assessment's under
+`Faas:NumberSource = Own`). It carries:
+- the transaction code and the unit PIN with its postscript;
+- owners and administrators with TIN and telephone, as of the TD's
+  effectivity;
+- taxable/exempt, effectivity quarter and year, and memoranda (TD and
+  assessment remarks);
+- the Record of Superseded Assessment (the previous TD: PIN, ARP, TD,
+  total AV, previous owners, effectivity);
+- the Land Reference (building and machinery) and the Building Reference
+  (machinery);
+- prepared rows for each table: land appraisal, other improvements, market
+  value adjustments (factors from the breakdown), building appraisal per
+  use portion, additional items, and machines with their depreciation
+  figures;
+- the full appraisal record for the assessment rows, signatures and Record
+  of Assessment entry.
+
+It can be issued only when the TD is Approved (or Cancelled, as a copy)
+and declares an assessment; otherwise it previews. A FAAS form of the
+wrong kind shows a notice naming the right one.
+
+**TD v3 data** (added to the TD provider under `mrpaao`):
+- the declared assessment (else the latest posted one, as before), with
+  row areas and the SMV ordinance;
+- unit PIN, effectivity quarter, transaction code;
+- kind of property (storeys and brief description);
+- "This declaration cancels TD No. / Owner / Previous A.V.";
+- declared parties with TIN and telephone.
+
+The template prints:
+- the total assessed value in words (new `amount_words` filter, e.g. ONE
+  HUNDRED THOUSAND PESOS AND 50/100);
+- all annotations, lifted ones with their lift;
+- earlier approval steps by label, and the last in "Approved by";
+- the note with `Lgu:SanggunianName` and the SMV ordinance;
+- a back page with the BIR clearance when the TD came from a transfer.
+
+A new `num` filter prints areas and counts without trailing zeros.
+
+**Not reproduced:**
+- the land sketch (it points to the tax map; a GIS extract is future
+  work);
+- the floor plan (an attachment, once document storage exists);
+- the AR page no. (it comes with the registers, step 6);
+- building depreciation (plan A9).
+
+**UI:**
+- a **FAAS** button on each TD row that declares an assessment (Land,
+  Building or Machinery form by unit type; "Preview" until approved);
+- the old provisional FAAS button on assessments is removed (the A8
+  definition stays in the database);
+- the document page labels the new authority.
+
+**Test infrastructure.** Integration test classes now run one at a time
+(`TestAssemblyInfo.cs`). They share the dev database, and parallel
+classes retiring the same configuration rows deadlocked (Postgres 40P01)
+once more classes used that pattern.
+
+**Verified:**
+- `MrpaaoFormsTests`:
+  - a land FAAS issued from the TD (MRPAAO authority, every block, code,
+    values, effectivity, no watermark);
+  - a v3 TD preview (amount in words, kind, "cancels", the note, area);
+  - a TD without an assessment that previews only, and a wrong-kind
+    notice.
+- An amount-in-words theory, and parse tests for the four templates.
+- Five older tests updated where they asserted the provisional TD layout.
+- Full suite passes three times in a row (101 domain, 37 application,
+  145 integration).
+- Production frontend build and lint pass.
+- In the browser on `DEMO-BILL-AE94B8`:
+  - the land FAAS preview of the DEMO draft TD (linked in the dev DB to the
+    posted assessment) shows every block;
+  - TD `DEMO-TD-AE94B8-R5` issued under v3 shows the land box, amount in
+    words, approver, "cancels TD No. …-R2", and the note with the SMV
+    ordinance;
+  - no console errors.
+
+**Local dev DB notes:**
+- The MRPAAO template rows were refreshed in place during development.
+  They were unreleased, and no MRPAAO form had been issued before the
+  final text.
+- The provisional TD v2 was installed today, so it is marked Cancelled
+  (superseded by v3 on its first day).
+- One TD (R5) is now issued under v3.
 

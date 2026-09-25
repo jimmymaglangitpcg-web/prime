@@ -68,6 +68,15 @@ public sealed class Assessment : AuditableEntity
     public string? FaasNumber { get; set; }
     public Guid? ApprovedBy { get; set; }
     public DateTimeOffset? ApprovedAt { get; set; }
+
+    /// <summary>
+    /// When and by whom it was posted — entered in the Record of Assessment
+    /// (MRPAAO Att. 1–3 "Date of Entry in the Record of Assessment … By";
+    /// docs/analysis/mrpaao-forms-model.md §12). Null for assessments posted
+    /// before the stamp existed.
+    /// </summary>
+    public DateTimeOffset? PostedAt { get; set; }
+    public Guid? PostedBy { get; set; }
 }
 
 /// <summary>

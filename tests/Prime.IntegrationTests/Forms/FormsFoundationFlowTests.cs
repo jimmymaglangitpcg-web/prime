@@ -138,11 +138,11 @@ public class FormsFoundationFlowTests(WebApplicationFactory<Program> factory) : 
 
         var first = await forms.IssueAsync(request);
         first.IsSuccess.ShouldBeTrue(first.IsSuccess ? null : first.Message);
-        first.Value.Authority.ShouldBe(FormAuthority.PrimeProvisional);
+        first.Value.Authority.ShouldBe(FormAuthority.Mrpaao); // the built-in TD follows the MRPAAO layout since step 5a
         first.Value.DocumentNumber.ShouldBe(seed.TaxDeclaration.TaxDeclarationNumber);
         var firstHtml = first.Value.Html.ShouldNotBeNull();
         firstHtml.ShouldContain(seed.TaxDeclaration.TaxDeclarationNumber);
-        firstHtml.ShouldContain("PROVISIONAL — NOT AN OFFICIAL FORM");
+        firstHtml.ShouldContain("MRPAAO 2004, Attachment 4");
         firstHtml.ShouldContain("100,000.00"); // assessed value from the posted assessment
 
         var td = await s.Db.TaxDeclarations.SingleAsync(x => x.Id == seed.TaxDeclaration.Id);
@@ -193,7 +193,7 @@ public class FormsFoundationFlowTests(WebApplicationFactory<Program> factory) : 
 
         var old = (await forms.GetIssuedAsync(provisional.Id)).Value;
         old.FormVersion.ShouldBe(provisional.FormVersion);
-        old.Html!.ShouldContain("PROVISIONAL — NOT AN OFFICIAL FORM");
+        old.Html!.ShouldContain("MRPAAO 2004, Attachment 4"); // the built-in version it was issued under
     }
 
     [Fact]

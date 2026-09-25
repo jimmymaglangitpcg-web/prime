@@ -3,7 +3,6 @@ import { Alert, Button, Descriptions, Drawer, Empty, Space, Spin, Table, Tag, Ty
 import { useAppraisalRecord, useRpuAssessments } from '../../../api/assessments';
 import { ApiRequestError } from '../../../lib/apiClient';
 import { formatMoney } from '../../../lib/format';
-import { PrintFormButton } from '../../../components/PrintFormButton';
 import type { AppraisalRecordDto, AssessmentSummaryDto, WorkflowStatus } from '../../../lib/types';
 
 const statusColor: Partial<Record<WorkflowStatus, string>> = {
@@ -37,12 +36,11 @@ export function AssessmentsForRpu({ rpuId }: { rpuId: string }) {
           },
           { title: 'Assessed value', dataIndex: 'assessedValue', align: 'right', render: formatMoney },
           { title: 'Status', dataIndex: 'status', render: statusTag },
+          { title: 'Entered in ROA', dataIndex: 'postedAt', render: (v: string | null) => (v ? new Date(v).toLocaleDateString() : '—') },
           {
             title: 'Actions', render: (_, a) => (
               <Space size={4} wrap>
                 <Button size="small" onClick={() => setSelected(a.id)}>Appraisal record</Button>
-                {/* The FAAS is issued once the assessment is approved; before that it opens as a preview. */}
-                <PrintFormButton formCode="FAAS" subjectId={a.id} issuable={a.status === 'Approved' || a.status === 'Posted'} label="Print FAAS" />
               </Space>
             ),
           },
@@ -226,6 +224,10 @@ function AppraisalRecordView({ r }: { r: AppraisalRecordDto }) {
       {section('Signatures')}
       <Typography.Paragraph type="secondary">
         Recorded by {r.recordedBy ?? '(system)'} on {new Date(r.recordedAt).toLocaleString()}.
+        {r.recordEntry
+          ? ` Entered in the Record of Assessment on ${new Date(r.recordEntry.postedAt).toLocaleDateString()}${r.recordEntry.postedBy ? ` by ${r.recordEntry.postedBy}` : ''}.`
+          : ' Not yet entered in the Record of Assessment.'}
+        {r.taxDeclaration?.transactionCode ? ` Transaction code ${r.taxDeclaration.transactionCode}.` : ''}
       </Typography.Paragraph>
       <Table size="small" rowKey={(x) => `${x.label}-${x.signedAt}`} dataSource={r.signatures} pagination={false} locale={{ emptyText: 'Not yet signed' }}
         columns={[

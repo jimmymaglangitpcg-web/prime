@@ -73,6 +73,20 @@ public class FluidFormRendererTests
     [InlineData("NOTICE_OF_ASSESSMENT.v1.liquid")]
     [InlineData("FAAS.v1.liquid")]
     [InlineData("STATEMENT_OF_ACCOUNT.v1.liquid")]
+    [InlineData("TAX_DECLARATION.v3.liquid")]
+    [InlineData("FAAS_LAND.v1.liquid")]
+    [InlineData("FAAS_BUILDING.v1.liquid")]
+    [InlineData("FAAS_MACHINERY.v1.liquid")]
     public void ProvisionalTemplates_AreEmbeddedAndParse(string file) =>
         renderer.Validate(ProvisionalFormSeeder.ReadTemplate(file)).ShouldBeNull();
+
+    [Theory]
+    [InlineData("100000", "ONE HUNDRED THOUSAND PESOS ONLY")]
+    [InlineData("1", "ONE PESO ONLY")]
+    [InlineData("0", "ZERO PESOS ONLY")]
+    [InlineData("1234567.5", "ONE MILLION TWO HUNDRED THIRTY FOUR THOUSAND FIVE HUNDRED SIXTY SEVEN PESOS AND 50/100")]
+    [InlineData("2000000000.05", "TWO BILLION PESOS AND 05/100")]
+    public void AmountInWords_WritesPesosAndCentavos(string amount, string expected) =>
+        FluidFormRenderer.AmountInWords(decimal.Parse(amount, System.Globalization.CultureInfo.InvariantCulture)).ShouldBe(expected);
 }
+

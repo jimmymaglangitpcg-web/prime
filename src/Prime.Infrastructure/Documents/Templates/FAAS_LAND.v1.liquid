@@ -1,0 +1,150 @@
+{% comment %}
+  FAAS — Land / Other Improvements, after the MRPAAO Attachment 1 (p.230–231;
+  instructions p.145–149). The manual is superseded by the LAM: this is a
+  reference layout (docs/analysis/mrpaao-forms-model.md §13). Rows come
+  prepared from PRIME's records (FaasFormDataProvider); nothing is computed here.
+{% endcomment %}
+{% assign f = faas %}{% assign a = appraisal %}{% assign p = a.property %}
+<style>
+  .src { font-size: 8pt; border: 1px solid #555; padding: 2px 6px; margin-bottom: 6px; }
+  .draft { border: 2px solid #b00; color: #b00; font-weight: bold; text-align: center; padding: 3px; margin-bottom: 6px; }
+  h1 { font-size: 12.5pt; text-align: center; margin: 4px 0 6px; }
+  .lgu { text-align: center; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 5px; }
+  td, th { border: 1px solid #000; padding: 2px 4px; font-size: 9pt; vertical-align: top; }
+  th { background: #eee; text-align: left; font-weight: bold; }
+  .sec { background: #ddd; font-weight: bold; font-size: 9pt; }
+  .num { text-align: right; white-space: nowrap; }
+  .lbl { font-size: 7.5pt; color: #333; display: block; }
+  .box { display: inline-block; width: 11px; height: 11px; border: 1px solid #000; text-align: center; line-height: 11px; font-size: 9pt; }
+  .sig { height: 34px; }
+</style>
+<div class="src">Layout: MRPAAO 2004, Attachment 1 — superseded by the Local Assessment Manual; reference layout. Form {{ form.code }} v{{ form.version }}.</div>
+{% if f.tdStatus != "Approved" and f.tdStatus != "Cancelled" %}<div class="draft">{{ f.tdStatus | upcase }} — NOT APPROVED</div>{% endif %}
+{% if f.kind != "Land" %}<div class="draft">This Tax Declaration is for {{ f.kind }}; use the {{ f.kind | upcase }} FAAS.</div>{% endif %}
+{% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% endif %}
+<h1>REAL PROPERTY FIELD APPRAISAL &amp; ASSESSMENT SHEET — LAND / OTHER IMPROVEMENTS</h1>
+
+<table>
+  <tr><td style="width:34%"><span class="lbl">TRANSACTION CODE</span>{{ f.transactionCode | default: "—" }}</td>
+      <td style="width:33%"><span class="lbl">ARP No.</span>{{ f.number | default: "(unnumbered)" }}</td>
+      <td><span class="lbl">PIN</span>{{ f.pin }}</td></tr>
+  <tr><td><span class="lbl">{{ p.titleType | default: "OCT/TCT/CLOA" }} No.</span>{{ p.titleNumber | default: "—" }}{% if p.titleDate %} — dated {{ p.titleDate | date_ph }}{% endif %}</td>
+      <td><span class="lbl">Survey No.</span>{{ p.surveyNumber | default: "—" }}</td>
+      <td><span class="lbl">Lot No. / Blk.</span>{{ p.lotNumber | default: "—" }} / {{ p.blockNumber | default: "—" }}</td></tr>
+</table>
+
+<table>
+  {% for o in f.owners %}
+  <tr><td style="width:50%"><span class="lbl">{% if forloop.first %}Owner{% endif %}</span>{{ o.name }}{% if o.sharePercent != 100 and o.role == "Owner" %} ({{ o.sharePercent | percent }}){% endif %}</td>
+      <td style="width:25%"><span class="lbl">TIN</span>{{ o.tin | default: "—" }}</td>
+      <td><span class="lbl">Tel No.</span>{{ o.contactNumber | default: "—" }}</td></tr>
+  <tr><td colspan="3"><span class="lbl">Address</span>{{ o.address | default: "—" }}</td></tr>
+  {% else %}
+  <tr><td colspan="3"><span class="lbl">Owner</span>No party recorded as of {{ f.effectivity.date | date_ph }}</td></tr>
+  {% endfor %}
+  {% for o in f.administrators %}
+  <tr><td><span class="lbl">Administrator / Beneficial User ({{ o.roleLabel }})</span>{{ o.name }}</td>
+      <td><span class="lbl">TIN</span>{{ o.tin | default: "—" }}</td><td><span class="lbl">Tel No.</span>{{ o.contactNumber | default: "—" }}</td></tr>
+  <tr><td colspan="3"><span class="lbl">Address</span>{{ o.address | default: "—" }}</td></tr>
+  {% endfor %}
+</table>
+
+<table>
+  <tr><td class="sec" colspan="4">PROPERTY LOCATION</td></tr>
+  <tr><td><span class="lbl">No./Street</span>{{ p.street | default: "—" }}{% if p.sitio %}, {{ p.sitio }}{% endif %}</td><td><span class="lbl">Brgy/District</span>{{ p.barangay }}</td>
+      <td><span class="lbl">Municipality</span>{{ p.municipality }}</td><td><span class="lbl">Province/City</span>{{ p.province }}</td></tr>
+</table>
+
+<table>
+  <tr><td class="sec" style="width:50%">PROPERTY BOUNDARIES</td><td class="sec">LAND SKETCH</td></tr>
+  <tr><td>
+      <span class="lbl">North</span>{{ p.boundaryNorth | default: "—" }}
+      <span class="lbl">East</span>{{ p.boundaryEast | default: "—" }}
+      <span class="lbl">South</span>{{ p.boundarySouth | default: "—" }}
+      <span class="lbl">West</span>{{ p.boundaryWest | default: "—" }}</td>
+    <td style="height:90px">See the tax map{% if p.taxMapNumber %} (Tax Map No. {{ p.taxMapNumber }}){% endif %}. <span class="lbl">(Not necessarily drawn to scale)</span></td></tr>
+</table>
+
+<table>
+  <tr><td class="sec" colspan="5">LAND APPRAISAL</td></tr>
+  <tr><th>Classification</th><th>Sub-Classification</th><th class="num">Area</th><th class="num">Unit Value</th><th class="num">Base Market Value</th></tr>
+  {% assign landTotal = 0 %}
+  {% for l in f.landRows %}
+  <tr><td>{{ l.classification }}</td><td>{{ l.subClassification | default: "—" }}</td><td class="num">{{ l.area | num }} {{ l.unit }}</td>
+      <td class="num">{{ l.unitValue | money }}</td><td class="num">{{ l.baseMarketValue | money }}</td></tr>
+  {% assign landTotal = landTotal | plus: l.baseMarketValue %}
+  {% endfor %}
+  <tr><td colspan="4" class="num"><b>Total</b></td><td class="num"><b>{{ landTotal | money }}</b></td></tr>
+</table>
+
+<table>
+  <tr><td class="sec" colspan="4">OTHER IMPROVEMENTS</td></tr>
+  <tr><th>Kind</th><th class="num">Total Number</th><th class="num">Unit Value</th><th class="num">Base Market Value</th></tr>
+  {% assign improvementTotal = 0 %}
+  {% for i in f.improvementRows %}
+  <tr><td>{{ i.kind }}</td><td class="num">{{ i.number | num }}</td><td class="num">{{ i.unitValue | money }}</td><td class="num">{{ i.baseMarketValue | money }}</td></tr>
+  {% assign improvementTotal = improvementTotal | plus: i.baseMarketValue %}
+  {% else %}
+  <tr><td colspan="4">None</td></tr>
+  {% endfor %}
+  <tr><td colspan="3" class="num"><b>Total</b></td><td class="num"><b>{{ improvementTotal | money }}</b></td></tr>
+</table>
+
+<table>
+  <tr><td class="sec" colspan="5">MARKET VALUE</td></tr>
+  <tr><th class="num">Base Market Value</th><th>Adjustment Factors</th><th class="num">% Adjustment</th><th class="num">Value Adjustment</th><th class="num">Market Value</th></tr>
+  {% for m in f.adjustmentRows %}
+  <tr><td class="num">{{ m.baseMarketValue | money }}</td><td>{{ m.factors | default: "—" }}{% if m.locationFactor %} (location factor {{ m.locationFactor }}){% endif %}</td>
+      <td class="num">{{ m.adjustmentPercent | percent }}</td><td class="num">{{ m.valueAdjustment | money }}</td><td class="num">{{ m.marketValue | money }}</td></tr>
+  {% endfor %}
+  {% for i in f.improvementRows %}
+  <tr><td class="num">{{ i.baseMarketValue | money }}</td><td>{{ i.kind }}</td><td class="num">—</td><td class="num">—</td><td class="num">{{ i.baseMarketValue | money }}</td></tr>
+  {% endfor %}
+  <tr><td colspan="4" class="num"><b>Total</b></td><td class="num"><b>{{ a.valuation.marketValue | money }}</b></td></tr>
+</table>
+
+<table>
+  <tr><td class="sec" colspan="4">PROPERTY ASSESSMENT</td></tr>
+  <tr><th>Actual Use</th><th class="num">Market Value</th><th class="num">Assessment Level</th><th class="num">Assessed Value</th></tr>
+  {% for l in a.assessment.lines %}
+  <tr><td>{{ l.actualUse }} ({{ l.classification }})</td><td class="num">{{ l.marketValue | money }}</td>
+      <td class="num">{{ l.assessmentLevelPercent | percent }}</td><td class="num">{{ l.assessedValue | money }}</td></tr>
+  {% endfor %}
+  <tr><td class="num"><b>Total</b></td><td class="num"><b>{{ a.assessment.marketValue | money }}</b></td><td></td><td class="num"><b>{{ a.assessment.assessedValue | money }}</b></td></tr>
+  <tr><td colspan="4">
+    <span class="box">{% if f.taxability == "Taxable" %}X{% endif %}</span> Taxable &nbsp;&nbsp;
+    <span class="box">{% if f.taxability != "Taxable" %}X{% endif %}</span> Exempt &nbsp;&nbsp;&nbsp;
+    Effectivity of Assessment/Reassessment: <b>Q{{ f.effectivity.quarter }}</b> Qtr. <b>{{ f.effectivity.year }}</b> Yr.</td></tr>
+</table>
+
+<table>
+  <tr><td style="width:33%"><span class="lbl">APPRAISED/ASSESSED BY</span><div class="sig"></div><b>{{ a.recordedBy | default: "—" }}</b><br>{{ a.recordedAt | date_ph }}</td>
+  {% for s in a.signatures %}
+    <td><span class="lbl">{{ s.label | upcase }}</span><div class="sig"></div><b>{{ s.name }}</b>{% if s.position %}<br>{{ s.position }}{% endif %}<br>{{ s.signedAt | date_ph }}</td>
+  {% else %}
+    <td><span class="lbl">RECOMMENDING APPROVAL</span><div class="sig"></div>&nbsp;</td>
+    <td><span class="lbl">APPROVED BY — Provincial/City/Municipal Assessor</span><div class="sig"></div>&nbsp;</td>
+  {% endfor %}
+  </tr>
+</table>
+
+<table>
+  <tr><td><span class="lbl">MEMORANDA</span>{{ f.memoranda | default: "—" }}</td></tr>
+  <tr><td>Date of Entry in the Record of Assessment: <b>{% if a.recordEntry %}{{ a.recordEntry.postedAt | date_ph }}{% else %}—{% endif %}</b>
+      &nbsp; By: <b>{% if a.recordEntry %}{{ a.recordEntry.postedBy | default: "—" }}{% else %}—{% endif %}</b></td></tr>
+</table>
+
+<table>
+  <tr><td class="sec" colspan="4">RECORD OF SUPERSEDED ASSESSMENT</td></tr>
+  {% if f.superseded %}
+  <tr><td><span class="lbl">PIN</span>{{ f.superseded.pin }}</td><td><span class="lbl">ARP No.</span>{{ f.superseded.arpNumber | default: "—" }}</td>
+      <td><span class="lbl">TD No.</span>{{ f.superseded.tdNumber }}</td><td><span class="lbl">Total Assessed Value</span>{% if f.superseded.totalAssessedValue %}{{ f.superseded.totalAssessedValue | money }}{% else %}—{% endif %}</td></tr>
+  <tr><td colspan="2"><span class="lbl">Previous Owner</span>{{ f.superseded.previousOwner | default: "—" }}</td>
+      <td><span class="lbl">Effectivity of Assessment</span>Q{{ f.superseded.effectivity.quarter }} {{ f.superseded.effectivity.year }}</td>
+      <td><span class="lbl">AR Page No.</span>—</td></tr>
+  {% else %}
+  <tr><td colspan="4">None — first assessment of this unit.</td></tr>
+  {% endif %}
+</table>
+<div class="lbl">Issued {{ issue.issuedAt | date_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}. {{ form.legalBasis }}.</div>

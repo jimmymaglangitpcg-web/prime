@@ -182,7 +182,7 @@ public class PartiesAndTdLifecycleTests(WebApplicationFactory<Program> factory) 
         var oldForm = (await forms.IssueAsync(new IssueFormRequest("TAX_DECLARATION", current.Id))).Value.Html.ShouldNotBeNull();
         oldForm.ShouldContain($"CANCELLED BY TD No. {replacement.TaxDeclarationNumber}");
         var newForm = (await forms.IssueAsync(new IssueFormRequest("TAX_DECLARATION", replacement.Id))).Value.Html.ShouldNotBeNull();
-        newForm.ShouldContain($"Cancels TD No.</th><td>{current.TaxDeclarationNumber}");
+        newForm.ShouldContain($"This declaration cancels TD No. <b>{current.TaxDeclarationNumber}</b>"); // MRPAAO Att. 4 wording (step 5a)
 
         (await tds.CreateAsync(Td(c, previous: current.Id))).Code.ShouldBe("PREVIOUS_TAX_DECLARATION_CANCELLED");
     }

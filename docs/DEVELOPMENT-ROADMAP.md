@@ -1102,8 +1102,20 @@ be entered through the level API.
 - The transfer's BIR clearance.
 - Corrections in place with a reason and the audit log.
 
-Migration `DescriptiveFields` is applied locally only. Next: step 4
-(transaction code and posting stamp). Plan items A9 and A10 remain.
+Migration `DescriptiveFields` is applied locally only. Steps 2–3 are
+committed as `81ce318`.
+
+**Step 4 done (2026-09-25, uncommitted):** the FAAS transaction code
+(highest rank wins; GR for general revision) and the Record of Assessment
+entry stamp on posting (plan §12). Migration
+`TransactionCodeAndPostingStamp` is applied locally only.
+
+**Step 5a done (2026-09-25, uncommitted):** MRPAAO layouts for the FAAS
+(land, building, machinery; subject = the TD) and the TD (v3), with the
+new `Mrpaao` form authority (plan §13). No migration. Integration tests
+now run serially (shared dev DB). Next: step 5b (Notice of Assessment for
+several properties, and notices on owner/address/location changes),
+then step 6 (registers). Plan items A9 and A10 remain.
 
 Candidates, in roadmap order:
 

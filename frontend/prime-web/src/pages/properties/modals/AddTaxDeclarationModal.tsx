@@ -4,6 +4,7 @@ import { useCreateTaxDeclaration, useTaxDeclarationsByRpu } from '../../../api/t
 import { useActualUses, useClassifications, useSubClassifications } from '../../../api/referenceData';
 import type { CreateTaxDeclarationRequest } from '../../../lib/types';
 import { ApiRequestError } from '../../../lib/apiClient';
+import { useTransactionTypes } from '../../../api/transactions';
 
 export function AddTaxDeclarationModal({
   propertyId,
@@ -23,6 +24,7 @@ export function AddTaxDeclarationModal({
   const { data: classifications } = useClassifications();
   const { data: actualUses } = useActualUses();
   const { data: subClassifications } = useSubClassifications();
+  const { data: transactionTypes = [] } = useTransactionTypes(true);
   const createTaxDeclaration = useCreateTaxDeclaration(propertyId);
   const { data: existing = [] } = useTaxDeclarationsByRpu(rpuId);
   const current = existing.find((td) => td.status === 'Approved');
@@ -66,6 +68,7 @@ export function AddTaxDeclarationModal({
             remarks: values.remarks,
             previousTaxDeclarationId: values.previousTaxDeclarationId,
             propertyTransactionId: transactionId,
+            transactionCode: transactionId ? undefined : values.transactionCode,
           };
           createTaxDeclaration.mutate(request, { onSuccess: handleClose });
         }}
@@ -110,6 +113,13 @@ export function AddTaxDeclarationModal({
         <Form.Item name="effectivityDate" label="Effectivity Date" rules={[{ required: true }]}>
           <DatePicker style={{ width: '100%' }} />
         </Form.Item>
+
+        {!transactionId && (
+          <Form.Item name="transactionCode" label="Transaction code (optional)"
+            extra="The FAAS code (e.g. DC, RC, DP). A TD drafted under a transaction takes that transaction's code; a general revision's, GR.">
+            <Select allowClear options={transactionTypes.map((t) => ({ value: t.code, label: `${t.code} — ${t.name}${t.rank !== null ? ` (rank ${t.rank})` : ''}` }))} />
+          </Form.Item>
+        )}
 
         <Form.Item name="remarks" label="Remarks">
           <Input.TextArea rows={2} />

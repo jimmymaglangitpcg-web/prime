@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Numbering;
 using Prime.Domain.Entities;
@@ -35,6 +36,40 @@ public sealed class FaasOptions
     /// general revision and on every change of value).
     /// </summary>
     public bool PrepareTdOnPosting { get; set; } = true;
+
+    /// <summary>
+    /// The transaction code of a FAAS arising from a general revision (MRPAAO
+    /// p.145: "GR"). Its rank comes from the transaction catalogue when a type
+    /// with this code is in force. Empty: none.
+    /// </summary>
+    public string? GeneralRevisionTransactionCode { get; set; } = "GR";
+}
+
+/// <summary>The FAAS transaction code rule (MRPAAO p.145, 167).</summary>
+public static class TransactionCodes
+{
+    /// <summary>The highest-ranking code (lowest rank number); unranked codes come last.</summary>
+    public static (string? Code, int? Rank) Highest(IEnumerable<(string? Code, int? Rank)> candidates) =>
+        candidates.Where(c => !string.IsNullOrWhiteSpace(c.Code))
+            .OrderBy(c => c.Rank ?? int.MaxValue)
+            .Select(c => ((string?)c.Code, c.Rank))
+            .FirstOrDefault();
+
+    /// <summary>The rank of <paramref name="code"/> in the transaction catalogue in force, if any.</summary>
+    public static async Task<int?> RankAsync(IApplicationDbContext db, string code, DateOnly asOf, CancellationToken ct) =>
+        await db.TransactionTypes.InForce(asOf).Where(x => x.Code == code).Select(x => x.Rank).FirstOrDefaultAsync(ct);
+
+    /// <summary>The general revision code and rank for an assessment made by a general revision, else none.</summary>
+    public static async Task<(string? Code, int? Rank)> FromRevisionAsync(IApplicationDbContext db, FaasOptions options, Assessment? assessment,
+        DateOnly asOf, CancellationToken ct)
+    {
+        var code = options.GeneralRevisionTransactionCode?.Trim();
+        if (assessment?.RevisionReference is null || string.IsNullOrEmpty(code))
+        {
+            return (null, null);
+        }
+        return (code, await RankAsync(db, code, asOf, ct));
+    }
 }
 
 /// <summary>Links between Tax Declarations and the assessments they declare.</summary>
@@ -75,7 +110,7 @@ internal static class FaasTaxDeclarations
     /// no TD numbering scheme is in force (a TD cannot exist unnumbered).
     /// </summary>
     public static async Task<string?> PrepareForPostedAsync(IApplicationDbContext db, INumberingService numbering, Assessment assessment,
-        DateOnly today, CancellationToken ct)
+        DateOnly today, FaasOptions options, CancellationToken ct)
     {
         var current = await db.TaxDeclarations.FirstOrDefaultAsync(x => x.RpuId == assessment.RpuId && x.Status == WorkflowStatus.Approved, ct);
         if (current is null)
@@ -102,8 +137,11 @@ internal static class FaasTaxDeclarations
         {
             return "No Tax Declaration numbering scheme is in force.";
         }
+        var (code, rank) = await TransactionCodes.FromRevisionAsync(db, options, assessment, today, ct);
         db.TaxDeclarations.Add(new TaxDeclaration
         {
+            TransactionCode = code,
+            TransactionRank = rank,
             RpuId = assessment.RpuId,
             PropertyId = assessment.PropertyId,
             TaxDeclarationNumber = number.Value,

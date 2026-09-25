@@ -245,12 +245,14 @@ public sealed class AssessmentService(
         }
 
         assessment.Status = WorkflowStatus.Posted;
+        assessment.PostedAt = clock.UtcNow; // the Record of Assessment entry (MRPAAO Att. 1–3)
+        assessment.PostedBy = currentUser.AppUserId;
         var ownsTransaction = db.Database.CurrentTransaction is null;
         await using var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
         if (faas.Value.PrepareTdOnPosting)
         {
             // The new FAAS: a Draft TD declaring this assessment, for the assessor to review and approve.
-            if (await FaasTaxDeclarations.PrepareForPostedAsync(db, numbering, assessment, clock.Today, cancellationToken) is { } skipped)
+            if (await FaasTaxDeclarations.PrepareForPostedAsync(db, numbering, assessment, clock.Today, faas.Value, cancellationToken) is { } skipped)
             {
                 logger.LogInformation("No Tax Declaration prepared for posted assessment {AssessmentId}: {Reason}", assessment.Id, skipped);
             }
@@ -326,5 +328,7 @@ public sealed class AssessmentService(
         x.ApprovedAt,
         x.CreatedAt,
         x.Lines.OrderBy(l => l.Sequence).Select(l => new AssessmentLineDto(l.Id, l.Sequence, l.ClassificationId, l.Classification!.Name,
-            l.ActualUseId, l.ActualUse!.Name, l.MarketValue, l.AssessmentLevelId, l.AssessmentPercentage, l.AssessedValue)).ToList());
+            l.ActualUseId, l.ActualUse!.Name, l.MarketValue, l.AssessmentLevelId, l.AssessmentPercentage, l.AssessedValue)).ToList(),
+        x.PostedAt,
+        x.PostedBy);
 }

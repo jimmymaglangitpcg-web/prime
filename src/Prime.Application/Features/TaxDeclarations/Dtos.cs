@@ -14,7 +14,8 @@ public sealed record CreateTaxDeclarationRequest(
     Guid? PreviousTaxDeclarationId,
     string? Remarks,
     Guid? PropertyTransactionId = null,
-    Guid? AssessmentId = null);
+    Guid? AssessmentId = null,
+    string? TransactionCode = null);
 
 public sealed record TaxDeclarationDto(
     Guid Id,
@@ -43,7 +44,9 @@ public sealed record TaxDeclarationDto(
     int ActiveAnnotationCount,
     Guid? PropertyTransactionId,
     Guid? AssessmentId,
-    string? FaasNumber);
+    string? FaasNumber,
+    string? TransactionCode = null,
+    int? TransactionRank = null);
 
 public sealed record TaxDeclarationReasonRequest(string Reason);
 

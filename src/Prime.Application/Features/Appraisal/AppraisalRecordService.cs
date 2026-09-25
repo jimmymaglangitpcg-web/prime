@@ -19,7 +19,11 @@ public sealed record AppraisalPartyDto(string Name, PropertyPartyRole Role, stri
 
 public sealed record AppraisalRpuDto(Guid Id, string Number, RpuType Type);
 
-public sealed record AppraisalTaxDeclarationDto(Guid Id, string Number, int RevisionNumber, DateOnly EffectivityDate, WorkflowStatus Status);
+public sealed record AppraisalTaxDeclarationDto(Guid Id, string Number, int RevisionNumber, DateOnly EffectivityDate, WorkflowStatus Status,
+    string? TransactionCode = null);
+
+/// <summary>The Record of Assessment entry: when the assessment was posted, and by whom (MRPAAO Att. 1–3).</summary>
+public sealed record AppraisalRecordEntryDto(DateTimeOffset PostedAt, string? PostedBy);
 
 public sealed record AppraisalLandDto(
     Guid Id, decimal Area, string AreaUnit, string Classification, string ActualUse, string? SubClassification, string? Zone,
@@ -101,7 +105,8 @@ public sealed record AppraisalRecordDto(
     AppraisalLandDto? Land, AppraisalBuildingDto? Building, AppraisalMachineryDto? Machinery, IReadOnlyList<AppraisalMachineryDto> MachineryUnits,
     AppraisalValuationDto Valuation, AppraisalAssessmentDto Assessment, AppraisalPreviousDto? Previous,
     string? RecordedBy, DateTimeOffset RecordedAt, IReadOnlyList<AppraisalSignatureDto> Signatures,
-    IReadOnlyList<AppraisalNoticeDto> Notices);
+    IReadOnlyList<AppraisalNoticeDto> Notices,
+    AppraisalRecordEntryDto? RecordEntry = null);
 
 public interface IAppraisalRecordService
 {
@@ -202,7 +207,7 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
 
         var previous = await AssessmentHistory.PreviousAsync(db, a, ct);
 
-        var userIds = new[] { a.CreatedBy, a.ApprovedBy }.OfType<Guid>().ToList();
+        var userIds = new[] { a.CreatedBy, a.ApprovedBy, a.PostedBy }.OfType<Guid>().ToList();
         var userNames = await db.AppUsers.Where(u => userIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
         var signatures = (await db.ApprovalRecords.AsNoTracking()
                 .Where(x => x.SubjectType == ApprovalSubjectType.Assessment && x.SubjectId == a.Id)
@@ -241,7 +246,10 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
             previous is null ? null : new AppraisalPreviousDto(previous.Id, previous.FaasNumber, previous.AssessmentYear, previous.EffectiveDate,
                 previous.MarketValue, previous.AssessedValue, a.AssessedValue - previous.AssessedValue),
             a.CreatedBy is { } creator ? userNames.GetValueOrDefault(creator) ?? "(unknown user)" : null, a.CreatedAt, signatures,
-            notices));
+            notices,
+            a.PostedAt is { } postedAt
+                ? new AppraisalRecordEntryDto(postedAt, a.PostedBy is { } poster ? userNames.GetValueOrDefault(poster) ?? "(unknown user)" : null)
+                : null));
     }
 
     /// <summary>
@@ -255,10 +263,10 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
             .Where(x => x.RpuId == rpuId && x.EffectivityDate <= date
                 && (x.Status == WorkflowStatus.Approved || x.Status == WorkflowStatus.Cancelled))
             .OrderByDescending(x => x.EffectivityDate).ThenByDescending(x => x.RevisionNumber)
-            .Select(x => new { x.Id, x.TaxDeclarationNumber, x.RevisionNumber, x.EffectivityDate, x.Status, x.CancelledAt })
+            .Select(x => new { x.Id, x.TaxDeclarationNumber, x.RevisionNumber, x.EffectivityDate, x.Status, x.CancelledAt, x.TransactionCode })
             .ToListAsync(ct);
         var td = candidates.FirstOrDefault(x => x.CancelledAt is not { } cancelledAt || clock.LocalDate(cancelledAt) > date);
-        return td is null ? null : new AppraisalTaxDeclarationDto(td.Id, td.TaxDeclarationNumber, td.RevisionNumber, td.EffectivityDate, td.Status);
+        return td is null ? null : new AppraisalTaxDeclarationDto(td.Id, td.TaxDeclarationNumber, td.RevisionNumber, td.EffectivityDate, td.Status, td.TransactionCode);
     }
 
     private static readonly Dictionary<string, int> BreakdownRank =
