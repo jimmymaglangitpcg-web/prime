@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Alert, Button, Descriptions, Drawer, Empty, Spin, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Descriptions, Drawer, Empty, Space, Spin, Table, Tag, Typography } from 'antd';
 import { useAppraisalRecord, useRpuAssessments } from '../../../api/assessments';
 import { ApiRequestError } from '../../../lib/apiClient';
 import { formatMoney } from '../../../lib/format';
+import { PrintFormButton } from '../../../components/PrintFormButton';
 import type { AppraisalRecordDto, AssessmentSummaryDto, WorkflowStatus } from '../../../lib/types';
 
 const statusColor: Partial<Record<WorkflowStatus, string>> = {
@@ -33,7 +34,15 @@ export function AssessmentsForRpu({ rpuId }: { rpuId: string }) {
           { title: 'Level', dataIndex: 'assessmentPercentage', align: 'right', render: (v: number) => `${plain.format(v)}%` },
           { title: 'Assessed value', dataIndex: 'assessedValue', align: 'right', render: formatMoney },
           { title: 'Status', dataIndex: 'status', render: statusTag },
-          { title: 'Actions', render: (_, a) => <Button size="small" onClick={() => setSelected(a.id)}>Appraisal record</Button> },
+          {
+            title: 'Actions', render: (_, a) => (
+              <Space size={4} wrap>
+                <Button size="small" onClick={() => setSelected(a.id)}>Appraisal record</Button>
+                {/* The FAAS is issued once the assessment is approved; before that it opens as a preview. */}
+                <PrintFormButton formCode="FAAS" subjectId={a.id} issuable={a.status === 'Approved' || a.status === 'Posted'} label="Print FAAS" />
+              </Space>
+            ),
+          },
         ]}
       />
       {selected && <AppraisalRecordDrawer assessmentId={selected} onClose={() => setSelected(undefined)} />}

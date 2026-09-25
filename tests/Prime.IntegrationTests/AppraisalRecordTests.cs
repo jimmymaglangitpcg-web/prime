@@ -170,6 +170,22 @@ public class AppraisalRecordTests(WebApplicationFactory<Program> factory) : ICla
         data.DocumentNumber.ShouldBe("DEMO-FAAS-2026-0001");
         data.Data["appraisal"]!["kind"]!.GetValue<string>().ShouldBe("Land");
         data.Data["appraisal"]!["assessment"]!["assessedValue"]!.GetValue<decimal>().ShouldBe(100_000m);
+
+        // A8: the provisional FAAS form issues from that data (seeded at startup).
+        var issued = await c.Services.GetRequiredService<IFormService>().IssueAsync(new IssueFormRequest("FAAS", c.Seed.AssessmentId));
+        issued.IsSuccess.ShouldBeTrue(issued.IsSuccess ? null : issued.Message);
+        issued.Value.DocumentNumber.ShouldBe("DEMO-FAAS-2026-0001");
+        var html = issued.Value.Html.ShouldNotBeNull();
+        html.ShouldContain("PROVISIONAL");
+        html.ShouldContain("FAAS No. DEMO-FAAS-2026-0001");
+        html.ShouldContain("<h2>Land</h2>");
+        html.ShouldNotContain("<h2>Building</h2>");
+        html.ShouldContain("Unit value (SMV)");
+        html.ShouldContain("500,000.00");
+        html.ShouldNotContain("500000"); // breakdown amounts are formatted as money
+        html.ShouldContain("100,000.00");
+        html.ShouldContain("DEMO Signer B");
+        html.ShouldNotContain("NOT APPROVED");
     }
 
     [Fact]
@@ -183,5 +199,11 @@ public class AppraisalRecordTests(WebApplicationFactory<Program> factory) : ICla
         draft.IssueBlocker.ShouldNotBeNull().ShouldContain("Draft");
         (await provider.BuildAsync(Guid.NewGuid(), CancellationToken.None)).ShouldBeNull();
         (await c.Appraisals.GetAsync(Guid.NewGuid())).Code.ShouldBe("ASSESSMENT_NOT_FOUND");
+
+        var forms = c.Services.GetRequiredService<IFormService>();
+        var preview = (await forms.PreviewAsync("FAAS", c.Seed.AssessmentId)).Value;
+        preview.IssueBlocker.ShouldNotBeNull();
+        preview.Html.ShouldContain("DRAFT — NOT APPROVED");
+        (await forms.IssueAsync(new IssueFormRequest("FAAS", c.Seed.AssessmentId))).Code.ShouldBe("FORM_SUBJECT_NOT_ISSUABLE");
     }
 }

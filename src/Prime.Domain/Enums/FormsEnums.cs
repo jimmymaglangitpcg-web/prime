@@ -35,6 +35,8 @@ public enum FormSubjectType
     NoticeOfAssessment = 2,
     /// <summary>An assessment's appraisal record — what a FAAS renders (docs/FORMS-REVISION-PLAN.md A7).</summary>
     Assessment = 3,
+    /// <summary>A property's statement of account; the subject id is the property (docs/FORMS-REVISION-PLAN.md A8).</summary>
+    StatementOfAccount = 4,
 }
 
 /// <summary>Records whose approval can follow a configured <c>ApprovalChain</c>.</summary>

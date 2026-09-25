@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Prime.Application.Features.AssessmentLevels;
 using Prime.Application.Features.Assessments;
 using Prime.Application.Features.Billing.Bills;
+using Prime.Application.Features.Forms;
 using Prime.Application.Features.Smv;
 using Prime.Application.Features.Valuation;
 using Prime.Domain.Entities;
@@ -232,6 +233,16 @@ public class BillingFlowTests(WebApplicationFactory<Program> factory) : IClassFi
         statement.Bills.Single().BillId.ShouldBe(june.Id);
         statement.Bills.Single().Interest.ShouldBe(120m);
         statement.TotalBilled.ShouldBe(2_120m);
+
+        // A8: the provisional statement form renders the same figures, preview only.
+        var forms = services.GetRequiredService<IFormService>();
+        var preview = await forms.PreviewAsync("STATEMENT_OF_ACCOUNT", seed.PropertyId);
+        preview.IsSuccess.ShouldBeTrue(preview.IsSuccess ? null : preview.Message);
+        preview.Value.IssueBlocker.ShouldNotBeNull();
+        preview.Value.Html.ShouldContain("PROVISIONAL");
+        preview.Value.Html.ShouldContain("TOTAL BILLED");
+        preview.Value.Html.ShouldContain("2,120.00");
+        (await forms.IssueAsync(new IssueFormRequest("STATEMENT_OF_ACCOUNT", seed.PropertyId))).Code.ShouldBe("FORM_SUBJECT_NOT_ISSUABLE");
     }
 
     [Fact]

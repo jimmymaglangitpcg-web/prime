@@ -1027,9 +1027,10 @@ Phases 0–8 are complete with DEMO values (Phase 8 — Billing finished
 2026-09-25; see its status block and docs/BILLING.md §6.1 for the defaults
 awaiting LGU/legal confirmation). Commits through `3301667` (A5) are
 pushed to `origin`, and Supabase has all migrations through
-`PropertyTransactions`. A6 and A7 are **uncommitted**; their migrations
-(`NoticesOfAssessment`, `AssessmentFaasNumber`) are applied to the local
-dev DB only. The local dev DB also holds a DEMO billing scenario (property
+`PropertyTransactions`. A6 and A7 are committed and pushed (`506d102`);
+their migrations (`NoticesOfAssessment`, `AssessmentFaasNumber`) are
+applied to the local dev DB only. A8 is **uncommitted** and adds no
+migration. The local dev DB also holds a DEMO billing scenario (property
 `DEMO-BILL-AE94B8`, DEMO tax types and approved DEMO rules).
 
 **Forms Foundation done (2026-09-25, uncommitted):** docs/FORMS-REVISION-PLAN.md
@@ -1060,9 +1061,14 @@ aggregate): one read model per assessment, served at
 `GET /api/assessments/{id}/appraisal-record` and as the `Assessment` form
 subject, shown in an Assessments table under each RPU. A FAAS number is
 assigned on approval when a FAAS numbering scheme is in force (plan §15).
-Migration `AssessmentFaasNumber` is applied locally only. Next in the
-plan: A8 provisional FAAS templates (and the remaining provisional forms),
-A9 building depreciation hook, A10 LAM intake checklist.
+Migration `AssessmentFaasNumber` is applied locally only.
+
+**A8 done (2026-09-25, uncommitted):** the provisional template set is
+complete (plan §16). There is one `FAAS` form that branches on kind and
+is issuable once the assessment is approved, and a preview-only
+`STATEMENT_OF_ACCOUNT` form, since statements are point-in-time and PRIME
+does not yet keep them as records. No migration. Next in the plan: A9
+building depreciation hook, A10 LAM intake checklist.
 
 Candidates, in roadmap order:
 

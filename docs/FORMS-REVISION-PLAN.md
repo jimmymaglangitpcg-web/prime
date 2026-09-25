@@ -3,9 +3,9 @@
 **FAAS, Tax Declaration and related assessment forms: from the initial
 system to the forms prescribed under the Local Assessment Manual (LAM)**
 
-Status: **A1–A7 implemented 2026-09-25**; A8–A10 not started. See §11
-(A1–A3), §12 (A4), §13 (A5), §14 (A6) and §15 (A7) for what was built and
-where it deviates from this plan.
+Status: **A1–A8 implemented 2026-09-25**; A9–A10 not started. See §11
+(A1–A3), §12 (A4), §13 (A5), §14 (A6), §15 (A7) and §16 (A8) for what was
+built and where it deviates from this plan.
 
 ---
 
@@ -739,3 +739,68 @@ kind check.
 
 Migration `AssessmentFaasNumber`: one nullable column and a unique index.
 Applied to the local dev DB only.
+
+---
+
+## 16. Implementation status — A8 provisional template set, 2026-09-25
+
+Every A8 form now has a provisional version. All are installed at startup
+by `ProvisionalFormSeeder` and always render with the PROVISIONAL
+watermark:
+
+| Code | Version | Subject | Issuable when |
+|---|---|---|---|
+| `TAX_BILL` | 1 | tax bill | posted (Phase 8) |
+| `TAX_DECLARATION` | 2 | Tax Declaration | not rejected or voided (A4) |
+| `NOTICE_OF_ASSESSMENT` | 1 | notice | issued or served (A6) |
+| `FAAS` | 1 | assessment | approved or posted — **new** |
+| `STATEMENT_OF_ACCOUNT` | 1 | property | never — preview only — **new** |
+
+**FAAS: one form, not three.** This settles the §15 deviation: a single
+`FAAS` code whose sections follow `appraisal.kind` (Land, Building,
+Machinery). The appraisal record already carries the kind, so three codes
+would only duplicate the header, valuation and assessment sections. If the
+LAM prescribes three separate forms, it arrives as three form codes on the
+same `Assessment` subject, with no code change. The template renders only
+what the appraisal record holds. Breakdown keys get readable labels in the
+template, and money keys are formatted as money, so a later version can
+reword them without code changes. The **Print FAAS** button sits next to
+**Appraisal record** in the Assessments table. It issues an approved or
+posted assessment's FAAS and previews any other.
+
+**Statement of Account: preview only (deviation).** Issuing is once per
+form and subject (`UX_IssuedForms_Definition_Subject_Valid`), and reprints
+return the frozen copy. That fits a bill or a TD, but a statement is a
+point-in-time view that changes with every posted bill and, from Phase 9,
+every payment. Freezing the first one issued would serve stale balances
+forever. The form data provider therefore always returns an issue blocker.
+Issuing statements needs its own statement record (a number, an as-of
+moment, the lines), which fits Phase 9/10. New subject type:
+`FormSubjectType.StatementOfAccount` (the subject id is the property id;
+stored as a string, so no migration). The data is the same
+`StatementOfAccountDto` that `GET /api/properties/{id}/statement-of-account`
+serves, plus the property and its current declared parties. A **Preview**
+button on the Statement of Account page opens it.
+
+**Open (DOMAIN VERIFICATION REQUIRED):** the LAM's FAAS and statement
+layouts and field lists (checklist §6). Missing fields go into the read
+models, not the templates.
+
+**Verified:**
+- Integration tests: FAAS issued for an approved assessment (number, Land
+  section only, SMV label, money-formatted breakdown, signer, no draft
+  banner); a draft previews with the NOT APPROVED banner but cannot be
+  issued; the statement preview shows the billed total and cannot be
+  issued. Both new templates parse (renderer theory).
+- Full suite passes (90 domain, 37 application, 107 integration tests).
+- Production frontend build and lint pass.
+- Live in the browser on `DEMO-BILL-AE94B8`: Print FAAS issued the FAAS
+  (Land, SMV rate, breakdown, 20% DEMO level, 100,000.00 assessed value,
+  recorder and approver signatures). The Statement of Account preview
+  showed the 2026 bill (2,070.00) with the preview-only notice. No console
+  errors.
+
+No migration. In the local dev DB only, the FAAS v1 template row was
+refreshed in place after the money-format fix. That version was never
+installed anywhere else, and the one FAAS issued during testing keeps its
+frozen HTML.

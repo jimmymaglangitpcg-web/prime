@@ -615,7 +615,7 @@ export type NumberedDocumentKind =
   | 'OfficialReceipt'
   | 'PropertyTransaction';
 export type FormAuthority = 'PrimeProvisional' | 'Lam' | 'Blgf' | 'LguOrdinance' | 'Other';
-export type FormSubjectType = 'TaxBill' | 'TaxDeclaration' | 'NoticeOfAssessment' | 'Assessment';
+export type FormSubjectType = 'TaxBill' | 'TaxDeclaration' | 'NoticeOfAssessment' | 'Assessment' | 'StatementOfAccount';
 export type ApprovalSubjectType = 'Assessment' | 'TaxDeclaration' | 'PropertyTransaction';
 
 interface ConfigurationHeader {

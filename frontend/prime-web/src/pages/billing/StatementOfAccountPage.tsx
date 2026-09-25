@@ -4,6 +4,7 @@ import { ArrowLeftOutlined, PrinterOutlined } from '@ant-design/icons';
 import { useStatementOfAccount } from '../../api/bills';
 import { ApiRequestError } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/format';
+import { PrintFormButton } from '../../components/PrintFormButton';
 import type { StatementLineDto } from '../../lib/types';
 
 const lguName = import.meta.env.VITE_LGU_NAME?.trim();
@@ -43,6 +44,8 @@ export function StatementOfAccountPage() {
         <Button type="primary" icon={<PrinterOutlined />} onClick={() => window.print()}>
           Print
         </Button>
+        {/* The configured STATEMENT_OF_ACCOUNT form; preview only until statements are kept as records. */}
+        <PrintFormButton formCode="STATEMENT_OF_ACCOUNT" subjectId={data.propertyId} issuable={false} />
       </Space>
 
       <div style={{ textAlign: 'center', marginBottom: 16 }}>

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Appraisal;
+using Prime.Application.Features.Billing.Bills;
 using Prime.Application.Features.Properties;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
@@ -272,5 +273,34 @@ public sealed class AppraisalRecordFormDataProvider(IAppraisalRecordService appr
             ? null
             : $"Only an approved or posted assessment's appraisal record can be issued (this one is {r.Status}); preview it instead.";
         return new FormSubjectData(r.FaasNumber, FormData.ToJson(new { appraisal = r }), blocker);
+    }
+}
+
+/// <summary>
+/// Statement of account (CLAUDE.md §52): a property's posted bills, from the
+/// same read model the API serves. Preview only: issuing is once per subject
+/// (UX_IssuedForms_Definition_Subject_Valid), but a statement is a
+/// point-in-time view that changes with every bill and, from Phase 9, every
+/// payment — issuing one needs its own statement record first.
+/// </summary>
+public sealed class StatementOfAccountFormDataProvider(IApplicationDbContext db, IBillService bills) : IFormDataProvider
+{
+    public FormSubjectType SubjectType => FormSubjectType.StatementOfAccount;
+
+    public async Task<FormSubjectData?> BuildAsync(Guid subjectId, CancellationToken cancellationToken)
+    {
+        var statement = await bills.GetStatementOfAccountAsync(subjectId, cancellationToken);
+        if (statement.IsFailure)
+        {
+            return null;
+        }
+        var data = FormData.ToJson(new
+        {
+            statement = statement.Value,
+            property = await FormData.PropertyAsync(db, subjectId, cancellationToken),
+            owners = await FormData.CurrentOwnersAsync(db, subjectId, cancellationToken),
+        });
+        return new FormSubjectData(null, data,
+            "A statement of account can only be previewed and printed: it changes with every bill and payment, and PRIME does not yet keep issued statements.");
     }
 }

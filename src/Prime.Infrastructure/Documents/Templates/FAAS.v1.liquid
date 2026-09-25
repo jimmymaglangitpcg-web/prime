@@ -1,0 +1,153 @@
+{% comment %}
+  PRIME provisional layout (docs/FORMS-REVISION-PLAN.md A8). Neutral design
+  built only from PRIME's appraisal record (A7) — no LAM content, no
+  2004/2006 manual layout. The official FAAS forms are prescribed under the
+  LAM (PVS 106 §30.1). One form for land, building and machinery: sections
+  follow appraisal.kind. Breakdown labels are template text, so a later
+  version can reword them without code.
+{% endcomment %}
+{% assign a = appraisal %}
+<style>
+  .hdr { text-align: center; margin-bottom: 10px; }
+  .hdr .lgu { font-weight: bold; font-size: 12pt; }
+  .hdr h1 { font-size: 15pt; margin: 6px 0 2px; }
+  h2 { font-size: 11pt; margin: 12px 0 2px; }
+  table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+  th, td { border: 1px solid #555; padding: 3px 5px; font-size: 10pt; vertical-align: top; }
+  th { background: #eee; text-align: left; width: 30%; }
+  thead th { width: auto; }
+  .num { text-align: right; }
+  .draft { border: 2px solid #b00; color: #b00; font-weight: bold; text-align: center; padding: 4px; margin: 6px 0; }
+  .sigs { display: flex; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
+  .sig { flex: 1; min-width: 160px; text-align: center; }
+  .sig .line { border-top: 1px solid #000; margin-top: 30px; padding-top: 2px; font-weight: bold; }
+  .foot { font-size: 8pt; color: #333; margin-top: 14px; }
+</style>
+<div class="hdr">
+  {% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% else %}<div class="lgu">[LGU name not configured]</div>{% endif %}
+  {% if lgu.office %}<div>{{ lgu.office }}</div>{% endif %}
+  <h1>{{ form.title }}</h1>
+  <div>{{ a.kind | upcase }} · FAAS No. {{ a.faasNumber | default: "(unnumbered)" }} · Assessment year {{ a.assessment.year }}</div>
+</div>
+{% if a.status != "Approved" and a.status != "Posted" %}
+<div class="draft">{{ a.status | upcase }} — NOT APPROVED</div>
+{% endif %}
+
+<h2>Property</h2>
+<table>
+  <tr><th>Property Identification No.</th><td>{{ a.property.pin }}</td></tr>
+  <tr><th>Location</th><td>{% if a.property.street %}{{ a.property.street }}, {% endif %}{% if a.property.sitio %}{{ a.property.sitio }}, {% endif %}{{ a.property.barangay }}, {{ a.property.municipality }}, {{ a.property.province }}</td></tr>
+  <tr><th>Lot / Block / Survey</th><td>{{ a.property.lotNumber | default: "—" }} / {{ a.property.blockNumber | default: "—" }} / {{ a.property.surveyNumber | default: "—" }}</td></tr>
+  <tr><th>Title No. / Tax Map No.</th><td>{{ a.property.titleNumber | default: "—" }} / {{ a.property.taxMapNumber | default: "—" }}</td></tr>
+  <tr><th>RPU</th><td>{{ a.rpu.number }} ({{ a.rpu.type }})</td></tr>
+  <tr><th>Tax Declaration in force</th><td>{% if a.taxDeclaration %}{{ a.taxDeclaration.number }} (revision {{ a.taxDeclaration.revisionNumber }}, effective {{ a.taxDeclaration.effectivityDate | date_ph }}){% else %}None on {{ a.assessment.effectiveDate | date_ph }}{% endif %}</td></tr>
+  <tr><th>Declared in the name of<br><small>as of {{ a.partiesAsOf | date_ph }}</small></th><td>{% for o in a.parties %}{{ o.name }}{% if o.role != "Owner" and o.role != "UnknownOwner" %} ({{ o.roleLabel }}){% endif %}{% if o.role == "Owner" and o.sharePercent != 100 %} ({{ o.sharePercent | percent }}){% endif %}{% if o.address %} — {{ o.address }}{% endif %}{% unless forloop.last %}<br>{% endunless %}{% else %}No party recorded{% endfor %}</td></tr>
+</table>
+
+{% if a.land %}
+<h2>Land</h2>
+<table>
+  <tr><th>Area</th><td>{{ a.land.area }} {{ a.land.areaUnit }}</td></tr>
+  <tr><th>Classification / Actual use</th><td>{{ a.land.classification }} / {{ a.land.actualUse }}{% if a.land.subClassification %} ({{ a.land.subClassification }}){% endif %}</td></tr>
+  <tr><th>Zone</th><td>{{ a.land.zone | default: "—" }}</td></tr>
+  <tr><th>Road</th><td>{{ a.land.roadType | default: "—" }}{% if a.land.roadFrontage %}, {{ a.land.roadFrontage }} m frontage{% endif %}{% if a.land.isCornerLot %}, corner lot{% endif %}</td></tr>
+  {% if a.land.zoning %}<tr><th>Zoning</th><td>{{ a.land.zoning }}</td></tr>{% endif %}
+</table>
+{% endif %}
+
+{% if a.building %}
+<h2>Building</h2>
+<table>
+  <tr><th>Building type / Structural type</th><td>{{ a.building.buildingType }} / {{ a.building.structuralType }}</td></tr>
+  <tr><th>Actual use</th><td>{{ a.building.actualUse }}</td></tr>
+  <tr><th>Storeys</th><td>{{ a.building.numberOfStoreys }}</td></tr>
+  <tr><th>Floor area / Total floor area</th><td>{{ a.building.floorArea }} / {{ a.building.totalFloorArea }} sqm</td></tr>
+  <tr><th>Year constructed / completed</th><td>{{ a.building.yearConstructed | default: "—" }} / {{ a.building.yearCompleted | default: "—" }}</td></tr>
+  <tr><th>Condition / Completion</th><td>{{ a.building.condition }} / {{ a.building.completionPercentage | percent }}</td></tr>
+</table>
+{% if a.building.components.size > 0 %}
+<table>
+  <thead><tr><th>Component</th><th>Description</th><th class="num">Quantity</th><th class="num">Cost</th></tr></thead>
+  {% for c in a.building.components %}
+  <tr><td>{{ c.componentType }}</td><td>{{ c.description | default: "—" }}</td><td class="num">{{ c.quantity | default: "—" }}</td><td class="num">{% if c.cost %}{{ c.cost | money }}{% else %}—{% endif %}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endif %}
+
+{% if a.machinery %}
+<h2>Machinery</h2>
+<table>
+  <tr><th>Machinery type</th><td>{{ a.machinery.machineryType }}</td></tr>
+  <tr><th>Description</th><td>{{ a.machinery.description | default: "—" }}</td></tr>
+  <tr><th>Brand / Model / Serial No.</th><td>{{ a.machinery.brand | default: "—" }} / {{ a.machinery.model | default: "—" }} / {{ a.machinery.serialNumber | default: "—" }}</td></tr>
+  <tr><th>Capacity</th><td>{% if a.machinery.capacity %}{{ a.machinery.capacity }} {{ a.machinery.capacityUnit }}{% else %}—{% endif %}</td></tr>
+  <tr><th>Date acquired</th><td>{% if a.machinery.dateAcquired %}{{ a.machinery.dateAcquired | date_ph }}{% else %}—{% endif %}{% if a.machinery.isBrandNew %} (brand new){% endif %}</td></tr>
+  <tr><th>Economic / Remaining life</th><td>{{ a.machinery.economicLifeYears | default: "—" }} / {{ a.machinery.remainingLifeYears | default: "—" }} years</td></tr>
+</table>
+{% endif %}
+
+<h2>Valuation</h2>
+<table>
+  <tr><th>Method</th><td>{{ a.valuation.method }}</td></tr>
+  <tr><th>Schedule of Market Values</th><td>{% if a.valuation.smv %}Ordinance {{ a.valuation.smv.ordinanceNumber }} ({{ a.valuation.smv.ordinanceDate | date_ph }}), effective {{ a.valuation.smv.effectivityDate | date_ph }}{% if a.valuation.scheduleRate %}; rate {{ a.valuation.scheduleRate | money }} {{ a.valuation.scheduleUnit }}{% endif %}{% else %}Not SMV-based{% endif %}</td></tr>
+</table>
+<table>
+  <thead><tr><th>Computation</th><th class="num">Value</th></tr></thead>
+  {% assign moneyKeys = "Rate,AcquisitionCost,InstallationCost,OtherCost,TotalAcquisitionCost,ReplacementCost,DepreciatedValue,MinimumRemainingValue,BaseValue,ValueBeforeClamp,MinimumValue,MaximumValue,MarketValue" | split: "," %}
+  {% for line in a.valuation.breakdown %}
+  {% case line.key %}
+    {% when "Area" %}{% assign label = "Area" %}
+    {% when "TotalFloorArea" %}{% assign label = "Total floor area" %}
+    {% when "Rate" %}{% assign label = "Unit value (SMV)" %}
+    {% when "LocationFactor" %}{% assign label = "Location factor" %}
+    {% when "CompletionPercentage" %}{% assign label = "Completion (%)" %}
+    {% when "IsBrandNew" %}{% assign label = "Brand new (1 = yes)" %}
+    {% when "AcquisitionCost" %}{% assign label = "Acquisition cost" %}
+    {% when "InstallationCost" %}{% assign label = "Installation cost" %}
+    {% when "OtherCost" %}{% assign label = "Other costs" %}
+    {% when "TotalAcquisitionCost" %}{% assign label = "Total acquisition cost" %}
+    {% when "ReplacementCost" %}{% assign label = "Replacement or reproduction cost" %}
+    {% when "EconomicLifeYears" %}{% assign label = "Estimated economic life (years)" %}
+    {% when "RemainingLifeYears" %}{% assign label = "Remaining economic life (years)" %}
+    {% when "RemainingFraction" %}{% assign label = "Remaining life fraction" %}
+    {% when "DepreciatedValue" %}{% assign label = "Depreciated value" %}
+    {% when "MinimumRemainingValuePercent" %}{% assign label = "Minimum remaining value (%)" %}
+    {% when "MinimumRemainingValue" %}{% assign label = "Minimum remaining value" %}
+    {% when "MinimumApplied" %}{% assign label = "Minimum applied (1 = yes)" %}
+    {% when "BaseValue" %}{% assign label = "Base value" %}
+    {% when "ValueBeforeClamp" %}{% assign label = "Value before schedule limits" %}
+    {% when "MinimumValue" %}{% assign label = "Schedule minimum" %}
+    {% when "MaximumValue" %}{% assign label = "Schedule maximum" %}
+    {% when "MarketValue" %}{% assign label = "Market value" %}
+    {% else %}{% assign label = line.key %}
+  {% endcase %}
+  <tr><td>{{ label }}</td><td class="num">{% if line.key == "MarketValue" %}<b>{{ line.value | money }}</b>{% elsif moneyKeys contains line.key %}{{ line.value | money }}{% else %}{{ line.value }}{% endif %}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>Assessment</h2>
+<table>
+  <tr><th>Property type / Classification / Actual use</th><td>{{ a.assessment.propertyType }} / {{ a.assessment.classification }} / {{ a.assessment.actualUse }}</td></tr>
+  <tr><th>Market value</th><td class="num">{{ a.assessment.marketValue | money }}</td></tr>
+  <tr><th>Assessment level</th><td class="num">{{ a.assessment.assessmentLevelPercent | percent }}</td></tr>
+  <tr><th>Level applied</th><td>Market value bracket {{ a.assessment.levelLowerValue | money }} – {% if a.assessment.levelUpperValue %}{{ a.assessment.levelUpperValue | money }}{% else %}and above{% endif %}; Ordinance {{ a.assessment.levelOrdinanceNumber }}{% if a.assessment.levelOrdinanceDate %} ({{ a.assessment.levelOrdinanceDate | date_ph }}){% endif %}</td></tr>
+  <tr><th>Assessed value</th><td class="num"><b>{{ a.assessment.assessedValue | money }}</b></td></tr>
+  <tr><th>Effective</th><td>{{ a.assessment.effectiveDate | date_ph }}</td></tr>
+  <tr><th>Previous assessment</th><td>{% if a.previous %}{% if a.previous.faasNumber %}FAAS No. {{ a.previous.faasNumber }}, {% endif %}effective {{ a.previous.effectiveDate | date_ph }}: assessed value {{ a.previous.assessedValue | money }} (change {{ a.previous.assessedValueChange | money }}){% else %}None — first assessment{% endif %}</td></tr>
+  {% if a.assessment.remarks %}<tr><th>Remarks</th><td>{{ a.assessment.remarks }}</td></tr>{% endif %}
+</table>
+
+<div class="sigs">
+  <div class="sig"><div>Recorded by</div><div class="line">{% if a.recordedBy %}{{ a.recordedBy }}{% else %}&nbsp;{% endif %}</div><div>{{ a.recordedAt | date_ph }}</div></div>
+  {% for s in a.signatures %}
+  <div class="sig"><div>{{ s.label }}</div><div class="line">{{ s.name }}</div>{% if s.position %}<div>{{ s.position }}</div>{% endif %}<div>{{ s.signedAt | date_ph }}</div></div>
+  {% else %}
+  <div class="sig"><div>Approved by</div><div class="line">&nbsp;</div></div>
+  {% endfor %}
+</div>
+
+<div class="foot">
+  Issued {{ issue.issuedAt | date_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}.
+  Form {{ form.code }} v{{ form.version }} — {{ form.legalBasis }}.
+</div>
