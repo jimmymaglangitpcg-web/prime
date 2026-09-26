@@ -19,6 +19,8 @@ public enum NumberedDocumentKind
     PaymentTransaction = 8,
     /// <summary>A cashier's remittance (docs/analysis/collection.md §4.7).</summary>
     Remittance = 9,
+    /// <summary>A temporary PIN before tax mapping, e.g. MM-BBBB-NNNN (MRPAAO Ch. II §2 D.1.b(2); docs/analysis/property-identification.md).</summary>
+    TemporaryPin = 10,
 }
 
 /// <summary>Who prescribes a form version (docs/FORMS-REVISION-PLAN.md §4.1).</summary>

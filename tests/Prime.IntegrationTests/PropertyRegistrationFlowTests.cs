@@ -221,6 +221,8 @@ public class PropertyRegistrationFlowTests(WebApplicationFactory<Program> factor
         db.RealPropertyUnits.RemoveRange(db.RealPropertyUnits.Where(x => x.RpuNumber.Contains(testId)));
         db.Parcels.RemoveRange(db.Parcels.Where(x => x.LotNumber == "L-1" && x.Property!.PropertyIdentificationNumber.Contains(testId)));
         db.PropertyTaxpayers.RemoveRange(db.PropertyTaxpayers.Where(x => x.Taxpayer!.Tin == $"TIN-{testId}"));
+        // The test's own PIN history (step 10a-2) references its property.
+        db.PinAssignments.RemoveRange(db.PinAssignments.Where(x => x.Property!.PropertyIdentificationNumber.Contains(testId)));
         db.Properties.RemoveRange(db.Properties.Where(x => x.PropertyIdentificationNumber.Contains(testId)));
         db.Taxpayers.RemoveRange(db.Taxpayers.Where(x => x.Tin == $"TIN-{testId}"));
         db.OwnershipTypes.RemoveRange(db.OwnershipTypes.Where(x => x.Code.Contains(testId)));

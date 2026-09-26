@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Prime.Infrastructure.Persistence;
 namespace Prime.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PrimeDbContext))]
-    partial class PrimeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260926081806_PinAssignments")]
+    partial class PinAssignments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3739,9 +3742,6 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("AssignedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("AssignedByTransactionId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid?>("BarangayId")
                         .HasColumnType("uuid");
 
@@ -3790,8 +3790,6 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AssignedByTransactionId");
 
                     b.HasIndex("BarangayId");
 
@@ -7846,11 +7844,6 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Prime.Domain.Entities.PinAssignment", b =>
                 {
-                    b.HasOne("Prime.Domain.Entities.Transactions.PropertyTransaction", null)
-                        .WithMany()
-                        .HasForeignKey("AssignedByTransactionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("Prime.Domain.Entities.Reference.Barangay", "Barangay")
                         .WithMany()
                         .HasForeignKey("BarangayId")

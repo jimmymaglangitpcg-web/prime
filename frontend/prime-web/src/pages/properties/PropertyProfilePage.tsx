@@ -9,6 +9,7 @@ import { ParcelsSection } from './sections/ParcelsSection';
 import { RpuSection } from './sections/RpuSection';
 import { BillingSection } from './sections/BillingSection';
 import { PaymentsSection } from './sections/PaymentsSection';
+import { PinSection } from './sections/PinSection';
 import { TransactionsSection } from './sections/TransactionsSection';
 import { SwornStatementsSection } from './sections/SwornStatementsSection';
 import { NoticesSection } from './sections/NoticesSection';
@@ -81,6 +82,7 @@ export function PropertyProfilePage() {
       <Card>
         <Tabs
           items={[
+            { key: 'pin', label: 'PIN', children: <PinSection propertyId={property.id} parcels={profile.parcels} /> },
             { key: 'owners', label: `Owners (${profile.owners.length})`, children: <OwnersSection propertyId={property.id} owners={profile.owners} rpus={profile.rpus} /> },
             { key: 'parcels', label: `Parcels (${profile.parcels.length})`, children: <ParcelsSection propertyId={property.id} parcels={profile.parcels} /> },
             { key: 'rpus', label: `RPUs (${profile.rpus.length})`, children: <RpuSection propertyId={property.id} rpus={profile.rpus} /> },
@@ -93,13 +95,6 @@ export function PropertyProfilePage() {
         />
       </Card>
 
-      <Alert
-        style={{ marginTop: 24 }}
-        type="info"
-        showIcon
-        title="Delinquency is not shown yet"
-        description="Value, assess, approve and post under each RPU (Value and assess); bill on the Billing tab and take payments on the Payments tab. Delinquency aging arrives with Phase 10."
-      />
     </div>
   );
 }

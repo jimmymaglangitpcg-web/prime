@@ -99,6 +99,9 @@ public interface IApplicationDbContext
     DbSet<Province> Provinces { get; }
     DbSet<Municipality> Municipalities { get; }
     DbSet<Barangay> Barangays { get; }
+    DbSet<CityDistrict> CityDistricts { get; }
+    DbSet<TaxMapSection> TaxMapSections { get; }
+    DbSet<PinAssignment> PinAssignments { get; }
     DbSet<Zone> Zones { get; }
     DbSet<Classification> Classifications { get; }
     DbSet<ActualUse> ActualUses { get; }

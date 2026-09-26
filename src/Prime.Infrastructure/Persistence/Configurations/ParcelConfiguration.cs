@@ -33,5 +33,10 @@ public sealed class ParcelConfiguration : IEntityTypeConfiguration<Parcel>
 
         // Npgsql maps a uint row version to the xmin system column.
         builder.Property(x => x.Version).IsRowVersion();
+
+        // Its tax map section and parcel number there (docs/analysis/property-identification.md §3.3).
+        builder.HasOne(x => x.Section).WithMany().HasForeignKey(x => x.SectionId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => new { x.SectionId, x.ParcelNumber }).IsUnique().HasFilter("\"SectionId\" IS NOT NULL");
+        builder.ToTable(t => t.HasCheckConstraint("CK_Parcels_SectionNumber", "(\"SectionId\" IS NULL) = (\"ParcelNumber\" IS NULL) AND (\"ParcelNumber\" IS NULL OR \"ParcelNumber\" > 0)"));
     }
 }

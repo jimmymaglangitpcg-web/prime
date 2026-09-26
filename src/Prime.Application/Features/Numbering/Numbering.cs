@@ -84,7 +84,7 @@ public sealed class NumberingService(
     ICurrentUserService currentUser,
     INumberSequenceAllocator allocator) : INumberingService
 {
-    private static readonly NumberContext ExampleContext = new(DateTime.UtcNow.Year, "PPPP", "MMMM", "BBBBBB");
+    private static readonly NumberContext ExampleContext = new(DateTime.UtcNow.Year, "PPPP", "MMMM", "BBBBBB", "020", "15", "0005", "002");
 
     public async Task<Result<NumberingSchemeDto>> CreateAsync(CreateNumberingSchemeRequest request, CancellationToken cancellationToken = default)
     {

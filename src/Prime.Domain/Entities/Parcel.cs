@@ -28,6 +28,11 @@ public sealed class Parcel : AuditableEntity
     public Guid? ZoneId { get; set; }
     public Zone? Zone { get; set; }
 
+    /// <summary>The tax map section the parcel is mapped in, and its parcel number there (MRPAAO Ch. II §1 A.4, C).</summary>
+    public Guid? SectionId { get; set; }
+    public TaxMapSection? Section { get; set; }
+    public int? ParcelNumber { get; set; }
+
     public RecordStatus Status { get; set; } = RecordStatus.Active;
 
     /// <summary>

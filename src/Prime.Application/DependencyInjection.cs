@@ -40,6 +40,8 @@ public static class DependencyInjection
         services.AddScoped<IReferenceLayerService, ReferenceLayerService>();
         services.AddScoped<IBillingRuleService, BillingRuleService>();
         services.AddScoped<IBillService, BillService>();
+        services.AddScoped<Features.PropertyIdentification.IPropertyIdentificationService, Features.PropertyIdentification.PropertyIdentificationService>();
+        services.AddScoped<Features.PropertyIdentification.IPinService, Features.PropertyIdentification.PinService>();
         services.AddScoped<Features.Collection.IPaymentService, Features.Collection.PaymentService>();
         services.AddScoped<Features.Collection.ICollectionSetupService, Features.Collection.CollectionSetupService>();
         services.AddScoped<Features.Collection.ICollectionReportService, Features.Collection.CollectionReportService>();

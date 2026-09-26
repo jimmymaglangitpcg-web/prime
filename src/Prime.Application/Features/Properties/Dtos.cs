@@ -78,7 +78,11 @@ public sealed record ParcelSummaryDto(
     decimal? Area,
     string? LotNumber,
     string BarangayName,
-    RecordStatus Status);
+    RecordStatus Status,
+    Guid BarangayId,
+    /// <summary>The tax map section and parcel number, once placed (docs/analysis/property-identification.md §3.3).</summary>
+    string? SectionIndex = null,
+    int? ParcelNumber = null);
 
 public sealed record RpuSummaryDto(
     Guid Id,

@@ -4,19 +4,37 @@ using System.Text.RegularExpressions;
 
 namespace Prime.Domain.DomainServices;
 
-/// <summary>Values a number pattern can draw on. Location codes are the PSGC-style codes of the property's location.</summary>
-public sealed record NumberContext(int Year, string? ProvinceCode = null, string? MunicipalityCode = null, string? BarangayCode = null);
+/// <summary>
+/// Values a number pattern can draw on. Location codes are the PSGC-style codes of the
+/// property's location. The index numbers are the assessor's (MRPAAO Ch. II §1;
+/// docs/analysis/property-identification.md §3.3): <see cref="LguIndex"/> is the
+/// province's, or a city's or Metro Manila municipality's own 3-digit number;
+/// <see cref="MunicipalityIndex"/> is the municipality's 2-digit number, or the city
+/// district's; <see cref="SectionIndex"/> is the tax map section's.
+/// </summary>
+public sealed record NumberContext(
+    int Year,
+    string? ProvinceCode = null,
+    string? MunicipalityCode = null,
+    string? BarangayCode = null,
+    string? LguIndex = null,
+    string? MunicipalityIndex = null,
+    string? BarangayIndex = null,
+    string? SectionIndex = null);
 
 /// <summary>
 /// Parses and applies <c>NumberingScheme</c> patterns
 /// (docs/FORMS-REVISION-PLAN.md §4.4). A pattern is literal text plus tokens:
-/// <c>{YEAR}</c>, <c>{PROV}</c>, <c>{MUN}</c>, <c>{BRGY}</c> and exactly one
-/// <c>{SEQ}</c> or <c>{SEQ:n}</c> (zero-padded to n digits, 1–12).
-/// Example: <c>TD-{MUN}-{YEAR}-{SEQ:5}</c> → <c>TD-0402-2026-00017</c>.
+/// <c>{YEAR}</c>, <c>{PROV}</c>, <c>{MUN}</c>, <c>{BRGY}</c> (PSGC codes),
+/// <c>{LGUIDX}</c>, <c>{MUNIDX}</c>, <c>{BRGYIDX}</c>, <c>{SECT}</c> (the
+/// assessor's index numbers) and exactly one <c>{SEQ}</c> or <c>{SEQ:n}</c>
+/// (zero-padded to n digits, 1–12).
+/// Examples: <c>TD-{MUN}-{YEAR}-{SEQ:5}</c> → <c>TD-0402-2026-00017</c>;
+/// the MRPAAO PIN <c>{LGUIDX}-{MUNIDX}-{BRGYIDX}-{SECT}-{SEQ:2}</c> →
+/// <c>020-15-0005-002-05</c>, where the sequence is the parcel number.
 /// Sequences run separately per <see cref="ScopeKey"/> — the pattern with the
-/// sequence left out — so <c>{YEAR}</c> in a pattern restarts numbering each
-/// year. New tokens (e.g. a PIN's section and parcel numbers, once the LAM
-/// defines them) are added here.
+/// sequence left out — so <c>{YEAR}</c> restarts numbering each year and
+/// <c>{SECT}</c> numbers each section's parcels on their own.
 /// </summary>
 public static partial class NumberPattern
 {
@@ -25,7 +43,7 @@ public static partial class NumberPattern
     [GeneratedRegex(@"\{([A-Z]+)(?::(\d+))?\}")]
     private static partial Regex TokenRegex();
 
-    private static readonly string[] ContextTokens = ["YEAR", "PROV", "MUN", "BRGY"];
+    private static readonly string[] ContextTokens = ["YEAR", "PROV", "MUN", "BRGY", "LGUIDX", "MUNIDX", "BRGYIDX", "SECT"];
 
     /// <summary>Why <paramref name="pattern"/> is unusable, or null when it is valid.</summary>
     public static string? Validate(string pattern)
@@ -48,7 +66,7 @@ public static partial class NumberPattern
             }
             else if (!ContextTokens.Contains(name) || m.Groups[2].Success)
             {
-                return $"unknown token {m.Value}; allowed: {{YEAR}} {{PROV}} {{MUN}} {{BRGY}} {{SEQ}} {{SEQ:n}}";
+                return $"unknown token {m.Value}; allowed: {{YEAR}} {{PROV}} {{MUN}} {{BRGY}} {{LGUIDX}} {{MUNIDX}} {{BRGYIDX}} {{SECT}} {{SEQ}} {{SEQ:n}}";
             }
         }
         if (sequences != 1)
@@ -71,6 +89,18 @@ public static partial class NumberPattern
 
     /// <summary>The pattern rendered without its sequence: numbers with the same scope key share one sequence.</summary>
     public static string ScopeKey(string pattern, NumberContext context) => Render(pattern, context, sequence: null);
+
+    /// <summary>Whether <paramref name="sequence"/> fits the pattern's <c>{SEQ:n}</c> width (always, for an unpadded <c>{SEQ}</c>).</summary>
+    public static bool Fits(string pattern, long sequence)
+    {
+        var m = TokenRegex().Matches(pattern).FirstOrDefault(x => x.Groups[1].Value == "SEQ");
+        return m is null || !m.Groups[2].Success
+            || sequence.ToString(CultureInfo.InvariantCulture).Length <= int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The pattern's context tokens, e.g. ["LGUIDX", "SECT"].</summary>
+    public static IReadOnlyList<string> Tokens(string pattern) =>
+        TokenRegex().Matches(pattern).Select(m => m.Groups[1].Value).Where(n => n != "SEQ").Distinct().ToList();
 
     public static string Format(string pattern, NumberContext context, long sequence)
     {
@@ -120,6 +150,10 @@ public static partial class NumberPattern
         "PROV" => context.ProvinceCode,
         "MUN" => context.MunicipalityCode,
         "BRGY" => context.BarangayCode,
+        "LGUIDX" => context.LguIndex,
+        "MUNIDX" => context.MunicipalityIndex,
+        "BRGYIDX" => context.BarangayIndex,
+        "SECT" => context.SectionIndex,
         _ => null,
     };
 }

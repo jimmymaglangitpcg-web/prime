@@ -5,10 +5,12 @@ import {
 } from 'antd';
 import { CheckOutlined, MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { Link } from 'react-router-dom';
 import {
   useOpenTransaction, usePropertyTransactions, useSatisfyRequirement, useTransactionAction, useTransactionTypes, type TransactionAction,
 } from '../../../api/transactions';
 import { useTaxpayerSearch } from '../../../api/taxpayers';
+import { usePropertySearch } from '../../../api/properties';
 import { useOwnershipTypes } from '../../../api/referenceData';
 import { ApiRequestError } from '../../../lib/apiClient';
 import {
@@ -29,6 +31,19 @@ function TaxpayerPicker({ value, onChange }: { value?: string; onChange?: (v: st
     <Select showSearch value={value} onChange={onChange} filterOption={false} onSearch={setTerm} loading={isFetching} style={{ width: 260 }}
       placeholder="Search taxpayer" notFoundContent={term.length >= 2 ? 'No taxpayers found' : 'Type to search'}
       options={data?.items.map((t) => ({ value: t.id, label: t.displayName }))} />
+  );
+}
+
+/** Searchable multi-select of other properties (by PIN, owner, lot …), excluding the transaction's own. */
+function PropertiesPicker({ excludeId, value, onChange }: { excludeId: string; value?: string[]; onChange?: (v: string[]) => void }) {
+  const [term, setTerm] = useState('');
+  const { data, isFetching } = usePropertySearch({ searchTerm: term || undefined, pageSize: 20 });
+  return (
+    <Select mode="multiple" showSearch value={value} onChange={onChange} filterOption={false} onSearch={setTerm} loading={isFetching}
+      placeholder="Search by PIN, owner, lot or title" notFoundContent="No properties found"
+      options={data?.items.filter((p) => p.id !== excludeId).map((p) => ({
+        value: p.id, label: `${p.propertyIdentificationNumber} — ${p.barangayName}${p.lotNumber ? `, lot ${p.lotNumber}` : ''}`,
+      }))} />
   );
 }
 
@@ -99,6 +114,9 @@ function NewTransactionModal({ propertyId, rpus, taxDeclarations, open, onClose 
           transactionTypeId: v.transactionTypeId, propertyId, effectiveDate: v.effectiveDate.format('YYYY-MM-DD'), description: v.description,
           cancelTaxDeclarationIds: v.cancelTaxDeclarationIds,
           transferRpuId: kind === 'Transfer' ? v.transferRpuId : undefined,
+          relatedProperties: kind === 'Subdivision' || kind === 'Consolidation'
+            ? (v.relatedPropertyIds ?? []).map((id: string) => ({ propertyId: id, role: kind === 'Subdivision' ? 'Result' : 'Source' }))
+            : undefined,
           newParties: kind === 'Transfer'
             ? (v.newParties ?? []).map((p: { role: PropertyPartyRole; taxpayerId?: string; ownershipTypeId?: string; ownershipPercentage?: number }) => ({
                 role: p.role,
@@ -120,6 +138,15 @@ function NewTransactionModal({ propertyId, rpus, taxDeclarations, open, onClose 
           <Select mode="multiple" allowClear
             options={taxDeclarations.filter((t) => t.status === 'Approved').map((t) => ({ value: t.id, label: t.taxDeclarationNumber }))} />
         </Form.Item>
+        {(kind === 'Subdivision' || kind === 'Consolidation') && (
+          <Form.Item name="relatedPropertyIds" rules={[{ required: true, type: 'array', min: 2, message: 'Choose at least two properties' }]}
+            label={kind === 'Subdivision' ? 'Resulting lots (at least two)' : 'Source properties (at least two)'}
+            extra={kind === 'Subdivision'
+              ? 'Open this on the mother property. Register each lot as its own property with its parcel first. On approval the mother’s PIN is retired and the lots take the next parcel numbers in its tax map section.'
+              : 'Open this on the consolidated property, registered with its parcel first. On approval the sources’ PINs are retired and it takes the next parcel number in their tax map section.'}>
+            <PropertiesPicker excludeId={propertyId} />
+          </Form.Item>
+        )}
         {kind === 'Transfer' && (
           <>
             {rpus.some((r) => r.rpuType !== 'Land') && (
@@ -228,7 +255,11 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
         {tx.status === 'Draft' && <Button type="primary" onClick={() => confirm('submit', 'Submit for review?', 'Mandatory requirements must be satisfied. Its TDs go for review with it.')}>Submit</Button>}
         {tx.status === 'PendingReview' && (
           <Button type="primary" onClick={() => confirm('approve', 'Approve this transaction?',
-            'Approval applies it: its TDs are approved (cancelling the TDs they replace), listed TDs are cancelled' + (tx.kind === 'Transfer' ? ', and the current owners are replaced by the new parties.' : '.'))}>
+            'Approval applies it: its TDs are approved (cancelling the TDs they replace), listed TDs are cancelled' + (tx.kind === 'Transfer'
+              ? ', and the current owners are replaced by the new parties.'
+              : tx.kind === 'Subdivision' || tx.kind === 'Consolidation'
+                ? `, the ${tx.kind === 'Subdivision' ? 'mother property' : 'source properties'} are retired with their PINs, and the ${tx.kind === 'Subdivision' ? 'lots take' : 'consolidated property takes'} the next parcel numbers in the tax map section.`
+                : '.'))}>
             Approve
           </Button>
         )}
@@ -268,6 +299,17 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
           <Typography.Title level={5} style={{ marginTop: 16 }}>Tax Declarations cancelled outright</Typography.Title>
           <Table rowKey="taxDeclarationId" size="small" dataSource={tx.cancelledTaxDeclarations} pagination={false}
             columns={[{ title: 'TD No.', dataIndex: 'taxDeclarationNumber' }, { title: 'Status', dataIndex: 'status', render: statusTag }]} />
+        </>
+      )}
+
+      {tx.relatedProperties.length > 0 && (
+        <>
+          <Typography.Title level={5} style={{ marginTop: 16 }}>{tx.kind === 'Subdivision' ? 'Resulting lots' : tx.kind === 'Consolidation' ? 'Source properties' : 'Related properties'}</Typography.Title>
+          <Table rowKey="propertyId" size="small" dataSource={tx.relatedProperties} pagination={false}
+            columns={[
+              { title: 'PIN', dataIndex: 'propertyIdentificationNumber', render: (v: string, r) => <Link to={`/properties/${r.propertyId}`}>{v}</Link> },
+              { title: 'Role', dataIndex: 'role' },
+            ]} />
         </>
       )}
 

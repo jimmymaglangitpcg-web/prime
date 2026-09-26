@@ -6,6 +6,7 @@ using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Approvals;
 using Prime.Application.Features.Numbering;
 using Prime.Application.Features.Properties;
+using Prime.Application.Features.PropertyIdentification;
 using Prime.Application.Features.TaxDeclarations;
 using Prime.Domain.Entities;
 using Prime.Domain.Entities.Transactions;
@@ -80,7 +81,10 @@ public interface ITransactionService
 /// once, in one database transaction: the TDs it lists for cancellation
 /// are cancelled, its own TDs are approved (cancelling the TDs they
 /// replace), and a transfer ends the current owners and starts the new
-/// parties — each change pointing back to the transaction.
+/// parties — each change pointing back to the transaction. A subdivision
+/// or consolidation also retires the PINs of the properties it ends and
+/// gives the properties it produces the next parcel numbers in the section
+/// (docs/analysis/property-identification.md §3.4, step 10a-3).
 /// </summary>
 public sealed class TransactionService(
     IApplicationDbContext db,
@@ -89,6 +93,7 @@ public sealed class TransactionService(
     ICurrentUserService currentUser,
     IApprovalChainService approvals,
     INumberingService numbering,
+    INumberSequenceAllocator allocator,
     IClock clock,
     IOptions<FaasOptions> faas) : ITransactionService
 {
@@ -173,6 +178,11 @@ public sealed class TransactionService(
             {
                 return Fail("PROPERTY_NOT_FOUND", $"Related property {r.PropertyId} does not exist.");
             }
+        }
+
+        if (await RenumberingProblemAsync(type.Kind, request.PropertyId, related, cancellationToken) is { } renumbering)
+        {
+            return Fail(renumbering.Code, renumbering.Message);
         }
 
         var parties = request.NewParties ?? [];
@@ -312,7 +322,7 @@ public sealed class TransactionService(
             return Fail("TRANSACTION_REQUIREMENTS_UNMET", $"Mandatory requirements not yet satisfied: {string.Join("; ", open)}.");
         }
         var tds = await db.TaxDeclarations.Where(x => x.PropertyTransactionId == id).ToListAsync(cancellationToken);
-        if (tds.Count == 0 && tx.TdCancellations.Count == 0 && tx.NewParties.Count == 0)
+        if (tds.Count == 0 && tx.TdCancellations.Count == 0 && tx.NewParties.Count == 0 && !IsRenumbering(tx.Kind))
         {
             return Fail("TRANSACTION_EMPTY", "The transaction does nothing yet: add a Tax Declaration, a TD to cancel, or (for a transfer) the new parties.");
         }
@@ -419,6 +429,16 @@ public sealed class TransactionService(
                 await db.SaveChangesAsync(cancellationToken);
             }
 
+            // 4. Subdivision and consolidation: retire the ended properties' PINs; number the resulting properties.
+            if (IsRenumbering(tx.Kind))
+            {
+                if (await RetireAndRenumberAsync(tx, label, now, cancellationToken) is { } pinProblem)
+                {
+                    return await AbortAsync(transaction, pinProblem.Code, pinProblem.Message);
+                }
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
             tx.Status = WorkflowStatus.Approved;
             tx.ApprovedBy = userId;
             tx.ApprovedAt = now;
@@ -496,6 +516,119 @@ public sealed class TransactionService(
         if (unknown == 0 && owners.Sum(o => o.OwnershipPercentage) != 100m)
         {
             return $"The new owners' shares total {owners.Sum(o => o.OwnershipPercentage)}%; they must total exactly 100%.";
+        }
+        return null;
+    }
+
+    private static bool IsRenumbering(PropertyTransactionKind kind) =>
+        kind is PropertyTransactionKind.Subdivision or PropertyTransactionKind.Consolidation;
+
+    /// <summary>
+    /// The properties a subdivision or consolidation ends and produces. A subdivision is
+    /// filed on the mother property and names its lots (Result); a consolidation is filed
+    /// on the consolidated property and names its sources (Source). MRPAAO Ch. II §1 D.4.
+    /// </summary>
+    private static (List<Guid> Ending, List<Guid> Resulting) RenumberingSets(PropertyTransactionKind kind, Guid propertyId, IEnumerable<Guid> related) =>
+        kind == PropertyTransactionKind.Subdivision ? ([propertyId], related.ToList()) : (related.ToList(), [propertyId]);
+
+    /// <summary>Checks a subdivision's or consolidation's properties when it is opened; null when fine or not applicable.</summary>
+    private async Task<(string Code, string Message)?> RenumberingProblemAsync(PropertyTransactionKind kind, Guid propertyId,
+        IReadOnlyList<RelatedPropertyRequest> related, CancellationToken ct)
+    {
+        if (!IsRenumbering(kind))
+        {
+            return null;
+        }
+        var subdivision = kind == PropertyTransactionKind.Subdivision;
+        var role = subdivision ? TransactionPropertyRole.Result : TransactionPropertyRole.Source;
+        if (related.Count < 2 || related.Any(r => r.Role != role))
+        {
+            return ("TRANSACTION_RELATED_PROPERTIES_INVALID", subdivision
+                ? "A subdivision is filed on the mother property and names at least two resulting lots (role Result), each registered as its own property."
+                : "A consolidation is filed on the consolidated property and names at least two source properties (role Source).");
+        }
+        var ids = related.Select(r => r.PropertyId).Append(propertyId).ToList();
+        if (await db.Properties.Where(x => ids.Contains(x.Id) && x.Status != RecordStatus.Active)
+                .Select(x => new { x.PropertyIdentificationNumber, x.Status }).FirstOrDefaultAsync(ct) is { } inactive)
+        {
+            return ("PROPERTY_NOT_ACTIVE", $"Property {inactive.PropertyIdentificationNumber} is {inactive.Status}; only active properties take part in a {(subdivision ? "subdivision" : "consolidation")}.");
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Step 10a-3 (docs/analysis/property-identification.md §3.4; MRPAAO Ch. II §1 D.4):
+    /// the ended properties (a subdivision's mother, a consolidation's sources) and their
+    /// active parcels are marked Subdivided or Consolidated and their PINs retired. When
+    /// those PINs are permanent and in one tax map section, each resulting property without
+    /// a permanent PIN takes the next parcel number there, in registration order; a
+    /// resulting property already given its permanent PIN (e.g. in a new section, misc
+    /// rule 2, or a chosen number) keeps it. Nothing is saved; the caller saves or rolls back.
+    /// </summary>
+    private async Task<(string Code, string Message)?> RetireAndRenumberAsync(PropertyTransaction tx, string label, DateTimeOffset now, CancellationToken ct)
+    {
+        var subdivision = tx.Kind == PropertyTransactionKind.Subdivision;
+        var (ending, resulting) = RenumberingSets(tx.Kind, tx.PropertyId, tx.RelatedProperties.Select(r => r.PropertyId));
+        var all = ending.Concat(resulting).ToList();
+        var properties = await db.Properties.Where(x => all.Contains(x.Id)).ToListAsync(ct);
+        if (properties.FirstOrDefault(p => p.Status != RecordStatus.Active) is { } inactive)
+        {
+            return ("PROPERTY_NOT_ACTIVE", $"Property {inactive.PropertyIdentificationNumber} is no longer active ({inactive.Status}).");
+        }
+        var currentPins = await db.PinAssignments.Where(x => all.Contains(x.PropertyId) && x.RetiredAt == null).ToListAsync(ct);
+        var sectionIds = currentPins.Where(a => ending.Contains(a.PropertyId) && a.Kind == PinKind.Permanent)
+            .Select(a => a.SectionId!.Value).Distinct().ToList();
+
+        // Everything that can refuse is checked before anything changes.
+        var section = sectionIds.Count == 1
+            ? await db.TaxMapSections.Include(x => x.Barangay).SingleAsync(x => x.Id == sectionIds[0], ct)
+            : null;
+        var toNumber = new List<(PropertyEntity Property, Parcel Parcel, PinAssignment? Current)>();
+        if (sectionIds.Count > 0)
+        {
+            foreach (var property in properties.Where(p => resulting.Contains(p.Id)).OrderBy(p => p.CreatedAt).ThenBy(p => p.Id))
+            {
+                var current = currentPins.SingleOrDefault(a => a.PropertyId == property.Id);
+                if (current?.Kind == PinKind.Permanent)
+                {
+                    continue; // already mapped, e.g. in a new section (misc rule 2) or with a chosen number
+                }
+                if (section is null)
+                {
+                    return ("TRANSACTION_PIN_SECTION_AMBIGUOUS",
+                        $"The source PINs are in {sectionIds.Count} tax map sections. Give property {property.PropertyIdentificationNumber} its permanent PIN from its PIN tab first, then approve.");
+                }
+                var parcels = await db.Parcels.Where(x => x.PropertyId == property.Id && x.Status == RecordStatus.Active).ToListAsync(ct);
+                if (parcels.Count != 1)
+                {
+                    return ("TRANSACTION_PARCEL_REQUIRED",
+                        $"Property {property.PropertyIdentificationNumber} needs exactly one active parcel to take its PIN in section {section.IndexNumber} (it has {parcels.Count}).");
+                }
+                toNumber.Add((property, parcels[0], current));
+            }
+        }
+
+        var endedStatus = subdivision ? RecordStatus.Subdivided : RecordStatus.Consolidated;
+        var reason = $"Retired by the {(subdivision ? "subdivision" : "consolidation")} {label}.";
+        foreach (var property in properties.Where(p => ending.Contains(p.Id)))
+        {
+            PermanentPins.Retire(db, property, currentPins.SingleOrDefault(a => a.PropertyId == property.Id), now, reason, tx.Id);
+            property.Status = endedStatus;
+        }
+        foreach (var parcel in await db.Parcels.Where(x => ending.Contains(x.PropertyId) && x.Status == RecordStatus.Active).ToListAsync(ct))
+        {
+            parcel.Status = endedStatus;
+        }
+        await db.SaveChangesAsync(ct);
+
+        // Not yet tax-mapped (no permanent source PIN): the resulting properties keep the PINs they were registered with.
+        foreach (var (property, parcel, current) in toNumber)
+        {
+            var assigned = await PermanentPins.AssignAsync(db, allocator, clock, property, parcel, section!, null, current, tx.Id, ct);
+            if (assigned.IsFailure)
+            {
+                return (assigned.Code!, $"Property {property.PropertyIdentificationNumber}: {assigned.Message}");
+            }
         }
         return null;
     }

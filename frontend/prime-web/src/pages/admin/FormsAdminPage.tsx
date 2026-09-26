@@ -31,7 +31,7 @@ const statusColor: Partial<Record<WorkflowStatus, string>> = { Draft: 'default',
 const statusTag = (s: WorkflowStatus) => <Tag color={statusColor[s]}>{s}</Tag>;
 const period = (x: { effectiveDate: string; endDate: string | null }) => `${x.effectiveDate} → ${x.endDate ?? 'open'}`;
 
-const kinds: NumberedDocumentKind[] = ['PropertyIdentificationNumber', 'TaxDeclaration', 'TaxBill', 'Faas', 'NoticeOfAssessment', 'OfficialReceipt', 'PropertyTransaction', 'SwornStatement', 'PaymentTransaction', 'Remittance'];
+const kinds: NumberedDocumentKind[] = ['PropertyIdentificationNumber', 'TaxDeclaration', 'TaxBill', 'Faas', 'NoticeOfAssessment', 'OfficialReceipt', 'PropertyTransaction', 'SwornStatement', 'PaymentTransaction', 'Remittance', 'TemporaryPin'];
 const authorities: FormAuthority[] = ['PrimeProvisional', 'Lam', 'Blgf', 'LguOrdinance', 'Other', 'Mrpaao'];
 const subjects: FormSubjectType[] = ['TaxBill', 'TaxDeclaration', 'NoticeOfAssessment', 'Assessment'];
 
@@ -106,7 +106,7 @@ function NumberingTab() {
           </Form.Item>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="pattern" label="Pattern" rules={[{ required: true }]}
-            extra="Tokens: {YEAR} {PROV} {MUN} {BRGY} and exactly one {SEQ} or {SEQ:n} (zero-padded). Example: TD-{MUN}-{YEAR}-{SEQ:5}">
+            extra="Tokens: {YEAR} {PROV} {MUN} {BRGY} (PSGC codes), {LGUIDX} {MUNIDX} {BRGYIDX} {SECT} (index numbers) and exactly one {SEQ} or {SEQ:n}. Examples: TD-{MUN}-{YEAR}-{SEQ:5}; MRPAAO PIN {LGUIDX}-{MUNIDX}-{BRGYIDX}-{SECT}-{SEQ:2}">
             <Input />
           </Form.Item>
           <Form.Item name="validationRegex" label="Format check for typed numbers (regular expression, optional)"><Input /></Form.Item>

@@ -1049,6 +1049,18 @@ exemptions, records, general revision and SMV preparation, appeals).
 Section numbers in CLAUDE.md are unchanged; removed sections keep a
 one-line note.
 
+**Phase 10a started (2026-09-26):** the design for the Real Property
+Identification System (MRPAAO Ch. II) is in
+docs/analysis/property-identification.md; all 8 recommendations were
+approved. **10a-1** (index numbers, city districts, tax map sections;
+migration `PropertyIdentificationIndexes`) and **10a-2** (the permanent PIN
+from a section, PIN history, index locks; migration `PinAssignments`) and
+**10a-3** (subdivision and consolidation retire PINs and number the
+resulting properties; migration `PinAssignedByTransaction`) are done and
+uncommitted; the three migrations are on the local dev DB only. Next:
+10a-4, the TMCR per section, the pre-TMCR, the section layer and index maps.
+See §6 of that doc.
+
 **Current (2026-09-26):** everything through `b2e369b` (value and assess)
 is committed and pushed; Supabase has all 28 migrations. **Phase 9 —
 Collection started:** the design is in docs/analysis/collection.md

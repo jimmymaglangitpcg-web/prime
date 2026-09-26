@@ -28,6 +28,9 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<Province> Provinces => Set<Province>();
     public DbSet<Municipality> Municipalities => Set<Municipality>();
     public DbSet<Barangay> Barangays => Set<Barangay>();
+    public DbSet<CityDistrict> CityDistricts => Set<CityDistrict>();
+    public DbSet<TaxMapSection> TaxMapSections => Set<TaxMapSection>();
+    public DbSet<PinAssignment> PinAssignments => Set<PinAssignment>();
     public DbSet<Zone> Zones => Set<Zone>();
     public DbSet<Classification> Classifications => Set<Classification>();
     public DbSet<ActualUse> ActualUses => Set<ActualUse>();

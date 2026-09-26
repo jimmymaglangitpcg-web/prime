@@ -55,4 +55,38 @@ public class NumberPatternTests
     [Fact]
     public void Format_RejectsSequenceBelowOne() =>
         Should.Throw<ArgumentOutOfRangeException>(() => NumberPattern.Format("{SEQ}", Ctx, 0));
+
+    // --- The MRPAAO PIN (docs/analysis/property-identification.md §3.3; DEMO index numbers) ---
+
+    private const string MrpaaoPin = "{LGUIDX}-{MUNIDX}-{BRGYIDX}-{SECT}-{SEQ:2}";
+
+    [Fact]
+    public void Pin_IsBuiltFromTheIndexNumbers_WithTheParcelAsSequence()
+    {
+        var province = new NumberContext(2026, LguIndex: "020", MunicipalityIndex: "15", BarangayIndex: "0005", SectionIndex: "002");
+        var cityDistrict = new NumberContext(2026, LguIndex: "132", MunicipalityIndex: "06", BarangayIndex: "0012", SectionIndex: "001");
+
+        NumberPattern.Format(MrpaaoPin, province, 5).ShouldBe("020-15-0005-002-05");
+        NumberPattern.Format(MrpaaoPin, cityDistrict, 35).ShouldBe("132-06-0012-001-35");
+    }
+
+    [Fact]
+    public void Pin_SequenceRunsPerSection()
+    {
+        var section2 = new NumberContext(2026, LguIndex: "020", MunicipalityIndex: "15", BarangayIndex: "0005", SectionIndex: "002");
+        var section3 = section2 with { SectionIndex = "003" };
+
+        NumberPattern.ScopeKey(MrpaaoPin, section2).ShouldBe("020-15-0005-002-#");
+        NumberPattern.ScopeKey(MrpaaoPin, section3).ShouldNotBe(NumberPattern.ScopeKey(MrpaaoPin, section2));
+        NumberPattern.Tokens(MrpaaoPin).ShouldBe(["LGUIDX", "MUNIDX", "BRGYIDX", "SECT"]);
+        NumberPattern.MissingValues(MrpaaoPin, section2 with { SectionIndex = null }).ShouldBe(["{SECT}"]);
+    }
+
+    [Fact]
+    public void Fits_ChecksTheSequenceWidth()
+    {
+        NumberPattern.Fits(MrpaaoPin, 99).ShouldBeTrue();
+        NumberPattern.Fits(MrpaaoPin, 100).ShouldBeFalse();
+        NumberPattern.Fits("{SEQ}", 123_456).ShouldBeTrue();
+    }
 }

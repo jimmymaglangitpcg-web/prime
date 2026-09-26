@@ -17,6 +17,7 @@ import { RegistersPage } from './pages/registers/RegistersPage';
 import { ValuationRulesPage } from './pages/admin/ValuationRulesPage';
 import { FormsAdminPage } from './pages/admin/FormsAdminPage';
 import { CollectionSetupPage } from './pages/admin/CollectionSetupPage';
+import { PropertyIdentificationPage } from './pages/admin/PropertyIdentificationPage';
 import { CollectionPage } from './pages/collection/CollectionPage';
 import { PaymentWorkspacePage } from './pages/collection/PaymentWorkspacePage';
 
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/admin/forms" element={<FormsAdminPage />} />
         <Route path="/admin/valuation" element={<ValuationRulesPage />} />
         <Route path="/admin/collection" element={<CollectionSetupPage />} />
+        <Route path="/admin/property-identification" element={<PropertyIdentificationPage />} />
         <Route path="/collection" element={<CollectionPage />} />
         <Route path="/collection/pay" element={<PaymentWorkspacePage />} />
       </Routes>

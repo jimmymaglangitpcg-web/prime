@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Prime.Infrastructure.Persistence;
 namespace Prime.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PrimeDbContext))]
-    partial class PrimeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260926075542_PropertyIdentificationIndexes")]
+    partial class PropertyIdentificationIndexes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3673,13 +3676,7 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
-                    b.Property<int?>("ParcelNumber")
-                        .HasColumnType("integer");
-
                     b.Property<Guid>("PropertyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("SectionId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Status")
@@ -3720,101 +3717,7 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ZoneId");
 
-                    b.HasIndex("SectionId", "ParcelNumber")
-                        .IsUnique()
-                        .HasFilter("\"SectionId\" IS NOT NULL");
-
-                    b.ToTable("Parcels", t =>
-                        {
-                            t.HasCheckConstraint("CK_Parcels_SectionNumber", "(\"SectionId\" IS NULL) = (\"ParcelNumber\" IS NULL) AND (\"ParcelNumber\" IS NULL OR \"ParcelNumber\" > 0)");
-                        });
-                });
-
-            modelBuilder.Entity("Prime.Domain.Entities.PinAssignment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("AssignedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("AssignedByTransactionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("BarangayId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid?>("ParcelId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int?>("ParcelNumber")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Pin")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("PropertyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("PropertyTransactionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("RetiredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("RetirementReason")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<Guid?>("SectionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssignedByTransactionId");
-
-                    b.HasIndex("BarangayId");
-
-                    b.HasIndex("ParcelId");
-
-                    b.HasIndex("Pin")
-                        .IsUnique();
-
-                    b.HasIndex("PropertyId")
-                        .IsUnique()
-                        .HasDatabaseName("UX_PinAssignments_Current")
-                        .HasFilter("\"RetiredAt\" IS NULL");
-
-                    b.HasIndex("PropertyTransactionId");
-
-                    b.HasIndex("SectionId");
-
-                    b.ToTable("PinAssignments", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_PinAssignments_Permanent", "\"Kind\" <> 'Permanent' OR (\"ParcelId\" IS NOT NULL AND \"SectionId\" IS NOT NULL AND \"ParcelNumber\" IS NOT NULL)");
-
-                            t.HasCheckConstraint("CK_PinAssignments_Retired", "(\"RetiredAt\" IS NULL) = (\"RetirementReason\" IS NULL)");
-                        });
+                    b.ToTable("Parcels");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.PropertyEntity", b =>
@@ -7825,11 +7728,6 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Prime.Domain.Entities.Reference.TaxMapSection", "Section")
-                        .WithMany()
-                        .HasForeignKey("SectionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("Prime.Domain.Entities.Reference.Zone", "Zone")
                         .WithMany()
                         .HasForeignKey("ZoneId")
@@ -7839,51 +7737,7 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Navigation("Property");
 
-                    b.Navigation("Section");
-
                     b.Navigation("Zone");
-                });
-
-            modelBuilder.Entity("Prime.Domain.Entities.PinAssignment", b =>
-                {
-                    b.HasOne("Prime.Domain.Entities.Transactions.PropertyTransaction", null)
-                        .WithMany()
-                        .HasForeignKey("AssignedByTransactionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Prime.Domain.Entities.Reference.Barangay", "Barangay")
-                        .WithMany()
-                        .HasForeignKey("BarangayId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Prime.Domain.Entities.Parcel", "Parcel")
-                        .WithMany()
-                        .HasForeignKey("ParcelId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Prime.Domain.Entities.PropertyEntity", "Property")
-                        .WithMany()
-                        .HasForeignKey("PropertyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Prime.Domain.Entities.Transactions.PropertyTransaction", null)
-                        .WithMany()
-                        .HasForeignKey("PropertyTransactionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Prime.Domain.Entities.Reference.TaxMapSection", "Section")
-                        .WithMany()
-                        .HasForeignKey("SectionId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Barangay");
-
-                    b.Navigation("Parcel");
-
-                    b.Navigation("Property");
-
-                    b.Navigation("Section");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.PropertyEntity", b =>

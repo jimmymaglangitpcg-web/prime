@@ -10,6 +10,12 @@ namespace Prime.Application.Common.Interfaces;
 public interface INumberSequenceAllocator
 {
     Task<long> NextAsync(Guid numberingSchemeId, string scopeKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Raises the scope's last value to at least <paramref name="value"/>, so a number
+    /// entered by hand (e.g. a migrated parcel number) is never generated again.
+    /// </summary>
+    Task ReserveAsync(Guid numberingSchemeId, string scopeKey, long value, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

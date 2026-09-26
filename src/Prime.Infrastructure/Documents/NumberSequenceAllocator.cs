@@ -37,4 +37,26 @@ public sealed class NumberSequenceAllocator(PrimeDbContext db) : INumberSequence
         command.Parameters.Add(new NpgsqlParameter("scope", scopeKey));
         return (long)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
+
+    public async Task ReserveAsync(Guid numberingSchemeId, string scopeKey, long value, CancellationToken cancellationToken = default)
+    {
+        var connection = db.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await db.Database.OpenConnectionAsync(cancellationToken);
+        }
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO "NumberSequences" ("Id", "NumberingSchemeId", "ScopeKey", "LastValue")
+            VALUES (@id, @scheme, @scope, @value)
+            ON CONFLICT ("NumberingSchemeId", "ScopeKey")
+            DO UPDATE SET "LastValue" = GREATEST("NumberSequences"."LastValue", @value);
+            """;
+        command.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
+        command.Parameters.Add(new NpgsqlParameter("id", Guid.NewGuid()));
+        command.Parameters.Add(new NpgsqlParameter("scheme", numberingSchemeId));
+        command.Parameters.Add(new NpgsqlParameter("scope", scopeKey));
+        command.Parameters.Add(new NpgsqlParameter("value", value));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 }

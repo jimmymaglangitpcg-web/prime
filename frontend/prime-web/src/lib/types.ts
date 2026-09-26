@@ -130,6 +130,9 @@ export interface ParcelSummaryDto {
   lotNumber: string | null;
   barangayName: string;
   status: RecordStatus;
+  barangayId: string;
+  sectionIndex: string | null;
+  parcelNumber: number | null;
 }
 
 export interface RpuSummaryDto {
@@ -1030,7 +1033,8 @@ export type NumberedDocumentKind =
   | 'PropertyTransaction'
   | 'SwornStatement'
   | 'PaymentTransaction'
-  | 'Remittance';
+  | 'Remittance'
+  | 'TemporaryPin';
 export type FormAuthority = 'PrimeProvisional' | 'Lam' | 'Blgf' | 'LguOrdinance' | 'Other' | 'Mrpaao';
 export type FormSubjectType = 'TaxBill' | 'TaxDeclaration' | 'NoticeOfAssessment' | 'Assessment' | 'StatementOfAccount' | 'Faas' | 'Register' | 'SwornStatement' | 'Payment';
 export type ApprovalSubjectType = 'Assessment' | 'TaxDeclaration' | 'PropertyTransaction';
@@ -1205,6 +1209,8 @@ export interface OpenTransactionRequest {
   cancelTaxDeclarationIds?: string[];
   /** A transfer of one unit only (not land); omitted for the whole property. */
   transferRpuId?: string;
+  /** A subdivision's resulting lots (Result) or a consolidation's sources (Source). */
+  relatedProperties?: { propertyId: string; role: 'Source' | 'Result' }[];
 }
 
 export interface TransactionRequirementStatusDto extends TransactionRequirementDto {
