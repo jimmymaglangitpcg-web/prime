@@ -1,7 +1,9 @@
-import { useState, type ReactNode } from 'react';
-import { Layout, Menu, Typography } from 'antd';
-import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined } from '@ant-design/icons';
+import { useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Alert, Layout, Menu, Switch, Tooltip, Typography } from 'antd';
+import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { devActAsAvailable, isActingAsChecker, setActingAsChecker, subscribeActingAsChecker } from '../lib/devActAs';
 
 const { Header, Sider, Content } = Layout;
 
@@ -12,6 +14,7 @@ const navItems = [
   { key: '/gis', icon: <GlobalOutlined />, label: 'Tax Map' },
   { key: '/sworn-statements', icon: <AuditOutlined />, label: 'Sworn Statements' },
   { key: '/registers', icon: <BookOutlined />, label: 'Registers' },
+  { key: '/admin/valuation', icon: <CalculatorOutlined />, label: 'Valuation Rules' },
   { key: '/admin/forms', icon: <FileTextOutlined />, label: 'Forms & Numbering' },
   { key: '/health', icon: <HeartOutlined />, label: 'System Health' },
 ];
@@ -65,9 +68,36 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Typography.Title level={4} ellipsis={{ tooltip: true }} style={{ margin: 0, minWidth: 0 }}>
             {narrow ? 'PRIME' : 'Property Registry, Information, Mapping & Evaluation System'}
           </Typography.Title>
+          {devActAsAvailable && <DevCheckerSwitch />}
         </Header>
-        <Content style={{ margin: narrow ? 16 : 24, minWidth: 0 }}>{children}</Content>
+        <Content style={{ margin: narrow ? 16 : 24, minWidth: 0 }}>
+          {devActAsAvailable && <DevCheckerBanner />}
+          {children}
+        </Content>
       </Layout>
     </Layout>
   );
 }
+
+const useActingAsChecker = () => useSyncExternalStore(subscribeActingAsChecker, isActingAsChecker);
+
+/** Development only: switch to the second development user to try approvals (docs/analysis/value-and-assess.md §4). */
+function DevCheckerSwitch() {
+  const acting = useActingAsChecker();
+  const queryClient = useQueryClient();
+  return (
+    <Tooltip title="Development only: act as the second development user, to approve what the usual user created.">
+      <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap', fontSize: 12 }}>
+        <Switch size="small" checked={acting} aria-label="Act as checker"
+          onChange={(v) => { setActingAsChecker(v); queryClient.invalidateQueries(); }} /> Act as checker (dev)
+      </span>
+    </Tooltip>
+  );
+}
+
+function DevCheckerBanner() {
+  return useActingAsChecker()
+    ? <Alert type="warning" showIcon banner style={{ marginBottom: 16 }} title="Acting as DEV CHECKER — development only; requests are made as the second development user." />
+    : null;
+}
+

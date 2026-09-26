@@ -269,13 +269,7 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
         return td is null ? null : new AppraisalTaxDeclarationDto(td.Id, td.TaxDeclarationNumber, td.RevisionNumber, td.EffectivityDate, td.Status, td.TransactionCode);
     }
 
-    private static readonly Dictionary<string, int> BreakdownRank =
-        ValuationCalculator.BreakdownOrder.Select((key, i) => (key, i)).ToDictionary(x => x.key, x => x.i);
-
-    // Inputs, then intermediate values, then the market value (ValuationCalculator.BreakdownOrder).
+    // Inputs, then intermediate values, then the market value (one ordering: ValuationBreakdown).
     private static List<AppraisalBreakdownLineDto> Breakdown(string json) =>
-        (JsonSerializer.Deserialize<Dictionary<string, decimal>>(json) ?? [])
-        .OrderBy(kv => kv.Key == "MarketValue" ? int.MaxValue : BreakdownRank.GetValueOrDefault(kv.Key, int.MaxValue - 1))
-        .ThenBy(kv => kv.Key, StringComparer.Ordinal)
-        .Select(kv => new AppraisalBreakdownLineDto(kv.Key, kv.Value)).ToList();
+        Valuation.ValuationBreakdown.Ordered(json).Select(x => new AppraisalBreakdownLineDto(x.Key, x.Value)).ToList();
 }

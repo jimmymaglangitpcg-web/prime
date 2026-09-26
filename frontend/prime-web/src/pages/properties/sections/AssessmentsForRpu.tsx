@@ -1,6 +1,9 @@
 import { useState } from 'react';
-import { Alert, Button, Descriptions, Drawer, Empty, Space, Spin, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Descriptions, Drawer, Empty, Input, Modal, Popconfirm, Space, Spin, Table, Tag, Typography, message } from 'antd';
 import { useAppraisalRecord, useRpuAssessments } from '../../../api/assessments';
+import { useAssessmentAction, type AssessmentAction } from '../../../api/valuation';
+import { useTaxDeclarationsByRpu } from '../../../api/taxDeclarations';
+import { ValuationDrawer } from './ValueAndAssess';
 import { ApiRequestError } from '../../../lib/apiClient';
 import { formatMoney } from '../../../lib/format';
 import type { AppraisalRecordDto, AssessmentSummaryDto, WorkflowStatus } from '../../../lib/types';
@@ -19,9 +22,14 @@ const dash = (v: string | number | null | undefined) => (v === null || v === und
 export function AssessmentsForRpu({ rpuId }: { rpuId: string }) {
   const { data = [], isLoading } = useRpuAssessments(rpuId);
   const [selected, setSelected] = useState<string>();
+  const [valuing, setValuing] = useState(false);
+  const byId = new Map(data.map((a) => [a.id, a]));
   return (
     <div style={{ padding: '8px 24px' }}>
-      <Typography.Text strong>Assessments</Typography.Text>
+      <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+        <Typography.Text strong>Assessments</Typography.Text>
+        <Button size="small" type="primary" onClick={() => setValuing(true)}>Value and assess</Button>
+      </Space>
       <Table<AssessmentSummaryDto>
         size="small" rowKey="id" loading={isLoading} dataSource={data} pagination={false} scroll={{ x: 'max-content' }} style={{ marginTop: 8 }}
         locale={{ emptyText: <Empty description="No assessments yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
@@ -35,19 +43,80 @@ export function AssessmentsForRpu({ rpuId }: { rpuId: string }) {
             render: (v: number | null, a) => (v === null ? <Tag>{a.lines.length} rows</Tag> : `${plain.format(v)}%`),
           },
           { title: 'Assessed value', dataIndex: 'assessedValue', align: 'right', render: formatMoney },
+          {
+            // Before and after (CLAUDE.md §51): the change from the previous assessment it continues.
+            title: 'Change in AV', align: 'right', render: (_, a) => {
+              const previous = a.previousAssessmentId ? byId.get(a.previousAssessmentId) : undefined;
+              if (!previous) return '—';
+              const d = a.assessedValue - previous.assessedValue;
+              return <Tag color={d > 0 ? 'orange' : d < 0 ? 'blue' : 'default'}>{d > 0 ? '+' : ''}{formatMoney(d)}</Tag>;
+            },
+          },
           { title: 'Status', dataIndex: 'status', render: statusTag },
           { title: 'Entered in ROA', dataIndex: 'postedAt', render: (v: string | null) => (v ? new Date(v).toLocaleDateString() : '—') },
           {
             title: 'Actions', render: (_, a) => (
               <Space size={4} wrap>
                 <Button size="small" onClick={() => setSelected(a.id)}>Appraisal record</Button>
+                <WorkflowActions rpuId={rpuId} assessment={a} />
               </Space>
             ),
           },
         ]}
       />
       {selected && <AppraisalRecordDrawer assessmentId={selected} onClose={() => setSelected(undefined)} />}
+      {valuing && <ValuationDrawer rpuId={rpuId} onClose={() => setValuing(false)} />}
     </div>
+  );
+}
+
+/**
+ * The assessment's next workflow step (docs/analysis/value-and-assess.md §3):
+ * Draft → submit; Pending review → approve or reject (by someone other than the
+ * creator); Approved → post, after a confirmation.
+ */
+function WorkflowActions({ rpuId, assessment: a }: { rpuId: string; assessment: AssessmentSummaryDto }) {
+  const act = useAssessmentAction(rpuId);
+  const { refetch: refetchTds } = useTaxDeclarationsByRpu(rpuId);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
+  const [toast, toastContext] = message.useMessage();
+  const run = (action: AssessmentAction, extra?: { reason: string }) =>
+    act.mutate({ id: a.id, action, ...extra }, {
+      onSuccess: async (result) => {
+        setRejecting(false);
+        if (action !== 'post') return;
+        const tds = (await refetchTds()).data ?? [];
+        const prepared = tds.find((t) => t.assessmentId === a.id && t.status === 'Draft');
+        if (prepared) {
+          toast.success(`Posted. Draft Tax Declaration ${prepared.taxDeclarationNumber} was prepared for review under this unit.`);
+        } else {
+          toast.warning(`Posted and entered in the Record of Assessment. ${result.taxDeclarationNote ?? ''}`, 8);
+        }
+      },
+      onError: (e) => toast.error(e instanceof ApiRequestError ? e.apiError.message : (e as Error).message),
+    });
+  return (
+    <>
+      {toastContext}
+      {a.status === 'Draft' && <Button size="small" loading={act.isPending} onClick={() => run('submit-for-review')}>Submit for review</Button>}
+      {a.status === 'PendingReview' && (
+        <>
+          <Button size="small" type="primary" loading={act.isPending} onClick={() => run('approve')}>Approve</Button>
+          <Button size="small" danger onClick={() => setRejecting(true)}>Reject</Button>
+        </>
+      )}
+      {a.status === 'Approved' && (
+        <Popconfirm title="Post this assessment?" description="Posting enters it in the Record of Assessment; it cannot be undone."
+          okText="Post" onConfirm={() => run('post')}>
+          <Button size="small" type="primary" loading={act.isPending}>Post</Button>
+        </Popconfirm>
+      )}
+      <Modal open={rejecting} title="Reject the assessment" okText="Reject" okButtonProps={{ danger: true, disabled: !reason.trim(), loading: act.isPending }}
+        onCancel={() => setRejecting(false)} onOk={() => run('reject', { reason: reason.trim() })}>
+        <Input.TextArea rows={3} maxLength={1000} placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+      </Modal>
+    </>
   );
 }
 

@@ -11,6 +11,13 @@ public class DevelopmentAuthOptions : AuthenticationSchemeOptions
     public string UserId { get; set; } = "00000000-0000-0000-0000-000000000001";
     public string DisplayName { get; set; } = "Local Dev User";
     public string[] Roles { get; set; } = ["SYSTEM_ADMIN"];
+
+    /// <summary>
+    /// The second development user a request selects with <see cref="DevelopmentAuthenticationHandler.ActAsHeader"/>
+    /// = "checker", so maker-checker approvals can be tried on screen (docs/analysis/value-and-assess.md §4).
+    /// </summary>
+    public string CheckerUserId { get; set; } = "00000000-0000-0000-0000-000000000002";
+    public string CheckerDisplayName { get; set; } = "Local Dev Checker";
 }
 
 /// <summary>
@@ -31,12 +38,17 @@ public class DevelopmentAuthenticationHandler(
 {
     public const string SchemeName = "DevelopmentBypass";
 
+    /// <summary>Development only: "checker" acts as the second development user.</summary>
+    public const string ActAsHeader = "X-Prime-Dev-Act-As";
+
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        // Reachable only where this whole bypass is (Development + DevAuth:Enabled; Program.cs).
+        var checker = string.Equals(Request.Headers[ActAsHeader], "checker", StringComparison.OrdinalIgnoreCase);
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, Options.UserId),
-            new(ClaimTypes.Name, Options.DisplayName),
+            new(ClaimTypes.NameIdentifier, checker ? Options.CheckerUserId : Options.UserId),
+            new(ClaimTypes.Name, checker ? Options.CheckerDisplayName : Options.DisplayName),
         };
         claims.AddRange(Options.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
 

@@ -75,6 +75,15 @@ public sealed class SmvService(
             : Result.Success(ToDto(smv));
     }
 
+    public async Task<Result<PagedResult<SmvDto>>> ListAsync(PagedRequest request, CancellationToken cancellationToken = default)
+    {
+        var query = db.Smvs.AsNoTracking();
+        var total = await query.CountAsync(cancellationToken);
+        var rows = await query.OrderByDescending(x => x.EffectivityDate).ThenByDescending(x => x.CreatedAt)
+            .Skip((request.Page - 1) * request.PageSize).Take(request.PageSize).ToListAsync(cancellationToken);
+        return Result.Success(new PagedResult<SmvDto> { Items = rows.Select(ToDto).ToList(), TotalCount = total, Page = request.Page, PageSize = request.PageSize });
+    }
+
     public async Task<Result<SmvScheduleDto>> CreateScheduleAsync(Guid smvId, CreateSmvScheduleRequest request, CancellationToken cancellationToken = default)
     {
         var validation = await createScheduleValidator.ValidateAsync(request, cancellationToken);

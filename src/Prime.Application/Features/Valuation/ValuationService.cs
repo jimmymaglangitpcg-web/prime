@@ -120,7 +120,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         land.MarketValue = valuation.ComputedMarketValue;
         await db.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(ToDto(valuation, DeserializeBreakdown(valuation.BreakdownJson)));
+        return Result.Success(await MapAsync(valuation.Id, cancellationToken));
     }
 
     /// <summary>
@@ -197,7 +197,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         building.MarketValue = valuation.ComputedMarketValue;
         await db.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(ToDto(valuation, DeserializeBreakdown(valuation.BreakdownJson)));
+        return Result.Success(await MapAsync(valuation.Id, cancellationToken));
     }
 
     /// <summary>
@@ -238,7 +238,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         var valuation = PersistLines(machinery.RpuId, machinery.PropertyId, ValuationSourceType.Machinery, machines[0].Id, lines, null, null, clock.Today);
         await db.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(ToDto(valuation, DeserializeBreakdown(valuation.BreakdownJson)));
+        return Result.Success(await MapAsync(valuation.Id, cancellationToken));
     }
 
     /// <summary>
@@ -276,21 +276,21 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
 
     public async Task<Result<ValuationDto>> GetByIdAsync(Guid valuationId, CancellationToken cancellationToken = default)
     {
-        var valuation = await db.Valuations.FirstOrDefaultAsync(x => x.Id == valuationId, cancellationToken);
+        var valuation = await WithDetails().FirstOrDefaultAsync(x => x.Id == valuationId, cancellationToken);
         return valuation is null
             ? Result.Failure<ValuationDto>("VALUATION_NOT_FOUND", "No Valuation was found with the given id.")
-            : Result.Success(ToDto(valuation, DeserializeBreakdown(valuation.BreakdownJson)));
+            : Result.Success(ToDto(valuation));
     }
 
     public async Task<Result<IReadOnlyList<ValuationDto>>> ListByRpuAsync(Guid rpuId, CancellationToken cancellationToken = default)
     {
-        var valuations = await db.Valuations
+        var valuations = await WithDetails()
             .Where(x => x.RpuId == rpuId)
             .OrderByDescending(x => x.ComputedAt)
             .ToListAsync(cancellationToken);
 
         return Result.Success<IReadOnlyList<ValuationDto>>(
-            valuations.Select(x => ToDto(x, DeserializeBreakdown(x.BreakdownJson))).ToList());
+            valuations.Select(ToDto).ToList());
     }
 
     /// <summary>
@@ -385,10 +385,16 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         return candidates.FirstOrDefault(x => x.ZoneId == zoneId) ?? candidates.FirstOrDefault(x => x.ZoneId == null);
     }
 
-    private static Dictionary<string, decimal> DeserializeBreakdown(string json) =>
-        JsonSerializer.Deserialize<Dictionary<string, decimal>>(json) ?? [];
+    private IQueryable<Prime.Domain.Entities.Valuation> WithDetails() => db.Valuations.AsNoTracking()
+        .Include(x => x.Smv)
+        .Include(x => x.Lines).ThenInclude(l => l.Classification)
+        .Include(x => x.Lines).ThenInclude(l => l.SubClassification)
+        .Include(x => x.Lines).ThenInclude(l => l.ActualUse);
 
-    private static ValuationDto ToDto(Prime.Domain.Entities.Valuation v, IReadOnlyDictionary<string, decimal> breakdown) => new(
+    private async Task<ValuationDto> MapAsync(Guid valuationId, CancellationToken cancellationToken) =>
+        ToDto(await WithDetails().SingleAsync(x => x.Id == valuationId, cancellationToken));
+
+    private static ValuationDto ToDto(Prime.Domain.Entities.Valuation v) => new(
         v.Id,
         v.RpuId,
         v.PropertyId,
@@ -398,7 +404,12 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         v.SmvScheduleId,
         v.ValuationMethod,
         v.ComputedMarketValue,
-        breakdown,
+        JsonSerializer.Deserialize<Dictionary<string, decimal>>(v.BreakdownJson) ?? [],
         v.EffectiveDate,
-        v.ComputedAt);
+        v.ComputedAt,
+        v.Lines.OrderBy(l => l.Sequence).Select(l => new ValuationLineDto(
+            l.Sequence, l.Source, l.SourceId, l.Description, l.Classification?.Name, l.SubClassification?.Name, l.ActualUse?.Name,
+            l.Quantity, l.Unit, l.UnitValue, l.SmvScheduleId, l.MarketValue, ValuationBreakdown.Ordered(l.BreakdownJson))).ToList(),
+        v.Smv?.OrdinanceNumber,
+        v.Smv?.RevisionYear);
 }

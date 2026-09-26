@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { devActAsHeader, isActingAsChecker } from './devActAs';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'https://localhost:7221';
 
@@ -38,6 +39,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   headers.set('Accept', 'application/json');
   if (session?.access_token) {
     headers.set('Authorization', `Bearer ${session.access_token}`);
+  }
+  if (isActingAsChecker()) {
+    headers.set(devActAsHeader, 'checker');
   }
 
   const response = await fetch(`${apiBaseUrl}${path}`, { ...init, headers });

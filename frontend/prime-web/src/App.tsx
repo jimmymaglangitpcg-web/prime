@@ -14,6 +14,7 @@ import { FormDocumentPage } from './pages/documents/FormDocumentPage';
 import { SwornStatementPage } from './pages/swornStatements/SwornStatementPage';
 import { SwornStatementsPage } from './pages/swornStatements/SwornStatementsPage';
 import { RegistersPage } from './pages/registers/RegistersPage';
+import { ValuationRulesPage } from './pages/admin/ValuationRulesPage';
 import { FormsAdminPage } from './pages/admin/FormsAdminPage';
 
 function DashboardPlaceholder() {
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/sworn-statements" element={<SwornStatementsPage />} />
         <Route path="/sworn-statements/:id" element={<SwornStatementPage />} />
         <Route path="/admin/forms" element={<FormsAdminPage />} />
+        <Route path="/admin/valuation" element={<ValuationRulesPage />} />
       </Routes>
     </AppShell>
   );

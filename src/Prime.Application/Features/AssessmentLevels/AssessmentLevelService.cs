@@ -32,23 +32,23 @@ public sealed class AssessmentLevelService(
             return Result.Failure<AssessmentLevelDto>("PROPERTY_TYPE_NOT_FOUND", "The specified property type does not exist.");
         }
 
-        // Never overwrite (CLAUDE.md §29): close any currently-open assessment
-        // level for the same classification/actual use/property type key
-        // instead of editing it in place.
-        var currentlyOpen = await db.AssessmentLevels.FirstOrDefaultAsync(
-            x => x.ClassificationId == request.ClassificationId
+        // Never overwrite (CLAUDE.md §29): a new level closes the open levels of the same
+        // classification/actual use/property type whose value range it overlaps. Levels with
+        // separate ranges — the brackets of one table — stay open side by side
+        // (docs/analysis/value-and-assess.md §2.5).
+        var open = await db.AssessmentLevels
+            .Where(x => x.ClassificationId == request.ClassificationId
                 && x.ActualUseId == request.ActualUseId
                 && x.PropertyTypeId == request.PropertyTypeId
-                && x.EndDate == null,
-            cancellationToken);
-
-        if (currentlyOpen is not null)
+                && x.EndDate == null)
+            .ToListAsync(cancellationToken);
+        foreach (var currentlyOpen in open.Where(x => RangesOverlap(x.LowerValue, x.UpperValue, request.LowerValue, request.UpperValue)))
         {
             if (request.EffectiveDate <= currentlyOpen.EffectiveDate)
             {
                 return Result.Failure<AssessmentLevelDto>(
                     "ASSESSMENT_LEVEL_EFFECTIVE_DATE_CONFLICT",
-                    "The new assessment level's effective date must be after the currently-open one's effective date.");
+                    "The new assessment level's effective date must be after that of the open level whose value range it overlaps.");
             }
             currentlyOpen.EndDate = request.EffectiveDate.AddDays(-1);
         }
@@ -89,6 +89,22 @@ public sealed class AssessmentLevelService(
         if (currentUser.AppUserId is not null && assessmentLevel.CreatedBy == currentUser.AppUserId)
         {
             return Result.Failure<AssessmentLevelDto>("CANNOT_APPROVE_OWN_ASSESSMENT_LEVEL", "The assessment level's creator cannot also approve it.");
+        }
+
+        // Two approved levels may never both apply to one value on one day.
+        var siblings = await db.AssessmentLevels
+            .Where(x => x.Id != assessmentLevel.Id
+                && x.ClassificationId == assessmentLevel.ClassificationId
+                && x.ActualUseId == assessmentLevel.ActualUseId
+                && x.PropertyTypeId == assessmentLevel.PropertyTypeId
+                && x.Status == WorkflowStatus.Approved
+                && (x.EndDate == null || x.EndDate >= assessmentLevel.EffectiveDate)
+                && (assessmentLevel.EndDate == null || x.EffectiveDate <= assessmentLevel.EndDate))
+            .ToListAsync(cancellationToken);
+        if (siblings.Any(x => RangesOverlap(x.LowerValue, x.UpperValue, assessmentLevel.LowerValue, assessmentLevel.UpperValue)))
+        {
+            return Result.Failure<AssessmentLevelDto>("ASSESSMENT_LEVEL_OVERLAP",
+                "An approved level of the same classification, actual use and property type already covers part of this value range in this period.");
         }
 
         assessmentLevel.Status = WorkflowStatus.Approved;
@@ -145,4 +161,11 @@ public sealed class AssessmentLevelService(
         x.EndDate,
         x.Status,
         x.CreatedAt);
+
+    /// <summary>
+    /// Whether two value ranges share a value, each read "over the lower, not over the upper"
+    /// (a null upper is unbounded) — the matching the assessment uses.
+    /// </summary>
+    public static bool RangesOverlap(decimal lower1, decimal? upper1, decimal lower2, decimal? upper2) =>
+        (upper2 is null || lower1 < upper2) && (upper1 is null || lower2 < upper1);
 }

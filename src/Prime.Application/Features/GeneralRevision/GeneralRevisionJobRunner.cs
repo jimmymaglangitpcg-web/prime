@@ -75,7 +75,7 @@ public sealed class GeneralRevisionJobRunner(
         }
 
         var previousAssessment = await db.Assessments
-            .Where(x => x.RpuId == rpuId)
+            .Where(x => x.RpuId == rpuId && x.Status == WorkflowStatus.Posted)
             .OrderByDescending(x => x.EffectiveDate)
             .FirstOrDefaultAsync(cancellationToken);
 

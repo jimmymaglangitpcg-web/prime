@@ -18,6 +18,11 @@ public class ValuationController(IValuationService valuationService) : ApiContro
     public async Task<ActionResult<ValuationDto>> ComputeForMachinery(Guid machineryId, CancellationToken cancellationToken) =>
         HandleCreated(await valuationService.ComputeForMachineryAsync(machineryId, cancellationToken), nameof(GetById), dto => new { id = dto.Id });
 
+    /// <summary>Values the whole unit: every appraisal row of its land, building or machinery (docs/analysis/value-and-assess.md §2).</summary>
+    [HttpPost("~/api/rpus/{rpuId:guid}/valuations")]
+    public async Task<ActionResult<ValuationDto>> ComputeForRpu(Guid rpuId, CancellationToken cancellationToken) =>
+        HandleCreated(await valuationService.ComputeForRpuAsync(rpuId, cancellationToken), nameof(GetById), dto => new { id = dto.Id });
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ValuationDto>> GetById(Guid id, CancellationToken cancellationToken) =>
         HandleResult(await valuationService.GetByIdAsync(id, cancellationToken));

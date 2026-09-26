@@ -96,7 +96,7 @@ export function PropertyProfilePage() {
         type="info"
         showIcon
         title="Payments and delinquency are not shown yet"
-        description="Assessments and their appraisal records are listed under each RPU. Creating, approving and posting assessments is still done through the API. Payments arrive with Phase 9 (Collection) and delinquency with Phase 10."
+        description="Value, assess, approve and post under each RPU (Value and assess). Payments arrive with Phase 9 (Collection) and delinquency with Phase 10."
       />
     </div>
   );

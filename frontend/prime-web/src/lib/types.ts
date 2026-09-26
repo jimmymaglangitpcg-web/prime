@@ -353,6 +353,8 @@ export interface CreateTaxDeclarationRequest {
   propertyTransactionId?: string;
   /** A transaction code in force (catalogue), when the TD is not drafted under a transaction. */
   transactionCode?: string;
+  /** The posted assessment this TD declares (FAAS = TD + assessment; docs/analysis/mrpaao-forms-model.md §6.1). */
+  assessmentId?: string | null;
 }
 
 export interface TaxDeclarationDto {
@@ -1041,6 +1043,8 @@ export interface AssessmentSummaryDto {
   /** The Record of Assessment entry. */
   postedAt: string | null;
   postedBy: string | null;
+  /** Set by posting only: whether a draft Tax Declaration was prepared, and if not, why. */
+  taxDeclarationNote?: string | null;
 }
 
 // --- Appraisal record / FAAS aggregate (docs/FORMS-REVISION-PLAN.md A7) ---
@@ -1242,3 +1246,69 @@ export const unitTypesFor: Record<SwornStatementItemKind, RpuType[]> = {
   Machinery: ['Machinery'],
   OtherImprovement: ['Land', 'OtherImprovement'],
 };
+
+// --- Value and assess (docs/analysis/value-and-assess.md) ---
+
+export type ValuationLineSource = 'Land' | 'Building' | 'Machinery' | 'LandStrip' | 'LandImprovement' | 'BuildingUsePortion';
+
+export interface ValuationBreakdownItemDto { key: string; value: number }
+
+export interface ValuationLineDto {
+  sequence: number; source: ValuationLineSource; sourceId: string | null; description: string | null;
+  classificationName: string | null; subClassificationName: string | null; actualUseName: string | null;
+  quantity: number | null; unit: string | null; unitValue: number | null; smvScheduleId: string | null; marketValue: number;
+  breakdown: ValuationBreakdownItemDto[];
+}
+
+export interface ValuationDto {
+  id: string; rpuId: string; propertyId: string; sourceType: string; sourceId: string; smvId: string | null; smvScheduleId: string | null;
+  valuationMethod: string; computedMarketValue: number; breakdown: Record<string, number>; effectiveDate: string; computedAt: string;
+  lines: ValuationLineDto[] | null; smvOrdinanceNumber: string | null; smvRevisionYear: number | null;
+}
+
+export interface CreateAssessmentRequest {
+  valuationId: string; assessmentYear: number; effectiveDate: string; previousAssessmentId: string | null;
+  revisionReference: string | null; remarks: string | null;
+}
+
+export interface AssessmentPreviewDto {
+  valuationId: string; rpuId: string; marketValue: number; assessedValue: number; lines: AssessmentLineDto[];
+}
+
+export interface SmvDto {
+  id: string; ordinanceNumber: string; ordinanceDate: string; approvalDate: string | null; effectivityDate: string;
+  revisionYear: number; status: WorkflowStatus; description: string | null; createdAt: string;
+}
+
+export interface CreateSmvRequest {
+  ordinanceNumber: string; ordinanceDate: string; approvalDate: string | null; effectivityDate: string; revisionYear: number; description: string | null;
+}
+
+export interface SmvScheduleDto {
+  id: string; smvId: string; classificationId: string; classificationName: string; actualUseId: string; actualUseName: string;
+  propertyTypeId: string; propertyTypeName: string; zoneId: string | null; zoneName: string | null;
+  improvementKindId: string | null; improvementKindName: string | null; unit: string; marketValue: number;
+  minimumValue: number | null; maximumValue: number | null; effectiveDate: string; endDate: string | null; status: WorkflowStatus; createdAt: string;
+}
+
+export interface CreateSmvScheduleRequest {
+  classificationId: string; actualUseId: string; propertyTypeId: string; zoneId: string | null; unit: string; marketValue: number;
+  minimumValue: number | null; maximumValue: number | null; effectiveDate: string; improvementKindId: string | null;
+}
+
+export interface AssessmentLevelDto {
+  id: string; ordinanceNumber: string; ordinanceDate: string | null; classificationId: string; classificationName: string;
+  actualUseId: string; actualUseName: string; propertyTypeId: string; propertyTypeName: string;
+  lowerValue: number; upperValue: number | null; assessmentPercentage: number; effectiveDate: string; endDate: string | null;
+  status: WorkflowStatus; createdAt: string;
+}
+
+export interface CreateAssessmentLevelRequest {
+  ordinanceNumber: string; ordinanceDate: string | null; classificationId: string; actualUseId: string; propertyTypeId: string;
+  lowerValue: number; upperValue: number | null; assessmentPercentage: number; effectiveDate: string;
+}
+
+export interface CreateAdjustmentFactorRequest {
+  smvId: string; code: string; name: string; percent: number; classificationId: string | null; description: string | null;
+  legalBasis: string; effectiveDate: string; remarks: string | null;
+}

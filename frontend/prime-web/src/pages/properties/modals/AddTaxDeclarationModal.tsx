@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Radio, Select } from 'antd';
 import dayjs from 'dayjs';
 import { useCreateTaxDeclaration, useTaxDeclarationsByRpu } from '../../../api/taxDeclarations';
@@ -5,6 +6,8 @@ import { useActualUses, useClassifications, useSubClassifications } from '../../
 import type { CreateTaxDeclarationRequest } from '../../../lib/types';
 import { ApiRequestError } from '../../../lib/apiClient';
 import { useTransactionTypes } from '../../../api/transactions';
+import { useRpuAssessments } from '../../../api/assessments';
+import { formatMoney } from '../../../lib/format';
 
 export function AddTaxDeclarationModal({
   propertyId,
@@ -28,6 +31,15 @@ export function AddTaxDeclarationModal({
   const createTaxDeclaration = useCreateTaxDeclaration(propertyId);
   const { data: existing = [] } = useTaxDeclarationsByRpu(rpuId);
   const current = existing.find((td) => td.status === 'Approved');
+  const { data: assessments = [] } = useRpuAssessments(rpuId);
+  const posted = assessments.filter((a) => a.status === 'Posted').sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
+  // Propose the current TD as the one replaced once it is known (the list may load after the
+  // form mounts, and initial values apply only at mount), unless the user already chose.
+  useEffect(() => {
+    if (open && current && !form.isFieldTouched('previousTaxDeclarationId')) {
+      form.setFieldValue('previousTaxDeclarationId', current.id);
+    }
+  }, [open, current, form]);
   const replaceable = existing.filter((td) => !['Cancelled', 'Voided', 'Rejected'].includes(td.status));
 
   function handleClose() {
@@ -69,6 +81,7 @@ export function AddTaxDeclarationModal({
             previousTaxDeclarationId: values.previousTaxDeclarationId,
             propertyTransactionId: transactionId,
             transactionCode: transactionId ? undefined : values.transactionCode,
+            assessmentId: values.assessmentId ?? null,
           };
           createTaxDeclaration.mutate(request, { onSuccess: handleClose });
         }}
@@ -88,6 +101,18 @@ export function AddTaxDeclarationModal({
         >
           <Select allowClear placeholder="None — first declaration for this RPU"
             options={replaceable.map((td) => ({ value: td.id, label: `${td.taxDeclarationNumber} (${td.status})` }))} />
+        </Form.Item>
+
+        <Form.Item name="assessmentId" label="Declares assessment"
+          extra="The posted assessment this declaration declares; its FAAS then shows the assessment's values.">
+          <Select allowClear placeholder="None"
+            onChange={(id?: string) => {
+              const a = posted.find((x) => x.id === id);
+              const principal = a ? [...a.lines].sort((x, y) => y.marketValue - x.marketValue)[0] : undefined;
+              if (a) form.setFieldsValue({ assessmentYear: a.assessmentYear, effectivityDate: dayjs(a.effectiveDate),
+                ...(principal ? { classificationId: principal.classificationId, actualUseId: principal.actualUseId } : {}) });
+            }}
+            options={posted.map((a) => ({ value: a.id, label: `${a.assessmentYear}, effective ${a.effectiveDate} — AV ${formatMoney(a.assessedValue)}` }))} />
         </Form.Item>
 
         <Form.Item name="taxability" label="Taxability" rules={[{ required: true }]}>

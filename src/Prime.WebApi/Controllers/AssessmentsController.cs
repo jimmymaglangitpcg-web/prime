@@ -12,6 +12,10 @@ public class AssessmentsController(IAssessmentService assessmentService, IApprai
     public async Task<ActionResult<AppraisalRecordDto>> GetAppraisalRecord(Guid id, CancellationToken cancellationToken) =>
         HandleResult(await appraisals.GetAsync(id, cancellationToken));
 
+    [HttpPost("preview")]
+    public async Task<ActionResult<AssessmentPreviewDto>> Preview(CreateAssessmentRequest request, CancellationToken cancellationToken) =>
+        HandleResult(await assessmentService.PreviewAsync(request, cancellationToken));
+
     [HttpPost]
     public async Task<ActionResult<AssessmentDto>> Create(CreateAssessmentRequest request, CancellationToken cancellationToken) =>
         HandleCreated(await assessmentService.CreateAsync(request, cancellationToken), nameof(GetById), dto => new { id = dto.Id });

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Prime.Application.Common;
 using Prime.Application.Features.Smv;
 
 namespace Prime.WebApi.Controllers;
@@ -11,6 +12,10 @@ public class SmvController(ISmvService smvService) : ApiControllerBase
     [HttpPost]
     public async Task<ActionResult<SmvDto>> Create(CreateSmvRequest request, CancellationToken cancellationToken) =>
         HandleCreated(await smvService.CreateSmvAsync(request, cancellationToken), nameof(GetById), dto => new { id = dto.Id });
+
+    [HttpGet]
+    public async Task<ActionResult<PagedResult<SmvDto>>> List([FromQuery] PagedRequest request, CancellationToken cancellationToken) =>
+        HandleResult(await smvService.ListAsync(request, cancellationToken));
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<SmvDto>> GetById(Guid id, CancellationToken cancellationToken) =>

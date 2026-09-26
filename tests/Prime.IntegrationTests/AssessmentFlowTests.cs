@@ -168,6 +168,11 @@ public class AssessmentFlowTests(WebApplicationFactory<Program> factory) : IClas
         var first = (await assessmentService.CreateAsync(new CreateAssessmentRequest(
             valuation.Id, 2026, new DateOnly(2026, 1, 1), null, null, "First"))).Value;
 
+        // Only a posted assessment of the same unit can be the previous one (docs/analysis/value-and-assess.md §2.4).
+        (await assessmentService.CreateAsync(new CreateAssessmentRequest(
+            valuation.Id, 2026, new DateOnly(2026, 6, 1), first.Id, null, "Draft previous"))).Code.ShouldBe("PREVIOUS_ASSESSMENT_INVALID");
+        await db.Assessments.Where(x => x.Id == first.Id).ExecuteUpdateAsync(x => x.SetProperty(a => a.Status, WorkflowStatus.Posted));
+
         var second = await assessmentService.CreateAsync(new CreateAssessmentRequest(
             valuation.Id, 2026, new DateOnly(2026, 6, 1), first.Id, null, "Reassessment after correction"));
 

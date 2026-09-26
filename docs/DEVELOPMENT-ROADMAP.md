@@ -1122,6 +1122,16 @@ Step 5b is committed as `29e0d34`.
 
 Step 6 is committed as `e7f3ad8`.
 
+Step 7 is committed as `7526be3`.
+
+**Value and assess on screen (2026-09-26, uncommitted):** the Phase 5/6 UI
+gap is closed. Each unit can be valued (every row's calculation shown),
+assessed with a preview and before-and-after, and submitted, approved and
+posted. A Valuation Rules page manages SMVs, schedules, adjustment factors
+and assessment levels (brackets side by side, "over the lower, not over the
+upper"). A development-only "act as checker" switch lets you try
+maker-checker on screen. No migration. See docs/analysis/value-and-assess.md.
+
 **Step 7 done (2026-09-26, uncommitted):** the owner's Sworn Statement of
 market value (MRPAAO Att. 11): statements with declared land, buildings,
 machinery and trees; filing, correction, cancellation, linking NEW items to

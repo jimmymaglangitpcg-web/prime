@@ -50,6 +50,7 @@ export const useMachineryTypes = () => useLookup('machinery-types');
 export const useImprovementKinds = () => useLookup('improvement-kinds');
 export const useBuildingComponentTypes = () => useLookup('building-component-types');
 export const useTitleTypes = () => useLookup('title-types');
+export const usePropertyTypes = () => useLookup('property-types');
 export const useStructuralParts = () => useLookup('structural-parts');
 
 export function useStructuralMaterials() {
