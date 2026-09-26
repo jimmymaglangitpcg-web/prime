@@ -908,6 +908,22 @@ Exit criteria: full CREATE PROPERTY → ... → PAY → VERIFY BALANCE E2E flow
 from CLAUDE.md §74 passes; overpayment/partial/reversal scenarios from §75
 covered by tests; posting is verified atomic under concurrent submission.
 
+### Status — complete with DEMO values (2026-09-26)
+
+Design, decisions and step-by-step status are in
+docs/analysis/collection.md (§9 decisions, §10 steps 9a–9f, §11 exit
+review). Summary:
+- 9a: the shared charge steps and `CollectionCalculator`.
+- 9b: payments, allocation, receipts and the collection setup.
+- 9c: void, reversal and correction under maker-checker.
+- 9d: the receipt form and the collection screens.
+- 9e: remittance, the summary and reconciliation.
+- 9f: the §74 end-to-end test and a UI run.
+
+All three exit criteria are met. Open gaps: collection by taxpayer, and
+the DOMAIN VERIFICATION items in §11. Migrations `Payments`,
+`PaymentCancellations` and `Remittances` are on the local dev DB only.
+
 ## Phase 10 — Delinquency
 
 **Goal**: outstanding balances and aging are accurate and reportable.
@@ -1023,6 +1039,16 @@ API first starts against Supabase, which still has not been exercised.
 
 ## Immediate next action
 
+**Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so
+PRIME is the assessor's office system following the MRPAAO (CLAUDE.md §0).
+Treasury work (billing, payments, collection, delinquency) is out of scope,
+and the Phase 8–9 code is frozen: kept, not extended, removed only on
+explicit instruction. Phase 10 is now **MRPAAO completeness** (CLAUDE.md
+§97: identification and tax mapping, appraisal, assessment/listing/
+exemptions, records, general revision and SMV preparation, appeals).
+Section numbers in CLAUDE.md are unchanged; removed sections keep a
+one-line note.
+
 **Current (2026-09-26):** everything through `b2e369b` (value and assess)
 is committed and pushed; Supabase has all 28 migrations. **Phase 9 —
 Collection started:** the design is in docs/analysis/collection.md
@@ -1034,9 +1060,13 @@ reversal and correction under maker-checker; migration
 `PaymentCancellations`) is committed and pushed (`e6eab47`). Both migrations
 are on the local dev DB only. **Step 9d** (the receipt form, the payment
 workspace, the Payments tab, the Collection and Collection Setup pages, and
-the balance on the Statement of Account) is done, browser-verified and
-uncommitted. Next: 9e, remittance, the collection summary and
-reconciliation. See §10 of that doc. The paragraphs below are the earlier history.
+the balance on the Statement of Account) is committed and pushed
+(`4261372`). **Steps 9e** (remittance, the collection summary and
+reconciliation; migration `Remittances`, local dev DB only) **and 9f** (the
+§74 end-to-end test and UI run) are done and uncommitted. **Phase 9 is
+complete with DEMO values** (exit review: §11 of that doc). Next
+candidates: Phase 10 (Delinquency), the taxpayer-collection gap, and
+bringing Supabase up to date. The paragraphs below are the earlier history.
 
 Phases 0–8 are complete with DEMO values (Phase 8 — Billing finished
 2026-09-25; see its status block and docs/BILLING.md §6.1 for the defaults

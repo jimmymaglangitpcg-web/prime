@@ -2,7 +2,55 @@
 
 ## Property Registry, Information, Mapping & Evaluation System
 
-### Philippine LGU Real Property Information, Assessment & Tax Platform
+### Philippine LGU Real Property Appraisal & Assessment Platform
+
+---
+
+# 0. SCOPE (revised 2026-09-26)
+
+PRIME is the system of the **local assessor's office**. Its scope follows the
+**Manual on Real Property Appraisal and Assessment Operations** (MRPAAO;
+DOF-BLGF Local Assessment Regulations No. 1-04, 2004/2006), kept in the
+repository as `docs/References/ManualRPAandAO.pdf`. The manual's chapters
+define what PRIME covers:
+
+```text
+Ch. I    Local Government Assessment Organization      → users, roles, offices (§9, §47)
+Ch. II   Real Property Identification System            → PIN, tax mapping, TMCR (§19, §21, §38, §115)
+Ch. III  General Revision; Schedule of Fair Market Values → SMV preparation, general revision (§28, §33)
+Ch. IV   Real Property Appraisal for Taxation Purposes  → land, buildings, machinery, special purpose (§24–§26, §30)
+Ch. V    Assessment of Real Property                    → assessment, listing, exemptions (§29, §32, §43)
+Ch. VI   Real Property Assessment Records Management    → forms, codes, numbering (§114)
+Ch. VII  Appeals before the LBAA and CBAA               → assessment appeals (§113)
+Ch. VIII Miscellaneous (appraisal committee, zonal valuation, land use) → §28, §116
+Ch. IX–X Penal and final provisions                     → reference only
+```
+
+**How the manual is used (user decision, 2026-09-25):** the MRPAAO is the
+source for **structure, forms, fields and procedures**. Its rules and values
+are **not** hard-coded: they stay configurable, because the manual is
+superseded by the **Local Assessment Manual (LAM, DOF Department Circular
+004-2025)** and by RA 12001 and its IRR. When the LAM or an ordinance is
+supplied, it overrides the MRPAAO wherever they differ. Never commit
+LAM-derived or ordinance-derived content to the repository, which has a
+GitHub remote.
+
+**Out of scope: treasury operations.** Tax rates, billing, payment,
+collection, remittance, delinquency, discounts, penalties and interest belong
+to the Local Treasurer. They are not part of PRIME's objectives.
+
+- Code for billing and collection already exists from the earlier scope
+  (Phases 8–9: `Billing`, `Collection` features, `/api/bills`,
+  `/api/payments`, `/api/collection*`, their tables and screens). It is
+  **frozen**: do not extend it and do not build on it. Remove it only when
+  the user explicitly asks, and plan the removal as a reviewed, non-destructive
+  change (§105).
+- The assessor's outputs that the treasury uses (the assessed value on a
+  posted assessment and Tax Declaration, the assessment roll) stay in scope.
+
+**Section numbers are stable.** Code and documents cite this file as
+`CLAUDE.md §N`. Removed sections keep their number with a one-line note, and
+new sections are appended (§113 onward).
 
 ---
 
@@ -14,49 +62,32 @@ You are the lead software architect, senior full-stack engineer, database engine
 
 > **Property Registry, Information, Mapping & Evaluation System**
 
-PRIME is a production-grade platform for Philippine Local Government Units (LGUs) covering:
+PRIME is a production-grade platform for the real property appraisal and assessment operations of Philippine Local Government Units (LGUs), covering:
 
-* Property registration
-* Property information management
-* Taxpayer/ownership management
+* Assessment organization, users and offices
+* Property identification (PIN) and tax mapping
+* Property registration and property information management
+* Owner/administrator (taxpayer) and ownership management
 * Real Property Unit (RPU) management
-* Tax Declaration management
-* Land assessment
-* Building and improvement assessment
-* Machinery assessment
-* Property classification
-* Actual-use classification
-* Valuation
-* Schedule of Market Values (SMV)
-* Assessment levels
-* Assessed values
-* General revision
-* Reassessment
-* Property transfers
-* Subdivision
-* Consolidation
-* Property cancellation
-* GIS and tax mapping
-* Real Property Tax billing
-* Payments
-* Collection
-* Delinquency
+* Land, building/improvement and machinery appraisal
+* Property classification and actual use
+* Schedule of Fair Market Values (SMV) preparation and versioning
+* Assessment levels, assessed values and assessment
+* Tax Declarations and FAAS
+* Listing of real property, taxable and exempt
 * Exemptions
-* Reports
-* Document generation
-* Approval workflows
-* User management
-* Audit trails
-
-PRIME is **not merely a tax calculator**.
-
-PRIME is a complete **Real Property Information, Valuation, Assessment, Mapping, Billing and Collection Platform**.
+* General revision and reassessment
+* Property transactions (transfer, subdivision, consolidation, cancellation …)
+* Notices of Assessment and sworn statements
+* Assessment records: TMCR, Assessment Rolls, Ownership Record Cards, Records of Assessment
+* Assessment appeals (LBAA/CBAA)
+* GIS and tax maps
+* Reports and document generation
+* Approval workflows, user management and audit trails
 
 ---
 
 # 2. PRODUCT NAME
-
-Use the following product identity consistently.
 
 ```text
 Product Name:
@@ -66,7 +97,7 @@ Full Name:
 Property Registry, Information, Mapping & Evaluation System
 
 Category:
-LGU Real Property Information, Assessment & Tax Platform
+LGU Real Property Appraisal & Assessment Platform
 ```
 
 Application title:
@@ -76,34 +107,30 @@ PRIME
 Property Registry, Information, Mapping & Evaluation System
 ```
 
-Do not use "Real Property Tax System" as the sole product name because PRIME covers substantially more than taxation.
-
 ---
 
 # 3. CORE SYSTEM CONCEPT
 
-The central concept of PRIME is:
-
 ```text
 PROPERTY
     ↓
-PROPERTY REGISTRY
+PROPERTY IDENTIFICATION (PIN) + TAX MAP
     ↓
 PARCEL
     ↓
-RPU
+RPU (land / building / machinery / other improvement)
     ↓
-TAX DECLARATION
-    ↓
-VALUATION
+APPRAISAL (FAAS)
     ↓
 ASSESSMENT
     ↓
-BILLING
+TAX DECLARATION
     ↓
-PAYMENT
+NOTICE OF ASSESSMENT
     ↓
-COLLECTION
+ASSESSMENT RECORDS (TMCR, Assessment Roll, ORC, ROA)
+    ↓
+APPEAL (where filed)
 ```
 
 A property can contain:
@@ -117,27 +144,19 @@ PROPERTY
 
 A property may have:
 
-* One or more taxpayers/owners
+* One or more owners/administrators and other parties
 * One or more RPUs
 * Current and historical Tax Declarations
-* Current and historical assessments
+* Current and historical appraisals and assessments
 * Property transactions
-* GIS geometry
-* Tax bills
-* Payments
-* Delinquencies
+* GIS geometry and tax map location
+* Notices, sworn statements and appeals
 * Documents
 * Audit history
 
 ---
 
 # 4. FUNDAMENTAL DESIGN PRINCIPLE
-
-Do NOT design PRIME as:
-
-```text
-Property → Tax
-```
 
 Design PRIME as:
 
@@ -146,20 +165,14 @@ Property
    ↓
 RPU
    ↓
-Tax Declaration
-   ↓
-Valuation
+Appraisal
    ↓
 Assessment
    ↓
-Billing
-   ↓
-Payment
-   ↓
-Collection
+Tax Declaration
 ```
 
-The physical property is the long-lived asset.
+The physical property is the long-lived asset, identified by its PIN.
 
 A Tax Declaration is a historical/current assessment record associated with an RPU.
 
@@ -169,33 +182,23 @@ Never use the Tax Declaration number as the permanent identity of the physical p
 
 # 5. PHILIPPINE LEGAL AND REGULATORY CONTEXT
 
-PRIME is intended for Philippine LGUs.
-
 The architecture must accommodate applicable:
 
-* Republic Act No. 7160 — Local Government Code of 1991
-* Republic Act No. 12001 — Real Property Valuation and Assessment Reform Act
-* Applicable implementing rules and regulations
-* BLGF issuances
-* DOF/BLGF policies
+* Republic Act No. 7160 — Local Government Code of 1991 (Book II, Title II)
+* Republic Act No. 12001 — Real Property Valuation and Assessment Reform Act, and its IRR
+* The Local Assessment Manual (DOF DC 004-2025) — supersedes the MRPAAO
+* The MRPAAO (LAR 1-04) — structural basis of PRIME (§0)
+* BLGF issuances and DOF/BLGF policies
 * Philippine Valuation Standards where applicable
-* Provincial ordinances
-* City ordinances
-* Municipal ordinances
-* Approved Schedule of Market Values
+* Provincial, city and municipal ordinances
+* Approved Schedules of Market Values
 * Applicable assessment levels
-* Applicable local tax rates
 * Applicable exemptions
-* Applicable discounts
-* Applicable penalties
-* Applicable interest
 * Other official government requirements
 
 IMPORTANT:
 
 Never invent a legal requirement.
-
-Never invent a tax rate.
 
 Never invent an assessment level.
 
@@ -205,7 +208,7 @@ Never invent an ordinance.
 
 Never invent an exemption.
 
-Never invent a penalty or interest rate.
+Never invent a depreciation rate, adjustment factor or form content.
 
 If a legal or domain rule is uncertain:
 
@@ -219,14 +222,12 @@ Do not silently guess.
 
 # 6. LEGAL SOURCE POLICY
 
-When implementing a rule that depends on Philippine law or government policy:
-
-Prefer authoritative sources such as:
+When implementing a rule that depends on Philippine law or government policy, prefer authoritative sources:
 
 1. Official Philippine government sources
 2. BLGF
 3. DOF
-4. Official government publications
+4. Official government publications (including the MRPAAO and the LAM)
 5. Official LGU ordinances
 6. Other authoritative government sources
 
@@ -243,24 +244,7 @@ Jurisdiction
 System Representation
 ```
 
-Example:
-
-```text
-Rule:
-Assessment level applicable to a particular property category.
-
-Legal Basis:
-[official source]
-
-Effective Date:
-[date]
-
-Jurisdiction:
-[LGU]
-
-System Representation:
-AssessmentLevel table
-```
+The regulatory baseline is kept in `docs/analysis/current-real-property-regulatory-baseline.md`.
 
 ---
 
@@ -270,32 +254,29 @@ PRIME must be configurable.
 
 Never hard-code:
 
-* Tax rates
 * Assessment levels
 * SMV values
 * Property classifications
 * Actual uses
 * Sub-classifications
-* Penalties
-* Interest
-* Discounts
+* Adjustment factors
+* Depreciation rates
 * Exemptions
 * Ordinances
 * Effective dates
-* Fiscal years
-* Tax years
-* Document numbering
-* Signatories
+* Assessment years
+* PIN formats and document numbering
+* Transaction codes
+* Form layouts
+* Signatories and approval chains
 
 Represent them through configuration/reference tables and effective-dated rules.
 
-PRIME must support changes in laws and local ordinances without rewriting core business logic.
+PRIME must support changes in laws, the LAM and local ordinances without rewriting core business logic.
 
 ---
 
 # 8. PRODUCT PHILOSOPHY
-
-PRIME means:
 
 ### P — Property-Centric
 
@@ -307,7 +288,7 @@ Property, ownership, RPU and Tax Declaration information must be structured and 
 
 ### I — Information-Rich
 
-The system preserves complete property, ownership, valuation, assessment, tax, GIS and historical information.
+The system preserves complete property, ownership, appraisal, assessment, GIS and historical information.
 
 ### M — Mapping-Enabled
 
@@ -315,13 +296,13 @@ GIS and tax mapping are integrated into the property lifecycle.
 
 ### E — Evaluation-Oriented
 
-Valuation and assessment must be transparent, reproducible, configurable and historically traceable.
+Appraisal and assessment must be transparent, reproducible, configurable and historically traceable.
 
 ---
 
 # 9. PRIMARY USERS
 
-PRIME must support:
+The assessor's office (MRPAAO Ch. I):
 
 ```text
 SYSTEM_ADMIN
@@ -329,13 +310,15 @@ ASSESSOR
 APPRAISER
 ASSESSMENT_ENCODER
 ASSESSMENT_REVIEWER
-TREASURER
-CASHIER
 GIS_OFFICER
 REPORTING_OFFICER
 AUDITOR
 VIEW_ONLY
 ```
+
+The office's actual positions and delegations (provincial, city and municipal
+assessors; MRPAAO Ch. I §4–§5) map onto these roles through configuration.
+Their exact mapping is DOMAIN VERIFICATION REQUIRED.
 
 Use permission-based authorization in addition to roles.
 
@@ -343,42 +326,37 @@ Use permission-based authorization in addition to roles.
 
 # 10. MAJOR MODULES
 
-PRIME shall contain the following modules:
-
 ```text
 PRIME
 │
 ├── Dashboard
 ├── Property Registry
-├── Taxpayer Registry
+├── Owner / Taxpayer Registry
+├── Property Identification (PIN) & Tax Mapping
 ├── Parcel Management
 ├── RPU Management
-├── Tax Declaration
 ├── Land
 ├── Buildings & Improvements
 ├── Machinery
 ├── Property Classification
 ├── Actual Use
-├── Valuation
+├── Appraisal / Valuation
 ├── Schedule of Market Values
 ├── Assessment Levels
 ├── Assessment
+├── Tax Declaration & FAAS
+├── Exemptions
 ├── General Revision
 ├── Reassessment
 ├── Property Transactions
-├── GIS / Tax Mapping
-├── Billing
-├── Payments
-├── Collection
-├── Delinquency
-├── Exemptions
-├── Discounts
-├── Penalties
-├── Interest
+├── Notices of Assessment
+├── Sworn Statements
+├── Assessment Records (TMCR, AR, ORC, ROA)
+├── Assessment Appeals
+├── GIS / Tax Maps
 ├── Reports
-├── Documents
-├── Workflow
-├── Approvals
+├── Documents & Forms
+├── Workflow & Approvals
 ├── Audit Trail
 ├── User Management
 └── System Administration
@@ -435,29 +413,13 @@ Use the following stack unless there is a documented technical reason to change 
 
 Use current stable versions appropriate for the development environment.
 
-Before installing or selecting versions, inspect the environment.
-
 ---
 
-# 12. STARTING FROM ZERO
+# 12. ENVIRONMENT
 
-This project is starting from zero unless repository inspection proves otherwise.
-
-Do not assume:
-
-* .NET is installed
-* Node.js is installed
-* PostgreSQL is installed
-* PostGIS is installed
-* Docker is installed
-* Git is installed
-* Any IDE is installed
-
-First inspect the development environment.
-
-Do not blindly install software.
-
-Recommend the minimum required environment.
+The development environment is set up (Phase 0). Before installing or
+upgrading anything, inspect what is installed. Do not blindly install
+software.
 
 ---
 
@@ -484,68 +446,32 @@ Never claim something works unless it was actually verified.
 
 # 14. EXISTING REPOSITORY SAFETY
 
-Before modifying anything:
-
-Inspect:
-
-* Directory structure
-* Existing source code
-* Existing configuration
-* Existing database
-* Existing migrations
-* Existing dependencies
-* Existing tests
-* Existing documentation
-* Git status
+Before modifying anything, inspect the directory structure, source code,
+configuration, database, migrations, dependencies, tests, documentation and
+git status.
 
 Never delete or overwrite existing work without explicit instruction.
 
-If the repository is empty, create the project from scratch.
-
 ---
 
-# 15. INITIAL PROJECT STRUCTURE
-
-Preferred structure:
+# 15. PROJECT STRUCTURE
 
 ```text
 PRIME/
-│
 ├── CLAUDE.md
-├── README.md
-├── .gitignore
-├── .editorconfig
-│
 ├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── DATABASE.md
-│   ├── BUSINESS-RULES.md
-│   ├── VALUATION.md
-│   ├── ASSESSMENT.md
-│   ├── BILLING.md
-│   ├── GIS.md
-│   ├── SECURITY.md
-│   ├── API.md
-│   ├── DEPLOYMENT.md
-│   ├── DATA-MIGRATION.md
-│   └── DEVELOPMENT-ROADMAP.md
-│
 ├── src/
 │   ├── Prime.Domain/
 │   ├── Prime.Application/
 │   ├── Prime.Infrastructure/
 │   └── Prime.WebApi/
-│
 ├── frontend/
 │   └── prime-web/
-│
 └── tests/
     ├── Prime.Domain.Tests/
     ├── Prime.Application.Tests/
     └── Prime.IntegrationTests/
 ```
-
-Adapt this structure if the technical requirements justify doing so.
 
 ---
 
@@ -574,9 +500,7 @@ Infrastructure
 Application / Domain
 ```
 
-Domain must not depend on WebApi.
-
-Domain must not depend on UI.
+Domain must not depend on WebApi or UI.
 
 Business rules must not be implemented inside controllers.
 
@@ -584,7 +508,7 @@ Business rules must not be implemented inside controllers.
 
 # 17. DOMAIN STRUCTURE
 
-Recommended:
+Domain:
 
 ```text
 Prime.Domain/
@@ -605,18 +529,23 @@ Prime.Application/
 │   ├── Properties/
 │   ├── Taxpayers/
 │   ├── Parcels/
-│   ├── Rpu/
+│   ├── RealPropertyUnits/
 │   ├── TaxDeclarations/
-│   ├── Land/
+│   ├── Lands/
 │   ├── Buildings/
-│   ├── Machinery/
+│   ├── MachineryUnits/
 │   ├── Valuation/
 │   ├── Smv/
-│   ├── Assessment/
-│   ├── Billing/
-│   ├── Payments/
-│   ├── Delinquency/
-│   ├── GIS/
+│   ├── AssessmentLevels/
+│   ├── Assessments/
+│   ├── GeneralRevision/
+│   ├── Transactions/
+│   ├── Notices/
+│   ├── SwornStatements/
+│   ├── Registers/
+│   ├── Appeals/
+│   ├── Forms/
+│   ├── Gis/
 │   └── Reports/
 ├── DTOs/
 ├── Validators/
@@ -641,18 +570,16 @@ Prime.Infrastructure/
 
 # 18. DATABASE CORE MODEL
 
-The core relationship shall be:
-
 ```text
-TAXPAYER
+TAXPAYER (owner / administrator)
     │
     ▼
-PROPERTY_TAXPAYER
+PROPERTY_TAXPAYER (party, capacity, history)
     │
     ▼
-PROPERTY
+PROPERTY (PIN)
     │
-    ├── PARCEL
+    ├── PARCEL (geometry, tax map)
     ├── LAND
     ├── BUILDING
     ├── MACHINERY
@@ -660,22 +587,17 @@ PROPERTY
     └── RPU
           │
           ▼
-     TAX DECLARATION
-          │
-          ▼
-       VALUATION
+       VALUATION (appraisal)
           │
           ▼
        ASSESSMENT
           │
           ▼
-        TAX BILL
+     TAX DECLARATION (+ FAAS)
           │
-          ▼
-        PAYMENT
-          │
-          ▼
-       COLLECTION
+          ├── NOTICE OF ASSESSMENT
+          ├── REGISTERS (TMCR, AR, ORC, ROA)
+          └── APPEAL
 ```
 
 ---
@@ -707,7 +629,9 @@ CreatedBy
 UpdatedBy
 ```
 
-Property is the long-lived physical property identity.
+Property is the long-lived physical property identity. The PIN follows the
+Real Property Identification System (MRPAAO Ch. II §1) through a configurable
+numbering scheme (§115).
 
 ---
 
@@ -901,6 +825,9 @@ AssessedValue
 Status
 ```
 
+Appraisal of urban and agricultural lands follows MRPAAO Ch. IV, with every
+factor configurable.
+
 ---
 
 # 25. BUILDING / IMPROVEMENTS
@@ -951,7 +878,7 @@ Finishing
 Other
 ```
 
-Component types and costs must be configurable.
+Component types, costs and depreciation must be configurable.
 
 ---
 
@@ -988,7 +915,7 @@ AssessedValue
 Status
 ```
 
-Machinery valuation must be configurable.
+Machinery valuation must be configurable (MRPAAO Ch. IV).
 
 ---
 
@@ -1011,8 +938,8 @@ Create configurable reference data for:
 * Road Type
 * Condition
 * Ownership Type
-* Transaction Type
-* Tax Type
+* Transaction Type and Transaction Code
+* Title Type
 * Status
 
 Do not hard-code LGU-specific values.
@@ -1061,6 +988,10 @@ EndDate
 ```
 
 Never overwrite historical SMVs.
+
+The preparation of the Schedule of Fair Market Values (MRPAAO Ch. III §4–§5)
+and the role of the appraisal committee (Ch. VIII §1) are supported as a
+workflow; the values themselves always come from the LGU.
 
 ---
 
@@ -1115,6 +1046,7 @@ Potential methods include:
 * Depreciation
 * Location adjustment
 * SMV-based valuation
+* Special purpose property rules (MRPAAO Ch. IV §8)
 * Other legally applicable methods
 
 Do not assume one formula applies to every property.
@@ -1174,6 +1106,8 @@ Remarks
 
 Historical assessments must never be overwritten.
 
+Assessment principles, rules and the listing of real property follow MRPAAO Ch. V.
+
 ---
 
 # 33. GENERAL REVISION
@@ -1202,7 +1136,7 @@ General revision must:
 * Record effective date
 * Record approving user
 
-Large revisions must run as background jobs.
+Large revisions must run as background jobs (§72).
 
 ---
 
@@ -1231,7 +1165,8 @@ ADDITION_OF_IMPROVEMENT
 REMOVAL_OF_IMPROVEMENT
 ```
 
-Every transaction must be auditable.
+Transaction types, their requirements and their codes (MRPAAO Ch. VI §2) are
+configurable. Every transaction must be auditable.
 
 ---
 
@@ -1303,18 +1238,17 @@ Support:
 * Barangay boundaries
 * Zones
 * Roads
-* Tax map layers
+* Tax map layers (MRPAAO Ch. II §2: base maps, index maps, property identification maps)
 
 GIS functionality:
 
 ```text
 Search Property
 Search TD
-Search Taxpayer
+Search Owner
 Click Parcel
 View Property
 View Assessment
-View Tax Status
 View History
 Filter
 Print Tax Map
@@ -1324,85 +1258,13 @@ A selected parcel should link to the Property Profile.
 
 ---
 
-# 39. BILLING
+# 39. BILLING — removed (treasury scope; see §0)
 
-Create:
+# 40. PAYMENT — removed (treasury scope; see §0)
 
-```text
-TaxBill
-TaxBillDetail
-```
+# 41. COLLECTION — removed (treasury scope; see §0)
 
-Support:
-
-* Tax year
-* Basic RPT
-* Applicable additional levies
-* Discounts
-* Penalties
-* Interest
-* Total amount due
-
-All calculations must use configurable rules.
-
----
-
-# 40. PAYMENT
-
-Create:
-
-```text
-Payment
-PaymentAllocation
-```
-
-Support:
-
-* Full payment
-* Partial payment
-* Advance payment
-* Multiple-year payment
-* Multiple tax components
-* Reversal
-* Void
-* Correction
-
-Payment posting must be transactional and protected against duplicate submission.
-
----
-
-# 41. COLLECTION
-
-Collection must provide:
-
-* Daily collection
-* Cashier collection
-* Payment summary
-* Tax-type collection
-* Tax-year collection
-* Property collection
-* Taxpayer collection
-* Collection reconciliation
-
----
-
-# 42. DELINQUENCY
-
-Create:
-
-```text
-Delinquency
-```
-
-Support:
-
-* Property-level delinquency
-* Taxpayer-level delinquency
-* Tax-year delinquency
-* Aging
-* Penalties
-* Interest
-* Outstanding balance
+# 42. DELINQUENCY — removed (treasury scope; see §0)
 
 ---
 
@@ -1428,35 +1290,14 @@ ApprovedBy
 Status
 ```
 
+Exempt properties are appraised, assessed and listed like taxable ones
+(MRPAAO Ch. V §4; Assessment Roll for Exempt Properties).
+
 Do not invent exemptions.
 
 ---
 
-# 44. DISCOUNTS / PENALTIES / INTEREST
-
-Create:
-
-```text
-DiscountRule
-PenaltyRule
-InterestRule
-```
-
-Each must support:
-
-```text
-LegalBasis
-OrdinanceId
-TaxType
-Rate
-FixedAmount
-Conditions
-StartDate
-EndDate
-Status
-```
-
-Never hard-code these values.
+# 44. DISCOUNTS / PENALTIES / INTEREST — removed (treasury scope; see §0)
 
 ---
 
@@ -1499,13 +1340,14 @@ For sensitive transactions, support separation of duties.
 Examples:
 
 * SMV approval
+* Assessment level approval
 * Assessment approval
 * General revision approval
 * Reassessment approval
 * Exemption approval
-* Tax Declaration cancellation
-* Payment reversal
-* Billing correction
+* Tax Declaration approval and cancellation
+* Property transaction approval
+* Configuration approval (numbering, forms, transaction types)
 
 Where configured, the creator must not be able to approve their own transaction.
 
@@ -1523,21 +1365,7 @@ UserRole
 RolePermission
 ```
 
-Roles:
-
-```text
-SYSTEM_ADMIN
-ASSESSOR
-APPRAISER
-ASSESSMENT_ENCODER
-ASSESSMENT_REVIEWER
-TREASURER
-CASHIER
-GIS_OFFICER
-REPORTING_OFFICER
-AUDITOR
-VIEW_ONLY
-```
+Roles: as in §9.
 
 Use least-privilege security.
 
@@ -1578,7 +1406,6 @@ REJECT
 POST
 VOID
 CANCEL
-REVERSE
 LOGIN
 LOGOUT
 EXPORT
@@ -1594,9 +1421,10 @@ Do not physically delete:
 
 * Tax Declarations
 * Assessments
-* Payments
-* Bills
+* Appraisals (valuations)
 * Transactions
+* Issued forms, notices and registers
+* Appeals
 * Audit logs
 * Historical ownership
 * Historical SMVs
@@ -1616,19 +1444,19 @@ PROPERTY
 │
 ├── Basic Information
 ├── GIS Map
-├── Owners
+├── Owners and other parties
 ├── Parcels
 ├── Land
 ├── Buildings
 ├── Machinery
 ├── RPUs
-├── Tax Declarations
+├── Tax Declarations / FAAS
 ├── Current Assessment
 ├── Assessment History
 ├── Transactions
-├── Billing
-├── Payments
-├── Delinquency
+├── Notices of Assessment
+├── Sworn Statements
+├── Appeals
 ├── Documents
 └── Audit History
 ```
@@ -1672,47 +1500,9 @@ Show the calculation breakdown.
 
 ---
 
-# 52. BILLING WORKSPACE
+# 52. BILLING WORKSPACE — removed (treasury scope; see §0)
 
-Display:
-
-```text
-Taxpayer
-Property
-Tax Declaration
-Tax Year
-
-Basic RPT
-Applicable Additional Levy
-Discount
-Penalty
-Interest
-Total
-
-Payments
-Balance
-Delinquency
-```
-
----
-
-# 53. PAYMENT WORKSPACE
-
-Display:
-
-```text
-Bill
-Tax Year
-Amount Due
-Payment Amount
-Payment Method
-Reference
-Official Receipt Number
-Allocation
-Remaining Balance
-```
-
-Require confirmation before posting.
+# 53. PAYMENT WORKSPACE — removed (treasury scope; see §0)
 
 ---
 
@@ -1728,7 +1518,6 @@ Filters
 Parcel Selection
 Property Information
 Assessment Information
-Tax Information
 ```
 
 Clicking a parcel should open the Property Profile.
@@ -1743,15 +1532,13 @@ Dashboard must show real database values:
 * Total parcels
 * Total land area
 * Total market value
-* Total assessed value
-* Current billing
-* Collection
-* Outstanding balance
-* Delinquent properties
+* Total assessed value (taxable and exempt)
 * Properties by classification
 * Properties by barangay
 * Pending approvals
 * Recent transactions
+* General revision progress
+* Pending appeals
 
 Do not use fake production statistics.
 
@@ -1762,7 +1549,7 @@ Do not use fake production statistics.
 Global search:
 
 ```text
-Property ID
+Property ID (PIN)
 Tax Declaration Number
 RPU Number
 Owner Name
@@ -1793,22 +1580,19 @@ Implement:
 
 ## Assessment
 
-* Assessment roll
+* Assessment Roll — taxable and exempt
 * Tax Declaration list
 * Market value summary
 * Assessed value summary
 * Assessment history
 * General revision
 * Reassessment
+* Records of Assessment
 
-## Tax
+## Records (MRPAAO Ch. VI)
 
-* Billing
-* Collection
-* Outstanding balance
-* Delinquency
-* Payment history
-* Statement of account
+* Tax Map Control Roll
+* Ownership Record Card
 
 ## GIS
 
@@ -1833,11 +1617,15 @@ CSV
 Print
 ```
 
+Reports required by BLGF or the LAM are DOMAIN VERIFICATION REQUIRED until
+their content is supplied.
+
 ---
 
 # 58. DOCUMENT GENERATION
 
-Use configurable document templates.
+Use configurable document templates (forms foundation: form definitions,
+versions, issued snapshots).
 
 Support:
 
@@ -1865,6 +1653,7 @@ Support secure documents such as:
 * Assessment documents
 * Exemption documents
 * Valuation documents
+* Appeal records
 * Supporting records
 
 Store metadata in the database.
@@ -1884,7 +1673,7 @@ Support:
 
 Import:
 
-* Taxpayers
+* Owners/taxpayers
 * Properties
 * Parcels
 * Tax Declarations
@@ -1921,7 +1710,7 @@ Never silently import invalid data.
 
 Validate:
 
-* Duplicate property
+* Duplicate property / PIN
 * Duplicate Tax Declaration
 * Duplicate RPU
 * Duplicate taxpayer
@@ -1939,29 +1728,38 @@ Validate:
 
 # 62. API
 
-Create REST APIs:
+REST APIs in scope:
 
 ```text
 /api/properties
 /api/taxpayers
 /api/parcels
 /api/rpus
-/api/tax-declarations
 /api/land
 /api/buildings
 /api/machinery
+/api/tax-declarations
 /api/smv
+/api/assessment-levels
+/api/adjustment-factors
 /api/valuation
 /api/assessments
+/api/general-revision
 /api/transactions
+/api/notices
+/api/sworn-statements
+/api/registers
+/api/appeals
 /api/gis
-/api/billing
-/api/payments
-/api/collection
-/api/delinquency
-/api/exemptions
+/api/forms
+/api/numbering-schemes
+/api/approval-chains
+/api/reference
 /api/reports
 ```
+
+`/api/bills`, `/api/billing`, `/api/payments`, `/api/collection` and
+`/api/collections` exist from the earlier scope and are frozen (§0).
 
 Support:
 
@@ -2010,11 +1808,13 @@ Use:
 * Concurrency tokens
 * Transactions
 
-All financial and assessment operations must be atomic.
+All assessment operations must be atomic.
 
 ---
 
 # 65. MONEY
+
+Market values, assessed values, costs and other amounts:
 
 C#:
 
@@ -2045,12 +1845,12 @@ Use consistent precision and scale.
 
 Protect against:
 
-* Duplicate payment
 * Duplicate Tax Declaration
 * Duplicate posting
 * Simultaneous assessment changes
 * Simultaneous approvals
 * Duplicate transaction submission
+* Duplicate document numbers
 
 Use:
 
@@ -2088,7 +1888,8 @@ Never commit secrets to Git.
 
 # 68. PERSONAL DATA
 
-Treat taxpayer and ownership information as sensitive.
+Treat owner and taxpayer information as sensitive (Data Privacy Act;
+RA 12001 penalties for unauthorized processing of RPIS data).
 
 Minimize exposure.
 
@@ -2109,9 +1910,7 @@ Log:
 * Errors
 * Authentication events
 * Authorization failures
-* Assessment events
-* Billing events
-* Payment events
+* Appraisal and assessment events
 * Approval events
 * Import/export events
 * Important business events
@@ -2213,21 +2012,17 @@ Jobs must be:
 
 # 74. TESTING
 
-Create:
-
 ## Unit Tests
 
 Test:
 
-* Valuation
-* Assessment
+* Valuation (land, building, machinery)
+* Adjustment factors
 * Depreciation
-* Billing
-* Discounts
-* Penalties
-* Interest
-* Payment allocation
-* Delinquency
+* Assessment levels and brackets
+* Assessment
+* Numbering patterns
+* Transaction code ranking
 
 ## Integration Tests
 
@@ -2237,7 +2032,7 @@ Test:
 * API
 * Authentication
 * Authorization
-* Workflow
+* Workflow and maker-checker
 
 ## End-to-End Tests
 
@@ -2246,45 +2041,40 @@ Test:
 ```text
 CREATE PROPERTY
 ↓
-CREATE TAXPAYER
+CREATE OWNER
 ↓
 CREATE PARCEL
 ↓
 CREATE RPU
 ↓
-CREATE TAX DECLARATION
-↓
-VALUATE
+APPRAISE (VALUATE)
 ↓
 ASSESS
 ↓
-BILL
+APPROVE AND POST
 ↓
-PAY
+ISSUE TAX DECLARATION / FAAS
 ↓
-VERIFY BALANCE
+NOTICE OF ASSESSMENT
+↓
+VERIFY RECORDS (Assessment Roll, ROA)
 ```
 
 ---
 
-# 75. FINANCIAL TESTING
+# 75. CALCULATION TESTING
 
-Explicitly test:
+Explicitly test appraisal and assessment arithmetic:
 
 * Zero
 * Large amounts
 * Decimal values
 * Rounding
-* Partial payment
-* Full payment
-* Overpayment
-* Multiple-year payment
-* Penalty
-* Interest
-* Discount
-* Reversal
-* Void
-* Correction
+* Boundaries between assessment level brackets
+* Depreciation limits
+* Adjustments
+* Multiple classifications on one unit
+* Historical rules (a past date uses the rules then in force)
 
 All calculations must be deterministic.
 
@@ -2298,12 +2088,11 @@ Never destroy:
 
 * Previous owners
 * Previous Tax Declarations
-* Previous assessments
+* Previous appraisals and assessments
 * Previous SMVs
 * Previous classifications
 * Previous transactions
-* Previous payments
-* Previous bills
+* Issued forms and registers
 
 PRIME must answer:
 
@@ -2343,19 +2132,17 @@ Provide administration for:
 * Barangays
 * Zones
 * Offices
-* Signatories
-* Fiscal year
-* Tax year
-* Document numbering
+* Signatories and approval chains
+* Assessment years
+* PIN format and document numbering
+* Form versions
 * Classifications
 * Actual uses
 * Property types
+* Transaction types and codes
 * SMV
+* Adjustment factors
 * Assessment levels
-* Tax rates
-* Discounts
-* Penalties
-* Interest
 * Exemptions
 * System parameters
 
@@ -2487,26 +2274,19 @@ Contact Information
 
 # 86. PROJECT DOCUMENTATION
 
-Maintain:
+Maintain in `/docs/`:
 
 ```text
-/docs/
-├── ARCHITECTURE.md
-├── DATABASE.md
-├── DOMAIN-MODEL.md
-├── BUSINESS-RULES.md
-├── VALUATION.md
-├── ASSESSMENT.md
-├── BILLING.md
-├── COLLECTION.md
-├── GIS.md
-├── SECURITY.md
-├── API.md
-├── DEPLOYMENT.md
-├── DATA-MIGRATION.md
-├── TESTING.md
-└── DEVELOPMENT-ROADMAP.md
+ARCHITECTURE.md
+DATABASE.md
+DOMAIN-MODEL.md
+GIS.md
+FORMS-REVISION-PLAN.md
+DEVELOPMENT-ROADMAP.md
+analysis/   (regulatory baseline, MRPAAO forms model, design docs per step)
 ```
+
+`BILLING.md` and `analysis/collection.md` document the frozen treasury code (§0).
 
 Update documentation whenever architecture changes.
 
@@ -2516,278 +2296,153 @@ Update documentation whenever architecture changes.
 
 Do not build the entire system in one uncontrolled operation.
 
-Use the following phases.
-
-## PHASE 0 — ENVIRONMENT & DISCOVERY
-
-Inspect:
-
-* Operating system
-* Git
-* .NET
-* Node.js
-* Package managers
-* PostgreSQL
-* PostGIS
-* Docker if available
-* IDE/editor
-* Repository
-
-Do not modify application code yet.
-
-Report:
-
 ```text
-Environment
-Repository
-Dependencies
-Risks
-Recommended Setup
+Phase 0   Environment & discovery                    done
+Phase 1   Architecture                               done
+Phase 2   Foundation                                 done
+Phase 3   Core database                              done
+Phase 4   Property registry                          done
+Phase 5   Valuation                                  done (DEMO values)
+Phase 6   Assessment                                 done (DEMO values)
+Phase 7   GIS                                        done
+          Forms foundation and MRPAAO forms model    done
+Phase 8   Billing                                    built under the earlier scope; frozen (§0)
+Phase 9   Collection                                 built under the earlier scope; frozen (§0)
+Phase 10  MRPAAO completeness                        next (§97)
+Phase 11  Reporting                                  (§98)
+Phase 12  Workflow & security                        (§99)
+Phase 13  Import / migration                         (§100)
+Phase 14  Production hardening                       (§101)
 ```
 
+`docs/DEVELOPMENT-ROADMAP.md` holds each phase's status; check it against
+the code before trusting it.
+
 ---
 
-# 88. PHASE 1 — ARCHITECTURE
+# 88. PHASE 1 — ARCHITECTURE (done)
 
-Before coding business functionality, create:
+Architecture, domain model, ERD, database design, API design, security model,
+GIS architecture, valuation and assessment architecture, roadmap.
 
-* Architecture
-* Domain model
-* ERD
-* Database design
-* API design
-* Security model
-* GIS architecture
-* Valuation architecture
-* Assessment architecture
-* Development roadmap
+---
 
-Create:
+# 89. PHASE 2 — FOUNDATION (done)
+
+Solution, projects, configuration, dependency injection, logging, PostgreSQL,
+PostGIS, EF Core, API, frontend, authentication foundation, health checks,
+initial migration.
+
+---
+
+# 90. PHASE 3 — CORE DATABASE (done)
+
+Reference data, Property, Taxpayer, PropertyTaxpayer, Parcel, RPU,
+TaxDeclaration, Land, Building, Machinery.
+
+---
+
+# 91. PHASE 4 — PROPERTY REGISTRY (done)
+
+Property registration, search and profile; taxpayer management; ownership
+history; parcels; RPUs; Tax Declarations.
+
+---
+
+# 92. PHASE 5 — VALUATION (done, DEMO values)
+
+SMV and versioning, assessment levels, valuation rules and engine, calculation
+breakdown, valuation history.
+
+---
+
+# 93. PHASE 6 — ASSESSMENT (done, DEMO values)
+
+Assessment workflow and approval, reassessment, general revision, historical
+assessment, before/after comparison, audit trail.
+
+---
+
+# 94. PHASE 7 — GIS (done)
+
+PostGIS, parcel geometry, map, layers, search, parcel selection, property
+popup, tax map printing.
+
+---
+
+# 95. PHASE 8 — BILLING (frozen; §0)
+
+# 96. PHASE 9 — COLLECTION (frozen; §0)
+
+---
+
+# 97. PHASE 10 — MRPAAO COMPLETENESS
+
+Bring PRIME in line with each chapter of the manual, in checkpointed steps.
+Each step starts with a design document under `docs/analysis/` that cites the
+manual's pages and lists review questions. No code is written before the
+user approves it (§108).
 
 ```text
-/docs/ARCHITECTURE.md
-/docs/DATABASE.md
-/docs/DOMAIN-MODEL.md
-/docs/DEVELOPMENT-ROADMAP.md
+10a  Real Property Identification System (Ch. II)
+     PIN structure through configurable numbering; tax mapping operations;
+     base, index and property identification maps; pre- and post-tax-map
+     control rolls.
+
+10b  Appraisal (Ch. IV)
+     Rules for urban lands, agricultural and other lands, buildings and
+     other structures (including depreciation), machinery and equipment,
+     and special purpose properties, all as configurable rules.
+
+10c  Assessment, listing and exemptions (Ch. V)
+     Guiding principles and assessment rules; listing of real property;
+     exemptions with their legal basis and the exempt assessment roll.
+
+10d  Records management (Ch. VI)
+     Complete the forms and records (FAAS, TD, TMCR, AR, ORC, ROA, NOA,
+     sworn statement), the codes used in assessment, and the numbering
+     system.
+
+10e  General revision and the Schedule of Fair Market Values (Ch. III, VIII §1–§2)
+     General revision of assessments and property classification; support
+     for preparing the SMV (mass appraisal data, approaches to value) and
+     its review and approval, including the appraisal committee.
+
+10f  Assessment appeals (Ch. VII; §113)
 ```
 
-Do not rush into UI development.
-
----
-
-# 89. PHASE 2 — FOUNDATION
-
-Implement:
-
-* Solution
-* Projects
-* Configuration
-* Dependency injection
-* Logging
-* PostgreSQL
-* PostGIS
-* EF Core
-* API
-* Frontend
-* Authentication foundation
-* Health checks
-* Initial migration
-
-Run:
-
-```text
-build
-tests
-migration
-```
-
-Fix all errors.
-
----
-
-# 90. PHASE 3 — CORE DATABASE
-
-Implement:
-
-* Reference data
-* Property
-* Taxpayer
-* PropertyTaxpayer
-* Parcel
-* RPU
-* TaxDeclaration
-* Land
-* Building
-* Machinery
-
-Create:
-
-* Entities
-* EF configurations
-* Migrations
-* Constraints
-* Indexes
-* Tests
-
----
-
-# 91. PHASE 4 — PROPERTY REGISTRY
-
-Implement:
-
-* Property registration
-* Property search
-* Property profile
-* Taxpayer management
-* Ownership history
-* Parcel management
-* RPU
-* Tax Declaration
-
----
-
-# 92. PHASE 5 — VALUATION
-
-Implement:
-
-* SMV
-* SMV versioning
-* Assessment levels
-* Valuation rules
-* Valuation engine
-* Calculation breakdown
-* Valuation history
-
-Use demo/test values until official LGU data is supplied.
-
----
-
-# 93. PHASE 6 — ASSESSMENT
-
-Implement:
-
-* Assessment workflow
-* Assessment approval
-* Reassessment
-* General Revision
-* Historical assessment
-* Before/after comparison
-* Audit trail
-
----
-
-# 94. PHASE 7 — GIS
-
-Implement:
-
-* PostGIS
-* Parcel geometry
-* Map
-* Layers
-* Search
-* Parcel selection
-* Property popup
-* Tax map
-
----
-
-# 95. PHASE 8 — BILLING
-
-Implement:
-
-* Billing engine
-* Tax bill
-* Tax bill details
-* Discounts
-* Penalties
-* Interest
-* Statement of account
-
----
-
-# 96. PHASE 9 — COLLECTION
-
-Implement:
-
-* Payment
-* Payment allocation
-* Collection
-* Reversal
-* Void
-* Corrections
-* Collection reports
-
----
-
-# 97. PHASE 10 — DELINQUENCY
-
-Implement:
-
-* Delinquency
-* Aging
-* Outstanding balances
-* Delinquency reports
-* Statements
+Values the manual gives as examples or as then-current rates are
+configuration, not code. The LAM supersedes the manual wherever they differ.
 
 ---
 
 # 98. PHASE 11 — REPORTING
 
-Implement:
-
-* Property reports
-* Assessment reports
-* Billing reports
-* Collection reports
-* Delinquency reports
-* GIS reports
-* Audit reports
+Property, assessment, records, GIS and audit reports (§57) in PDF, Excel,
+CSV and print, as background jobs for large reports (§73).
 
 ---
 
 # 99. PHASE 12 — WORKFLOW & SECURITY
 
-Complete:
-
-* RBAC
-* Permissions
-* Maker-checker
-* Approval workflows
-* Audit trail
-* Security hardening
-* Data protection
+RBAC, permissions, maker-checker on every sensitive transaction (§46),
+approval workflows, audit trail completeness, security hardening, data
+protection, real login.
 
 ---
 
 # 100. PHASE 13 — IMPORT / MIGRATION
 
-Implement:
-
-* CSV
-* Excel
-* Validation
-* Preview
-* Duplicate detection
-* Error reporting
-* Rollback
+CSV and Excel import (§60), validation, preview, duplicate detection, error
+reporting, rollback; migration of an LGU's existing assessment records.
 
 ---
 
 # 101. PHASE 14 — PRODUCTION HARDENING
 
-Perform:
-
-* Security review
-* Database review
-* Performance review
-* API review
-* UI review
-* Accessibility review
-* Backup testing
-* Recovery testing
-* Concurrency testing
-* Financial testing
-* Regression testing
+Security, database, performance, API, UI and accessibility reviews; backup
+and recovery testing; concurrency and calculation testing; regression
+testing.
 
 ---
 
@@ -2811,7 +2466,8 @@ test
 lint
 ```
 
-as applicable.
+as applicable. For frontend changes, also run the production build
+(`tsc -b`); the dev server does not catch type errors.
 
 ## Rule 4 — Fix failures
 
@@ -2829,15 +2485,15 @@ or make it configurable.
 
 ## Rule 6 — Preserve history
 
-Never destroy assessment, billing, ownership, or payment history.
+Never destroy appraisal, assessment, ownership or record history.
 
 ## Rule 7 — No magic numbers
 
 Do not embed unexplained business values.
 
-## Rule 8 — No magic tax rules
+## Rule 8 — No magic rules
 
-Tax rules must be configurable.
+Appraisal and assessment rules must be configurable.
 
 ## Rule 9 — Single source of business logic
 
@@ -2850,8 +2506,6 @@ Document significant architectural decisions.
 ---
 
 # 103. COMMAND EXECUTION
-
-When operating in the repository:
 
 ```text
 INSPECT
@@ -2881,6 +2535,9 @@ Do not skip verification.
 
 Keep changes reviewable.
 
+Commit and push only when the user asks; an earlier instruction to commit
+does not carry forward to later work.
+
 Never commit:
 
 * Passwords
@@ -2889,6 +2546,7 @@ Never commit:
 * Private keys
 * Production credentials
 * Sensitive production database dumps
+* LAM-derived or ordinance-derived content (§0)
 
 Use environment variables or secure secret management.
 
@@ -2905,6 +2563,9 @@ Before destructive migration:
 5. Require explicit confirmation for destructive production changes.
 
 Never automatically drop production tables.
+
+Apply migrations to the local development database first; the shared
+(Supabase) database is updated only when the user asks.
 
 ---
 
@@ -2929,13 +2590,13 @@ to ordinary users.
 
 # 107. QUALITY GATE
 
-A phase is NOT complete until:
+A phase or step is NOT complete until:
 
 * Code compiles
 * Tests pass
 * Database migration works
 * API works
-* UI works where applicable
+* UI works where applicable (verified in a browser)
 * Authorization works
 * Audit works where required
 * Documentation is updated
@@ -2943,102 +2604,61 @@ A phase is NOT complete until:
 
 ---
 
-# 108. FIRST TASK
+# 108. WORKING METHOD
 
-IMPORTANT:
+For each new phase or step:
 
-Do NOT start by writing the entire application.
-
-Do NOT generate hundreds of files immediately.
-
-Do NOT create the complete UI first.
-
-Do NOT invent legal/tax values.
-
-First inspect the repository and development environment.
-
-Then produce:
-
-```text
-1. Environment assessment
-2. Repository assessment
-3. Recommended technology versions
-4. Architecture
-5. Domain model
-6. ERD proposal
-7. Database strategy
-8. Security strategy
-9. GIS strategy
-10. Valuation strategy
-11. Assessment strategy
-12. Billing strategy
-13. Development phases
-14. Risks
-15. Questions requiring domain/legal clarification
-```
-
-Then begin **PHASE 1 — ARCHITECTURE**.
+1. Inspect the code, the roadmap and the relevant pages of the manual.
+2. Write a design document under `docs/analysis/`: what exists, the gaps,
+   the proposal, the delivery steps and numbered review questions, each
+   with a recommendation.
+3. Wait for the user's decisions. Record them in the document.
+4. Implement in checkpointed steps; build, test and verify each one, in a
+   browser where there is UI.
+5. Update the design document, the roadmap and the project memory.
+6. Report what was done, what was verified and what remains open.
 
 ---
 
-# 109. FIRST CLAUDE CODE RESPONSE
+# 109. FIRST RESPONSE — superseded
 
-Your first response after reading this CLAUDE.md should contain:
-
-```text
-PRIME INITIALIZATION
-
-1. Environment Status
-2. Repository Status
-3. Required Tools
-4. Proposed Architecture
-5. Proposed Database Architecture
-6. Proposed Domain Model
-7. Proposed Development Roadmap
-8. Risks
-9. Domain/Legal Items Requiring Verification
-10. Next Action
-```
-
-Do not claim implementation has occurred unless it has actually occurred.
+The project is past its first task; follow §108.
 
 ---
 
 # 110. FINAL SYSTEM OBJECTIVE
 
-PRIME must eventually allow an authorized LGU user to:
+PRIME must allow an authorized assessor's office user to:
 
-1. Register a physical property.
-2. Register its taxpayer/owner.
-3. Register its parcel.
-4. Map the property.
-5. Create an RPU.
-6. Create a Tax Declaration.
-7. Record land.
-8. Record buildings.
-9. Record improvements.
-10. Record machinery.
-11. Determine classification.
-12. Determine actual use.
-13. Apply the appropriate valuation methodology.
-14. Determine market value.
-15. Apply the applicable assessment rule.
-16. Determine assessed value.
-17. Preserve the calculation history.
-18. Generate RPT billing.
-19. Record payments.
-20. Monitor balances.
-21. Monitor delinquency.
-22. Process property transactions.
-23. Perform reassessment.
-24. Perform general revision.
-25. Produce official reports.
-26. Generate documents.
-27. Maintain GIS/tax maps.
-28. Maintain complete historical records.
-29. Maintain complete audit trails.
-30. Enforce role-based access.
-31. Support future changes in Philippine valuation and assessment rules.
+1. Register a physical property and give it its PIN.
+2. Register its owners, administrators and other parties.
+3. Register and map its parcel on the tax map.
+4. Create its RPUs.
+5. Record land, buildings, other improvements and machinery.
+6. Determine classification and actual use.
+7. Apply the appropriate appraisal methodology.
+8. Determine market value.
+9. Apply the applicable assessment level.
+10. Determine assessed value.
+11. Preserve the calculation history.
+12. Approve and post the assessment.
+13. Issue the Tax Declaration and FAAS.
+14. Serve the Notice of Assessment.
+15. Record sworn statements.
+16. Process property transactions.
+17. Perform reassessment.
+18. Perform general revision and support SMV preparation.
+19. Record exemptions.
+20. Record assessment appeals and apply their decisions.
+21. Maintain the Tax Map Control Roll, Assessment Rolls, Ownership Record
+    Cards and Records of Assessment.
+22. Produce official reports.
+23. Generate documents.
+24. Maintain GIS/tax maps.
+25. Maintain complete historical records.
+26. Maintain complete audit trails.
+27. Enforce role-based access.
+28. Support future changes in Philippine valuation and assessment rules.
 
 ---
 
@@ -3048,9 +2668,9 @@ The system must be able to answer, from its own data:
 
 > Who owns this property?
 
-> Where is the property located?
+> Where is the property located, and what is its PIN?
 
-> What parcel does it correspond to?
+> What parcel does it correspond to, and where is it on the tax map?
 
 > What land, buildings, improvements and machinery are associated with it?
 
@@ -3066,6 +2686,8 @@ The system must be able to answer, from its own data:
 
 > What is its assessed value?
 
+> Is it taxable or exempt, and on what basis?
+
 > Which SMV was used?
 
 > Which valuation method was used?
@@ -3078,13 +2700,9 @@ The system must be able to answer, from its own data:
 
 > Why did the assessment change?
 
-> What taxes are due?
+> Was the owner notified, and when?
 
-> What has been paid?
-
-> What remains outstanding?
-
-> Is the property delinquent?
+> Has the assessment been appealed, and with what result?
 
 > Who created the record?
 
@@ -3119,7 +2737,8 @@ MAINTAINABILITY
 TESTABILITY
 ```
 
-Build PRIME as a system that an LGU can maintain and audit for many years.
+Build PRIME as a system that an LGU assessor's office can maintain and audit
+for many years.
 
 Never sacrifice historical integrity for convenience.
 
@@ -3130,3 +2749,58 @@ Never invent legal requirements.
 Never hide errors.
 
 Always verify before claiming success.
+
+---
+
+# 113. ASSESSMENT APPEALS
+
+MRPAAO Ch. VII sets the rules for appeals before the Local Board of
+Assessment Appeals (LBAA) and the Central Board of Assessment Appeals (CBAA).
+PRIME records each appeal against an assessment: the appellant, the grounds,
+the dates filed and decided, the board's decision and any further appeal.
+When a decision requires it, a revised assessment is created through the
+normal workflow, without overwriting the original.
+
+Periods, requisites and procedures come from the manual and the current law
+as configuration or documented rules. They are DOMAIN VERIFICATION REQUIRED
+until checked against RA 7160, RA 12001 and the LAM.
+
+---
+
+# 114. FORMS, CODES AND NUMBERING
+
+MRPAAO Ch. VI and its Attachments 1–11 define the assessment forms and
+records:
+- FAAS for land/other improvements, buildings and machinery;
+- the Tax Declaration;
+- the Tax Map Control Roll;
+- the Assessment Rolls for taxable and exempt properties;
+- the Ownership Record Card and the Record of Assessment;
+- the Notice of Assessment and the Sworn Statement.
+
+PRIME renders them through versioned form definitions and issues frozen
+snapshots. The MRPAAO layouts are reference layouts, and the LAM's forms
+replace them when supplied. Codes used in assessment (e.g. transaction codes)
+and document numbering are configuration. The design is in
+`docs/analysis/mrpaao-forms-model.md` and `docs/FORMS-REVISION-PLAN.md`.
+
+---
+
+# 115. PROPERTY IDENTIFICATION AND TAX MAPPING
+
+MRPAAO Ch. II describes the Property Identification Number and tax mapping
+operations: base maps, section, barangay, municipality and district index
+maps, property identification maps, and pre- and post-tax-map control rolls.
+PRIME stores the PIN as a configurable pattern (never a hard-coded format),
+links every property to its parcel and tax map, and produces the maps and
+control rolls from its own data. Unit PINs for buildings and machinery on a
+land follow the configured suffix rules.
+
+---
+
+# 116. MISCELLANEOUS ASSESSMENT MATTERS
+
+MRPAAO Ch. VIII (appraisal committee, zonal valuation, land use planning)
+informs the SMV preparation workflow (§28) and reference data. Implement only
+what a design document has confirmed against current law; treat the rest as
+reference material.
