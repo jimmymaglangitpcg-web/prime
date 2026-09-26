@@ -3,7 +3,10 @@ namespace Prime.Domain.Enums;
 /// <summary>The MRPAAO assessment registers (Att. 5–9; docs/analysis/mrpaao-forms-model.md §15).</summary>
 public enum RegisterKind
 {
-    /// <summary>Tax Map Control Roll (Att. 5): parcels of a barangay.</summary>
+    /// <summary>
+    /// Tax Map Control Roll (Att. 5): the post-TMCR, one per tax map section in PIN
+    /// order (MRPAAO Ch. II §2 C.5, Figure 10); a barangay without sections lists its parcels.
+    /// </summary>
     TaxMapControlRoll = 0,
     /// <summary>Assessment Roll — Taxable Properties (Att. 6).</summary>
     AssessmentRollTaxable = 1,
@@ -13,4 +16,9 @@ public enum RegisterKind
     OwnershipRecordCard = 3,
     /// <summary>Record of Assessment (Att. 9): assessment transactions of a barangay and classification in a period.</summary>
     RecordOfAssessment = 4,
+    /// <summary>
+    /// Pre-Tax Map Control Roll (MRPAAO Ch. II §2 A.d, Figure 3): the land FAAS of a
+    /// barangay in temporary-PIN order, for the tax mapping campaign.
+    /// </summary>
+    PreTaxMapControlRoll = 5,
 }

@@ -14,11 +14,14 @@ public sealed class RegisterRunConfiguration : IEntityTypeConfiguration<Register
             // Each kind carries its scope (docs/analysis/mrpaao-forms-model.md §15).
             t.HasCheckConstraint("CK_RegisterRuns_Scope",
                 "(\"Kind\" = 'OwnershipRecordCard' AND \"TaxpayerId\" IS NOT NULL) OR (\"Kind\" <> 'OwnershipRecordCard' AND \"BarangayId\" IS NOT NULL)");
+            // Only the Tax Map Control Roll is kept per section (MRPAAO Ch. II §2 C.5).
+            t.HasCheckConstraint("CK_RegisterRuns_Section", "\"SectionId\" IS NULL OR \"Kind\" = 'TaxMapControlRoll'");
         });
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Kind).HasConversion<string>().HasMaxLength(30);
         builder.Property(x => x.Remarks).HasMaxLength(1000);
         builder.HasOne(x => x.Barangay).WithMany().HasForeignKey(x => x.BarangayId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Section).WithMany().HasForeignKey(x => x.SectionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Classification).WithMany().HasForeignKey(x => x.ClassificationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Taxpayer).WithMany().HasForeignKey(x => x.TaxpayerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => new { x.Kind, x.CreatedAt });

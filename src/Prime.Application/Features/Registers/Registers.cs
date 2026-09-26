@@ -4,6 +4,7 @@ using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Forms;
 using Prime.Application.Features.Properties;
+using Prime.Application.Features.PropertyIdentification;
 using Prime.Application.Features.RealPropertyUnits;
 using Prime.Application.Features.TaxDeclarations;
 using Prime.Domain.Entities;
@@ -12,12 +13,14 @@ using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.Registers;
 
+/// <param name="SectionId">Tax Map Control Roll only: the tax map section (its barangay is taken from it).</param>
 public sealed record CreateRegisterRunRequest(
-    RegisterKind Kind, DateOnly AsOf, Guid? BarangayId, Guid? ClassificationId, Guid? TaxpayerId, DateOnly? FromDate, string? Remarks);
+    RegisterKind Kind, DateOnly AsOf, Guid? BarangayId, Guid? ClassificationId, Guid? TaxpayerId, DateOnly? FromDate, string? Remarks, Guid? SectionId = null);
 
 public sealed record RegisterRunDto(
     Guid Id, RegisterKind Kind, string FormCode, DateOnly AsOf, DateOnly? FromDate, Guid? BarangayId, string? BarangayName,
-    Guid? ClassificationId, string? ClassificationName, Guid? TaxpayerId, string? TaxpayerName, string? Remarks, DateTimeOffset CreatedAt);
+    Guid? ClassificationId, string? ClassificationName, Guid? TaxpayerId, string? TaxpayerName, string? Remarks, DateTimeOffset CreatedAt,
+    Guid? SectionId = null, string? SectionIndexNumber = null);
 
 public interface IRegisterService
 {
@@ -40,6 +43,7 @@ public sealed class RegisterService(IApplicationDbContext db) : IRegisterService
         RegisterKind.AssessmentRollExempt => "AR_EXEMPT",
         RegisterKind.OwnershipRecordCard => "ORC",
         RegisterKind.RecordOfAssessment => "ROA",
+        RegisterKind.PreTaxMapControlRoll => "PRE_TMCR",
         _ => throw new InvalidOperationException($"Unhandled {nameof(RegisterKind)}: {kind}"),
     };
 
@@ -50,7 +54,25 @@ public sealed class RegisterService(IApplicationDbContext db) : IRegisterService
             return Fail("VALIDATION_FAILED", "A kind and an as-of date are required; the period cannot start after it ends; remarks max 1000.");
         }
         var needsOwner = r.Kind == RegisterKind.OwnershipRecordCard;
-        if (needsOwner ? r.TaxpayerId is null : r.BarangayId is null)
+        var barangayId = r.BarangayId;
+        if (r.SectionId is { } sectionId)
+        {
+            if (r.Kind != RegisterKind.TaxMapControlRoll)
+            {
+                return Fail("VALIDATION_FAILED", "Only the Tax Map Control Roll is kept per tax map section.");
+            }
+            var sectionBarangay = await db.TaxMapSections.Where(x => x.Id == sectionId).Select(x => (Guid?)x.BarangayId).SingleOrDefaultAsync(cancellationToken);
+            if (sectionBarangay is null)
+            {
+                return Fail("TAX_MAP_SECTION_NOT_FOUND", "The specified tax map section does not exist.");
+            }
+            if (barangayId is { } named && named != sectionBarangay)
+            {
+                return Fail("VALIDATION_FAILED", "The tax map section is not in the named barangay.");
+            }
+            barangayId = sectionBarangay;
+        }
+        if (needsOwner ? r.TaxpayerId is null : barangayId is null)
         {
             return Fail("VALIDATION_FAILED", needsOwner ? "An Ownership Record Card is for one owner: name the taxpayer." : "This register is kept by barangay: name the barangay.");
         }
@@ -58,7 +80,7 @@ public sealed class RegisterService(IApplicationDbContext db) : IRegisterService
         {
             return Fail("VALIDATION_FAILED", "The Record of Assessment is kept by classification: name the classification.");
         }
-        if (r.BarangayId is { } b && !await db.Barangays.AnyAsync(x => x.Id == b, cancellationToken))
+        if (barangayId is { } b && !await db.Barangays.AnyAsync(x => x.Id == b, cancellationToken))
         {
             return Fail("BARANGAY_NOT_FOUND", "The specified barangay does not exist.");
         }
@@ -73,7 +95,7 @@ public sealed class RegisterService(IApplicationDbContext db) : IRegisterService
         var run = new RegisterRun
         {
             Kind = r.Kind, AsOf = r.AsOf, FromDate = r.FromDate, Remarks = string.IsNullOrWhiteSpace(r.Remarks) ? null : r.Remarks.Trim(),
-            BarangayId = needsOwner ? null : r.BarangayId,
+            BarangayId = needsOwner ? null : barangayId, SectionId = r.SectionId,
             ClassificationId = r.Kind == RegisterKind.RecordOfAssessment ? r.ClassificationId : null,
             TaxpayerId = needsOwner ? r.TaxpayerId : null,
         };
@@ -87,11 +109,11 @@ public sealed class RegisterService(IApplicationDbContext db) : IRegisterService
 
     private static async Task<IReadOnlyList<RegisterRunDto>> ListAsync(IQueryable<RegisterRun> query, CancellationToken ct)
     {
-        var rows = await query.AsNoTracking().Include(x => x.Barangay).Include(x => x.Classification).Include(x => x.Taxpayer).ToListAsync(ct);
+        var rows = await query.AsNoTracking().Include(x => x.Barangay).Include(x => x.Section).Include(x => x.Classification).Include(x => x.Taxpayer).ToListAsync(ct);
         return rows.Select(x => new RegisterRunDto(x.Id, x.Kind, FormCode(x.Kind), x.AsOf, x.FromDate, x.BarangayId, x.Barangay?.Name,
             x.ClassificationId, x.Classification?.Name, x.TaxpayerId,
             x.Taxpayer is { } tp ? TaxpayerNameFormatter.Format(tp.TaxpayerType, tp.LastName, tp.FirstName, tp.MiddleName, tp.Suffix, tp.CorporateName) : null,
-            x.Remarks, x.CreatedAt)).ToList();
+            x.Remarks, x.CreatedAt, x.SectionId, x.Section?.IndexNumber)).ToList();
     }
 
     private static Result<RegisterRunDto> Fail(string code, string message) => Result.Failure<RegisterRunDto>(code, message);
@@ -102,10 +124,11 @@ public sealed class RegisterService(IApplicationDbContext db) : IRegisterService
 /// the run's date: a TD approved and effective by then, and not cancelled
 /// before it, with the assessment it declares (else the unit's latest posted
 /// assessment by then). Nothing is computed that PRIME has not recorded.
-/// DOMAIN VERIFICATION REQUIRED: page numbering (barangay index + sheet) and
-/// the manual's location index numbers — PSGC codes are shown instead.
+/// The heading carries the assessor's index numbers where they are set
+/// (step 10a-4), else the PSGC codes. DOMAIN VERIFICATION REQUIRED: page
+/// numbering (barangay index + sheet).
 /// </summary>
-public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock clock, IOptions<FaasOptions> faas) : IFormDataProvider
+public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock clock, IOptions<FaasOptions> faas, IGeometryMeasurementService measurement) : IFormDataProvider
 {
     public FormSubjectType SubjectType => FormSubjectType.Register;
 
@@ -114,6 +137,7 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
     public async Task<FormSubjectData?> BuildAsync(Guid subjectId, CancellationToken cancellationToken)
     {
         var run = await db.RegisterRuns.AsNoTracking().Include(x => x.Barangay).ThenInclude(b => b!.Municipality).ThenInclude(m => m!.Province)
+            .Include(x => x.Barangay).ThenInclude(b => b!.CityDistrict).Include(x => x.Section)
             .Include(x => x.Classification).Include(x => x.Taxpayer).FirstOrDefaultAsync(x => x.Id == subjectId, cancellationToken);
         if (run is null)
         {
@@ -122,7 +146,8 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
         var ct = cancellationToken;
         object rows = run.Kind switch
         {
-            RegisterKind.TaxMapControlRoll => await TaxMapRowsAsync(run, ct),
+            RegisterKind.TaxMapControlRoll => run.SectionId is null ? await TaxMapRowsAsync(run, ct) : await SectionTaxMapRowsAsync(run, ct),
+            RegisterKind.PreTaxMapControlRoll => await PreTaxMapRowsAsync(run, ct),
             RegisterKind.AssessmentRollTaxable => await RollRowsAsync(run, Taxability.Taxable, ct),
             RegisterKind.AssessmentRollExempt => await RollRowsAsync(run, Taxability.Exempt, ct),
             RegisterKind.OwnershipRecordCard => await OwnershipRowsAsync(run, ct),
@@ -130,6 +155,9 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
             _ => throw new InvalidOperationException($"Unhandled {nameof(RegisterKind)}: {run.Kind}"),
         };
         var owner = run.Taxpayer;
+        var index = run.BarangayId is { } barangayId ? await PinContexts.ForBarangayAsync(db, barangayId, run.AsOf.Year, run.Section?.IndexNumber, ct) : null;
+        // A city or Metro Manila municipality with its own 3-digit number heads the PIN in place of the province (MRPAAO p.35).
+        var cityHeads = run.Barangay?.Municipality?.PinIndexNumber is { Length: 3 };
         var data = FormData.ToJson(new
         {
             register = new
@@ -139,6 +167,14 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
                 municipality = run.Barangay?.Municipality?.Name, municipalityCode = run.Barangay?.Municipality?.PsgcCode,
                 province = run.Barangay?.Municipality?.Province?.Name, provinceCode = run.Barangay?.Municipality?.Province?.PsgcCode,
                 classification = run.Classification?.Name, classificationCode = run.Classification?.Code,
+                // The assessor's index numbers (MRPAAO Ch. II §1), null where not yet set.
+                index = index is null ? null : new
+                {
+                    lguName = cityHeads ? run.Barangay!.Municipality!.Name : run.Barangay!.Municipality!.Province!.Name, lgu = index.LguIndex,
+                    municipalityName = run.Barangay.CityDistrict?.Name ?? (cityHeads ? null : run.Barangay.Municipality.Name), municipality = index.MunicipalityIndex,
+                    barangay = index.BarangayIndex, section = run.Section?.IndexNumber,
+                },
+                sectionRetiredOn = run.Section?.RetiredOn,
                 // The general revision year: the revision year of the SMV the listed assessments used.
                 revisionYear = await RevisionYearAsync(run, ct),
                 owner = owner is null ? null : new
@@ -187,7 +223,7 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
 
     // ---------------- Shared row fields ----------------
 
-    private async Task<(string Names, string? Address)> OwnersAsync(Guid propertyId, Guid rpuId, DateOnly asOf, CancellationToken ct)
+    private async Task<(string Names, string? Address)> OwnersAsync(Guid propertyId, Guid? rpuId, DateOnly asOf, CancellationToken ct)
     {
         var rows = await PropertyParties.ProjectAsync(await PropertyParties.ScopeAsync(db, propertyId, rpuId,
             x => x.StartDate <= asOf && (x.EndDate == null || x.EndDate > asOf)
@@ -226,31 +262,121 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
 
     // ---------------- Registers ----------------
 
-    /// <summary>MRPAAO Att. 5 (p.158–159): one row per land parcel of the barangay.</summary>
+    /// <summary>MRPAAO Att. 5 (p.158–159): one row per land parcel of the barangay, in PIN order.</summary>
     private async Task<List<object>> TaxMapRowsAsync(RegisterRun run, CancellationToken ct)
     {
         var all = await FaasInForceAsync(db.TaxDeclarations.Where(x => x.Property!.BarangayId == run.BarangayId), run.AsOf, ct);
-        var rows = new List<object>();
-        foreach (var f in all.Where(x => x.Td.Rpu!.RpuType == RpuType.Land).OrderBy(x => x.Td.Rpu!.RpuNumber))
+        var rows = new List<(string Pin, object Row)>();
+        foreach (var f in all.Where(x => x.Td.Rpu!.RpuType == RpuType.Land))
         {
-            var p = await PropertyAsync(f.Td.PropertyId, ct);
-            var units = all.Where(x => x.Td.PropertyId == f.Td.PropertyId).Select(x => x.Td.Rpu!.RpuType).ToList();
-            var improvements = await db.LandImprovements.Where(i => db.Lands.Any(l => l.Id == i.LandId && l.RpuId == f.Td.RpuId))
-                .Select(i => i.ImprovementKind!.Name).Distinct().ToListAsync(ct);
-            var (area, unit) = await AreaAsync(f.Td, ct);
-            var (owners, _) = await OwnersAsync(f.Td.PropertyId, f.Td.RpuId, run.AsOf, ct);
-            rows.Add(new
+            rows.Add(await TaxMapRowAsync(f, await PropertyAsync(f.Td.PropertyId, ct), all, run.AsOf, ct));
+        }
+        return rows.OrderBy(x => x.Pin, StringComparer.Ordinal).Select(x => x.Row).ToList();
+    }
+
+    /// <summary>
+    /// The post-TMCR of one tax map section (MRPAAO Ch. II §2 C.5, Figure 10): every
+    /// parcel given a permanent PIN in the section by the run's date, in parcel-number
+    /// order. A PIN retired by then (subdivision, consolidation) is noted, not dropped
+    /// (Ch. II §1 D.4); a parcel without a land FAAS in force is listed from its parcel.
+    /// </summary>
+    private async Task<List<object>> SectionTaxMapRowsAsync(RegisterRun run, CancellationToken ct)
+    {
+        var assignments = (await db.PinAssignments.AsNoTracking().Include(x => x.Parcel)
+                .Where(x => x.SectionId == run.SectionId && x.Kind == PinKind.Permanent).ToListAsync(ct))
+            .Where(x => clock.LocalDate(x.AssignedAt) <= run.AsOf)
+            .OrderBy(x => x.ParcelNumber).ThenBy(x => x.AssignedAt).ToList();
+        var propertyIds = assignments.Select(x => x.PropertyId).Distinct().ToList();
+        var all = await FaasInForceAsync(db.TaxDeclarations.Where(x => propertyIds.Contains(x.PropertyId)), run.AsOf, ct);
+        var rows = new List<object>();
+        foreach (var a in assignments)
+        {
+            var lot = ParcelNumber(a.Pin);
+            if (a.RetiredAt is { } retired && clock.LocalDate(retired) <= run.AsOf)
             {
-                assessorLotNumber = ParcelNumber(p.PropertyIdentificationNumber), pin = p.PropertyIdentificationNumber,
-                surveyNumber = p.SurveyNumber, lotNumber = p.LotNumber, blockNumber = p.BlockNumber,
-                titleNumber = p.TitleNumber, area, areaUnit = unit, classCode = f.Td.Classification!.Code, owner = owners,
-                arpNumber = Arp(f), tdNumber = f.Td.TaxDeclarationNumber,
-                buildings = units.Count(t => t == RpuType.Building), machinery = units.Any(t => t == RpuType.Machinery),
-                others = string.Join(", ", improvements.Concat(units.Where(t => t == RpuType.OtherImprovement).Select(_ => "other improvement")).Distinct()),
-                remarks = f.Td.TransactionCode,
-            });
+                rows.Add(new { assessorLotNumber = lot, pin = a.Pin, retired = true, remarks = $"PIN retired {clock.LocalDate(retired):yyyy-MM-dd}: {a.RetirementReason}" });
+                continue;
+            }
+            var p = await PropertyAsync(a.PropertyId, ct);
+            var lands = all.Where(x => x.Td.PropertyId == a.PropertyId && x.Td.Rpu!.RpuType == RpuType.Land).ToList();
+            foreach (var f in lands)
+            {
+                rows.Add((await TaxMapRowAsync(f, p, all, run.AsOf, ct)).Row);
+            }
+            if (lands.Count == 0)
+            {
+                var (owners, _) = await OwnersAsync(p.Id, null, run.AsOf, ct);
+                rows.Add(new
+                {
+                    assessorLotNumber = lot, pin = a.Pin, surveyNumber = a.Parcel?.SurveyNumber ?? p.SurveyNumber,
+                    lotNumber = a.Parcel?.LotNumber ?? p.LotNumber, blockNumber = a.Parcel?.BlockNumber ?? p.BlockNumber,
+                    titleNumber = p.TitleNumber, area = a.Parcel?.Area, areaUnit = a.Parcel?.Area is null ? null : "sqm",
+                    owner = owners, buildings = 0, machinery = false, others = "", remarks = "No land FAAS in force",
+                });
+            }
         }
         return rows;
+    }
+
+    /// <summary>
+    /// The pre-TMCR (MRPAAO Ch. II §2 A.d, Figure 3): the land FAAS in force in the
+    /// barangay, in temporary-PIN order, with the final PIN once tax-mapped, the
+    /// declared area and the area measured from the tax-mapped parcel. The two tie-up
+    /// check columns are left for the tax mapping team (recorded in step 10a-5).
+    /// </summary>
+    private async Task<List<object>> PreTaxMapRowsAsync(RegisterRun run, CancellationToken ct)
+    {
+        var all = await FaasInForceAsync(db.TaxDeclarations.Where(x => x.Property!.BarangayId == run.BarangayId), run.AsOf, ct);
+        var lands = all.Where(x => x.Td.Rpu!.RpuType == RpuType.Land).ToList();
+        var propertyIds = lands.Select(x => x.Td.PropertyId).Distinct().ToList();
+        var pins = (await db.PinAssignments.AsNoTracking().Where(x => propertyIds.Contains(x.PropertyId)).ToListAsync(ct))
+            .Where(x => clock.LocalDate(x.AssignedAt) <= run.AsOf).ToLookup(x => x.PropertyId);
+        var parcels = (await db.Parcels.AsNoTracking().Where(x => propertyIds.Contains(x.PropertyId) && x.Status == RecordStatus.Active).ToListAsync(ct))
+            .ToLookup(x => x.PropertyId);
+        var measured = await measurement.GetParcelAreasAsync(parcels.SelectMany(g => g).Select(x => x.Id).ToList(), ct);
+        var rows = new List<(string? Temporary, string Owner, object Row)>();
+        foreach (var f in lands)
+        {
+            var p = await PropertyAsync(f.Td.PropertyId, ct);
+            var temporary = pins[p.Id].Where(x => x.Kind == PinKind.Temporary).MaxBy(x => x.AssignedAt)?.Pin;
+            var final = pins[p.Id].Where(x => x.Kind == PinKind.Permanent && (x.RetiredAt is not { } r || clock.LocalDate(r) > run.AsOf)).MaxBy(x => x.AssignedAt)?.Pin;
+            var parcel = parcels[p.Id].OrderByDescending(x => x.SectionId is not null).ThenBy(x => x.CreatedAt).FirstOrDefault();
+            var (owners, address) = await OwnersAsync(p.Id, f.Td.RpuId, run.AsOf, ct);
+            var (area, unit) = await AreaAsync(f.Td, ct);
+            var units = all.Where(x => x.Td.PropertyId == p.Id).Select(x => KindCode(x.Td.Rpu!.RpuType)).Where(k => k is "B" or "M").Distinct().Order();
+            rows.Add((temporary, owners, new
+            {
+                temporaryPin = temporary, finalPin = final, owner = owners, ownerAddress = address, tdNumber = f.Td.TaxDeclarationNumber,
+                surveyBefore = p.SurveyNumber, surveyAfter = parcel?.SurveyNumber is { } s && s != p.SurveyNumber ? s : null,
+                lotNumber = p.LotNumber, titleNumber = p.TitleNumber,
+                areaDeclared = area, areaUnit = unit,
+                areaTaxMapped = parcel is not null && measured.TryGetValue(parcel.Id, out var m) ? Math.Round(m, 2) : (decimal?)null,
+                kindOfLand = f.Td.Classification!.Code, improvement = string.Concat(units), remarks = f.Td.TransactionCode,
+            }));
+        }
+        // Temporary PINs first, in their order; land not given one yet follows, by owner.
+        return rows.OrderBy(x => x.Temporary is null).ThenBy(x => x.Temporary, StringComparer.Ordinal).ThenBy(x => x.Owner, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.Row).ToList();
+    }
+
+    /// <summary>One TMCR row: a land FAAS in force, with the property's other units.</summary>
+    private async Task<(string Pin, object Row)> TaxMapRowAsync(Faas f, PropertyEntity p, List<Faas> all, DateOnly asOf, CancellationToken ct)
+    {
+        var units = all.Where(x => x.Td.PropertyId == f.Td.PropertyId).Select(x => x.Td.Rpu!.RpuType).ToList();
+        var improvements = await db.LandImprovements.Where(i => db.Lands.Any(l => l.Id == i.LandId && l.RpuId == f.Td.RpuId))
+            .Select(i => i.ImprovementKind!.Name).Distinct().ToListAsync(ct);
+        var (area, unit) = await AreaAsync(f.Td, ct);
+        var (owners, _) = await OwnersAsync(f.Td.PropertyId, f.Td.RpuId, asOf, ct);
+        return (p.PropertyIdentificationNumber, new
+        {
+            assessorLotNumber = ParcelNumber(p.PropertyIdentificationNumber), pin = p.PropertyIdentificationNumber,
+            surveyNumber = p.SurveyNumber, lotNumber = p.LotNumber, blockNumber = p.BlockNumber,
+            titleNumber = p.TitleNumber, area, areaUnit = unit, classCode = f.Td.Classification!.Code, owner = owners,
+            arpNumber = Arp(f), tdNumber = f.Td.TaxDeclarationNumber,
+            buildings = units.Count(t => t == RpuType.Building), machinery = units.Any(t => t == RpuType.Machinery),
+            others = string.Join(", ", improvements.Concat(units.Where(t => t == RpuType.OtherImprovement).Select(_ => "other improvement")).Distinct()),
+            remarks = f.Td.TransactionCode,
+        });
     }
 
     /// <summary>MRPAAO Att. 6–7 (p.160–163): the FAAS of the barangay, taxable or exempt; a supplement lists only those entered since the from-date.</summary>

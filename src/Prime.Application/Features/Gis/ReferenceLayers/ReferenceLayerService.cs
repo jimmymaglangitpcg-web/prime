@@ -162,7 +162,9 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
         for (var i = 0; i < collection.Count; i++)
         {
             var feature = collection[i];
-            var key = Attribute(feature, keyProperty);
+            var key = layer == ReferenceLayer.Sections
+                ? (Attribute(feature, "psgcCode"), Attribute(feature, "section")) is ({ } psgc, { } section) ? SectionKey(psgc, section) : null
+                : Attribute(feature, keyProperty);
             if (string.IsNullOrWhiteSpace(key))
             {
                 errors.Add(new ImportIssue(i, "KEY_REQUIRED", $"Feature is missing the \"{keyProperty}\" property."));
@@ -249,6 +251,16 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
                 v => v.BarangayId,
                 (id, geometry) => new BarangayBoundary { BarangayId = id, Geometry = geometry },
                 v => db.BarangayBoundaries.Add(v)),
+            ReferenceLayer.Sections => await PlanKeyedPolygonsAsync(
+                features, effectiveDate, errors,
+                (await db.TaxMapSections.Where(x => keys.Contains(x.Barangay!.PsgcCode + "/" + x.IndexNumber))
+                    .Select(x => new { Key = x.Barangay!.PsgcCode + "/" + x.IndexNumber, x.Id }).ToListAsync(cancellationToken))
+                    .ToDictionary(x => x.Key, x => x.Id),
+                "TAX_MAP_SECTION_NOT_FOUND", "No tax map section has barangay PSGC code / section number",
+                ids => db.SectionBoundaries.Where(v => ids.Contains(v.SectionId)).ToListAsync(cancellationToken),
+                v => v.SectionId,
+                (id, geometry) => new SectionBoundary { SectionId = id, Geometry = geometry },
+                v => db.SectionBoundaries.Add(v)),
             ReferenceLayer.Zones => await PlanKeyedPolygonsAsync(
                 features, effectiveDate, errors,
                 await db.Zones.Where(z => keys.Contains(z.Code)).ToDictionaryAsync(z => z.Code, z => z.Id, cancellationToken),
@@ -388,8 +400,12 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
     {
         ReferenceLayer.Barangays => "psgcCode",
         ReferenceLayer.Zones => "zoneCode",
+        ReferenceLayer.Sections => "psgcCode\" and \"section",
         _ => "code",
     };
+
+    /// <summary>A section's business key: its barangay's PSGC code and its 3-digit section index number.</summary>
+    public static string SectionKey(string barangayPsgcCode, string sectionIndexNumber) => $"{barangayPsgcCode}/{sectionIndexNumber}";
 
     private static string? Attribute(IFeature feature, string name)
     {
@@ -427,6 +443,12 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
                 .Where(v => v.EffectiveDate <= date && (v.EndDate == null || v.EndDate > date) && v.Geometry.Intersects(extent))
                 .OrderBy(v => v.Id).Take(effectiveLimit + 1)
                 .Select(v => new LayerRow(v.Id, v.Barangay!.PsgcCode, v.Barangay.Name, v.EffectiveDate, v.EndDate, v.Source, v.SourceReference, v.Geometry))
+                .ToListAsync(cancellationToken),
+            ReferenceLayer.Sections => await db.SectionBoundaries
+                .Where(v => v.EffectiveDate <= date && (v.EndDate == null || v.EndDate > date) && v.Geometry.Intersects(extent))
+                .OrderBy(v => v.Id).Take(effectiveLimit + 1)
+                .Select(v => new LayerRow(v.Id, v.Section!.Barangay!.PsgcCode + "/" + v.Section.IndexNumber, "Section " + v.Section.IndexNumber,
+                    v.EffectiveDate, v.EndDate, v.Source, v.SourceReference, v.Geometry))
                 .ToListAsync(cancellationToken),
             ReferenceLayer.Zones => await db.ZoneBoundaries
                 .Where(v => v.EffectiveDate <= date && (v.EndDate == null || v.EndDate > date) && v.Geometry.Intersects(extent))

@@ -15,9 +15,13 @@ public sealed class RegisterRun : AuditableEntity
 {
     public RegisterKind Kind { get; set; }
 
-    /// <summary>Tax Map Control Roll, Assessment Rolls, Record of Assessment: the barangay.</summary>
+    /// <summary>Every register but the Ownership Record Card: the barangay.</summary>
     public Guid? BarangayId { get; set; }
     public Barangay? Barangay { get; set; }
+
+    /// <summary>Tax Map Control Roll: the tax map section (a section of <see cref="BarangayId"/>); null lists the whole barangay.</summary>
+    public Guid? SectionId { get; set; }
+    public TaxMapSection? Section { get; set; }
 
     /// <summary>Record of Assessment: the classification the ledger is kept for.</summary>
     public Guid? ClassificationId { get; set; }

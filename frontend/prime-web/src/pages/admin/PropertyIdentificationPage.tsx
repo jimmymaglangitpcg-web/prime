@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Card, DatePicker, Descriptions, Empty, Input, Modal, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
-import { EditOutlined, PlusOutlined } from '@ant-design/icons';
+import { EditOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons';
+import { Link } from 'react-router-dom';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
   type BarangayIndexDto, type CityDistrictDto, type TaxMapSectionDto,
@@ -144,9 +145,17 @@ function BarangaysTab({ municipalityId }: { municipalityId: string }) {
 
   return (
     <Space orientation="vertical" style={{ width: '100%' }}>
-      <Typography.Text type="secondary">
-        Barangays are numbered from "0001" for the Poblacion, then alphabetically. Select a barangay to manage its tax map sections.
-      </Typography.Text>
+      <Space wrap>
+        <Typography.Text type="secondary">
+          Barangays are numbered from "0001" for the Poblacion, then alphabetically. Select a barangay to manage its tax map sections.
+        </Typography.Text>
+        <Link to={`/gis/sheet?kind=barangay-index&id=${municipalityId}`}><Button size="small" icon={<PrinterOutlined />}>Barangay index map</Button></Link>
+        {(districts.data ?? []).map((d) => (
+          <Link key={d.id} to={`/gis/sheet?kind=barangay-index&id=${municipalityId}&districtId=${d.id}`}>
+            <Button size="small" icon={<PrinterOutlined />}>District {d.indexNumber} index map</Button>
+          </Link>
+        ))}
+      </Space>
       <Table<BarangayIndexDto>
         rowKey="id" size="small" loading={isLoading} dataSource={data} pagination={{ pageSize: 50, hideOnSinglePage: true }} scroll={{ x: 'max-content' }}
         rowClassName={(b) => (b.id === selected?.id ? 'ant-table-row-selected' : '')}
@@ -219,6 +228,7 @@ function SectionsPanel({ barangay }: { barangay: BarangayIndexDto }) {
     <Card size="small" title={`Tax map sections — ${barangay.name}${barangay.pinIndexNumber ? ` (${barangay.pinIndexNumber})` : ''}`}>
       <Space orientation="vertical" style={{ width: '100%' }}>
         <Typography.Text type="secondary">Sections are numbered from "001" at the upper-left section in an inverted "S" (the PIN's 10th–12th digits).</Typography.Text>
+        <Link to={`/gis/sheet?kind=section-index&id=${barangay.id}`}><Button size="small" icon={<PrinterOutlined />}>Section index map</Button></Link>
         {!barangay.retiredOn && (
           <Button icon={<PlusOutlined />} loading={create.isPending} onClick={() => create.mutate({ barangayId: barangay.id, indexNumber: null, remarks: null, splitFromSectionId: null })}>
             Add section (next number)
@@ -231,7 +241,14 @@ function SectionsPanel({ barangay }: { barangay: BarangayIndexDto }) {
             { title: 'Section No.', dataIndex: 'indexNumber' },
             { title: 'Remarks', dataIndex: 'remarks', render: (v: string | null) => v ?? '—' },
             { title: 'Status', key: 'status', render: (_, x) => (x.retiredOn ? <Tag color="orange">Retired {x.retiredOn}</Tag> : <Tag color="green">Active</Tag>) },
-            { title: '', key: 'retire', render: (_, x) => !x.retiredOn && <Button size="small" danger onClick={() => { setReason(''); retire.reset(); setRetiring(x); }}>Retire</Button> },
+            {
+              title: '', key: 'actions', render: (_, x) => (
+                <Space>
+                  <Link to={`/gis/sheet?kind=tax-map&id=${x.id}`}><Button size="small" icon={<PrinterOutlined />}>Tax map</Button></Link>
+                  {!x.retiredOn && <Button size="small" danger onClick={() => { setReason(''); retire.reset(); setRetiring(x); }}>Retire</Button>}
+                </Space>
+              ),
+            },
           ]} />
       </Space>
       <Modal open={retiring !== null} title={`Retire section ${retiring?.indexNumber}`} okText="Retire" okButtonProps={{ danger: true, disabled: reason.trim() === '' }}

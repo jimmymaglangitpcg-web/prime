@@ -9,6 +9,7 @@ import { TaxpayerSearchPage } from './pages/taxpayers/TaxpayerSearchPage';
 import { TaxpayerRegisterPage } from './pages/taxpayers/TaxpayerRegisterPage';
 import { GisWorkspacePage } from './pages/gis/GisWorkspacePage';
 import { GisPrintPage } from './pages/gis/GisPrintPage';
+import { TaxMapSheetPage } from './pages/gis/TaxMapSheetPage';
 import { StatementOfAccountPage } from './pages/billing/StatementOfAccountPage';
 import { FormDocumentPage } from './pages/documents/FormDocumentPage';
 import { SwornStatementPage } from './pages/swornStatements/SwornStatementPage';
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="/taxpayers/new" element={<TaxpayerRegisterPage />} />
         <Route path="/gis" element={<GisWorkspacePage />} />
         <Route path="/gis/print" element={<GisPrintPage />} />
+        <Route path="/gis/sheet" element={<TaxMapSheetPage />} />
         <Route path="/documents/preview" element={<FormDocumentPage />} />
         <Route path="/documents/:id" element={<FormDocumentPage />} />
         <Route path="/registers" element={<RegistersPage />} />

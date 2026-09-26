@@ -57,7 +57,10 @@ rather than silently producing wrong areas.
 - `Parcels.Geometry` — `geometry(MultiPolygon,4326)`, nullable (a parcel
   can be registered before it is mapped), GiST index `IX_Parcels_Geometry`.
 - **Reference layers** — `BarangayBoundaries`, `ZoneBoundaries` (valuation
-  zones), `RoadSegments` (migration `GisReferenceLayers`). Deliberately
+  zones), `RoadSegments` (migration `GisReferenceLayers`), and
+  `SectionBoundaries` (tax map sections; migration
+  `TaxMapSectionsLayerAndRolls`, Phase 10a-4 —
+  docs/analysis/property-identification.md §6). Deliberately
   **not** a geometry column on `Barangay`/`Zone`: boundaries change
   (barangays are created/merged; valuation zones are redrawn with SMV
   revisions), and overwriting a shape would destroy history (CLAUDE.md
@@ -68,7 +71,7 @@ rather than silently producing wrong areas.
   | `EffectiveDate` / `EndDate` | Half-open validity `[EffectiveDate, EndDate)`; `EndDate` null = current. Check constraint `EndDate > EffectiveDate`. |
   | `Source` (required) / `SourceReference` | Provenance of official map data, e.g. dataset + version, ordinance no. |
   | `ImportBatchId` | Every row written by one import; the audit log reason names the batch. |
-  | key | `BarangayId` (matched by PSGC code), `ZoneId` (by zone code), or road `Code` (the source dataset's id). |
+  | key | `BarangayId` (matched by PSGC code), `ZoneId` (by zone code), road `Code` (the source dataset's id), or `SectionId` (by the barangay's PSGC code and the 3-digit section number). |
 
   A filtered unique index (`UX_*_Current`, `WHERE "EndDate" IS NULL`)
   makes "one current version per key" a database guarantee. Geometry:
@@ -80,12 +83,12 @@ rather than silently producing wrong areas.
 > office) and valuation-zone shapes from the LGU's approved SMV — PRIME
 > does not invent them (CLAUDE.md §5/§81). Tests use DEMO shapes only.
 
-### Import (`POST /api/gis/layers/{barangays|zones|roads}/import`)
+### Import (`POST /api/gis/layers/{barangays|zones|roads|sections}/import`)
 
 Body: `{ effectiveDate, source, sourceReference?, featureCollection }`,
 where `featureCollection` is RFC 7946 GeoJSON (WGS84). Feature properties:
 barangays `psgcCode`; zones `zoneCode`; roads `code`, optional `name`,
-`roadTypeCode`. The referenced barangay/zone/road type must already exist
+`roadTypeCode`; sections `psgcCode` (the barangay's) and `section`. The referenced barangay/zone/road type must already exist
 in reference data.
 
 - **`dryRun=true` is the default** — validates and reports counts

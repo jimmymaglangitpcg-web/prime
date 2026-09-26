@@ -1056,10 +1056,14 @@ approved. **10a-1** (index numbers, city districts, tax map sections;
 migration `PropertyIdentificationIndexes`) and **10a-2** (the permanent PIN
 from a section, PIN history, index locks; migration `PinAssignments`) and
 **10a-3** (subdivision and consolidation retire PINs and number the
-resulting properties; migration `PinAssignedByTransaction`) are done and
-uncommitted; the three migrations are on the local dev DB only. Next:
-10a-4, the TMCR per section, the pre-TMCR, the section layer and index maps.
-See §6 of that doc.
+resulting properties; migration `PinAssignedByTransaction`) are committed
+(`f4f3b08`, not pushed). **10a-4** (the post-TMCR per section, the
+pre-TMCR, the section boundary layer, parcel numbers on the map, and the
+tax map, section index and barangay index sheets; migration
+`TaxMapSectionsLayerAndRolls`) is done and uncommitted. The 10a
+migrations are on the local dev DB only (Supabase lacks every migration
+since `Payments`). Next: 10a-5, the tax mapping campaign
+(temporary PINs and tie-up) and the ARPN. See §6 of that doc.
 
 **Current (2026-09-26):** everything through `b2e369b` (value and assess)
 is committed and pushed; Supabase has all 28 migrations. **Phase 9 —

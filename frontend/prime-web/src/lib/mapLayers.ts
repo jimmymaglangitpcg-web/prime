@@ -42,17 +42,19 @@ export const LAYERS: Record<MapLayerName, LayerDefinition> = {
   zones: { title: 'Valuation zones', minZoom: 12, stroke: '#047857', fill: 'rgba(4, 120, 87, 0.06)', width: 1.5 },
   barangays: { title: 'Barangay boundaries', minZoom: 11, stroke: '#7c3aed', lineDash: [8, 4], width: 2 },
   roads: { title: 'Roads', minZoom: 13, stroke: '#b45309', width: 2.5 },
+  sections: { title: 'Tax map sections', minZoom: 13, stroke: '#be123c', lineDash: [12, 4, 2, 4], width: 2 },
 };
 
-export const LAYER_ORDER: MapLayerName[] = ['zones', 'barangays', 'roads', 'parcels'];
+export const LAYER_ORDER: MapLayerName[] = ['zones', 'barangays', 'sections', 'roads', 'parcels'];
 
 export const highlightStyle = new Style({
   stroke: new Stroke({ color: '#ea580c', width: 3 }),
   fill: new Fill({ color: 'rgba(234, 88, 12, 0.18)' }),
 });
 
-// Labels only when zoomed in far enough to be legible (~zoom 14+).
+// Labels only when zoomed in far enough to be legible (~zoom 14+; parcel numbers ~zoom 17+).
 const LABEL_MAX_RESOLUTION = 10;
+const PARCEL_LABEL_MAX_RESOLUTION = 1.2;
 
 function layerStyle(name: MapLayerName): Style | ((feature: FeatureLike, resolution: number) => Style) {
   const def = LAYERS[name];
@@ -61,7 +63,24 @@ function layerStyle(name: MapLayerName): Style | ((feature: FeatureLike, resolut
     fill: def.fill ? new Fill({ color: def.fill }) : undefined,
   });
   if (name === 'parcels') {
-    return base;
+    // The assessor's parcel number within its section (MRPAAO Ch. II §1), once placed.
+    return (feature, resolution) => {
+      const parcelNumber = feature.get('parcelNumber') as number | null;
+      if (parcelNumber == null || resolution > PARCEL_LABEL_MAX_RESOLUTION) {
+        return base;
+      }
+      return new Style({
+        stroke: base.getStroke() ?? undefined,
+        fill: base.getFill() ?? undefined,
+        text: new Text({
+          text: String(parcelNumber).padStart(2, '0'),
+          font: '600 12px system-ui, sans-serif',
+          fill: new Fill({ color: def.stroke }),
+          stroke: new Stroke({ color: '#ffffff', width: 3 }),
+          overflow: false,
+        }),
+      });
+    };
   }
 
   return (feature, resolution) => {
@@ -162,6 +181,7 @@ export function createDataLayers(getAsOf: () => string, onStatus: (name: MapLaye
     zones: reference('zones'),
     barangays: reference('barangays'),
     roads: reference('roads'),
+    sections: reference('sections'),
   } satisfies Record<MapLayerName, VectorLayer>;
 }
 

@@ -35,6 +35,17 @@ public sealed class BarangayBoundaryConfiguration : IEntityTypeConfiguration<Bar
     }
 }
 
+public sealed class SectionBoundaryConfiguration : IEntityTypeConfiguration<SectionBoundary>
+{
+    public void Configure(EntityTypeBuilder<SectionBoundary> builder)
+    {
+        SpatialLayerMapping.ConfigureCommon(builder, "SectionBoundaries", "MultiPolygon");
+        builder.HasOne(x => x.Section).WithMany().HasForeignKey(x => x.SectionId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => new { x.SectionId, x.EffectiveDate });
+        builder.HasIndex(x => x.SectionId).IsUnique().HasFilter("\"EndDate\" IS NULL").HasDatabaseName("UX_SectionBoundaries_Current");
+    }
+}
+
 public sealed class ZoneBoundaryConfiguration : IEntityTypeConfiguration<ZoneBoundary>
 {
     public void Configure(EntityTypeBuilder<ZoneBoundary> builder)

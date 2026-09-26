@@ -423,4 +423,68 @@ All eight recommendations are accepted as written above.
   - The mother's RPUs are not ended automatically. Cancel its TDs through
     the transaction's "TDs this transaction cancels".
 
-Next: 10a-4 (TMCR per section, pre-TMCR, section layer and index maps).
+**10a-4 done (2026-09-26, uncommitted):**
+- **Post-TMCR per section** (Ch. II §2 C.5, Figure 10):
+  - `RegisterRun.SectionId` (Tax Map Control Roll only; check
+    `CK_RegisterRuns_Section`). Naming a section takes its barangay;
+    refusals: another kind (`VALIDATION_FAILED`), a section outside the
+    named barangay, an unknown section (`TAX_MAP_SECTION_NOT_FOUND`).
+  - Rows: every parcel given a permanent PIN in the section by the run's
+    date, in parcel-number order. A PIN retired by then is one line, "PIN …
+    — retired", with the date and reason; a parcel without a land FAAS in
+    force is listed from its parcel ("No land FAAS in force").
+  - A run without a section lists the barangay, now in PIN order.
+  - Every register's heading data now carries the assessor's index numbers
+    (`register.index`: LGU, municipality or district, barangay, section).
+  - Form `TMCR` v2 (MRPAAO): Prov./City, Mun./District, Barangay and Section
+    with their index numbers; retired PINs in italics.
+- **Pre-TMCR** (Ch. II §2 A.d, Figure 3): new `RegisterKind.PreTaxMapControlRoll`
+  and form `PRE_TMCR` v1. The land FAAS in force in the barangay, in
+  temporary-PIN order (land without one follows, by owner): temporary and
+  final PIN, declared owner and address, TD, survey before/after, title,
+  declared area and the area measured from the parcel's geometry, kind of
+  land, improvements (B/M), remarks. The two tie-up check columns are left
+  blank for the team (step 10a-5 records them).
+- **Section layer:** `SectionBoundary` (effective-dated, like the other
+  layers; migration `TaxMapSectionsLayerAndRolls`, additive), imported at
+  `/api/gis/layers/sections/import` with the feature properties `psgcCode`
+  and `section`, served at `/api/gis/layers/sections`. The map workspace
+  and the printable tax map have a "Tax map sections" layer; parcels are
+  labelled with their parcel number from about zoom 17.
+- **Sheets** (`ITaxMapSheetService`; `GET /api/gis/sheets/tax-map/{sectionId}`,
+  `…/section-index/{barangayId}`, `…/barangay-index/{municipalityId}?districtId=`),
+  printed at `/gis/sheet`:
+  - the **tax map** of a section, fitted to its boundary (or to its parcels
+    when it has none), with parcel numbers;
+  - the **section index map** of a barangay (Figure 8), each section
+    labelled with its number inside the barangay boundary;
+  - the **barangay index map** of a municipality or city district
+    (Figure 6), each barangay labelled with its number and name.
+
+  Each heading lists the index numbers. What cannot be drawn (no boundary,
+  no index number, a retired section) is printed under "Not shown".
+  Opened from Admin → Property Identification (barangay/district index map,
+  section index map, a tax map per section).
+- Not done: the municipality index map of a province (no municipality
+  boundary layer exists); the standard sheet size and map symbols (A4
+  landscape is used — DOMAIN VERIFICATION REQUIRED); registers are still
+  built per request, not as background jobs (CLAUDE.md §73).
+- Tests: `TaxMapRollsTests` (5 integration tests: the section roll with
+  index numbers, retired PINs and dates; run validation; the barangay roll
+  in PIN order; the pre-TMCR order, final PIN and areas; the section layer
+  import and the three sheets). Two `RegistersTests` assertions were
+  updated to the TMCR v2 wording. Full suite: 139 domain, 37 application
+  and 228 integration tests pass; oxlint is clean and the production build
+  passes.
+- **Verified in a browser** against the dev database, with DEMO shapes
+  (source "DEMO shapes for the 10a-4 browser check (not LGU data)"):
+  boundaries for DEMO_Barangay_1 and _2, section 001, and parcels for
+  990-01-0001-001-01, -03 and -04.
+  - Registers page: a TMCR for section 001 and a pre-TMCR were created
+    from the form; the TMCR lists 01, 02 (retired by DEMO-SD), 03 and 04
+    under index numbers 990 / 01 / 0001 / 001.
+  - The three sheets and the printable tax map (sections layer, parcel
+    numbers 01/03/04) render; the barangay index map notes
+    DEMO_Barangay_2's missing number. No console errors.
+
+Next: 10a-5 (tax mapping campaign: temporary PINs and tie-up; ARPN).

@@ -1,0 +1,52 @@
+{% comment %}
+  Pre-Tax Map Control Roll, after the MRPAAO Ch. II Figure 3 (p.54). Superseded manual:
+  reference layout (docs/analysis/property-identification.md §3.5). The land FAAS of a
+  barangay in temporary-PIN order, for the tax mapping campaign. The two tie-up
+  columns (office, field) are ticked by hand until step 10a-5 records them.
+{% endcomment %}
+{% assign r = register %}
+{% assign ix = r.index %}
+<style>
+  @page { size: landscape; }
+  .src { font-size: 8pt; border: 1px solid #555; padding: 2px 6px; margin-bottom: 6px; }
+  .draft { border: 2px solid #b00; color: #b00; font-weight: bold; text-align: center; padding: 3px; margin-bottom: 6px; }
+  h1 { font-size: 12.5pt; text-align: center; margin: 4px 0 6px; }
+  .lgu { text-align: center; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 6px; }
+  td, th { border: 1px solid #000; padding: 2px 4px; font-size: 8pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: center; }
+  .num { text-align: right; white-space: nowrap; }
+  .tick { width: 14px; }
+  .hd td { border: none; font-size: 9pt; padding: 1px 4px; }
+  .empty { text-align: center; font-style: italic; }
+  .foot { font-size: 7.5pt; margin-top: 6px; }
+</style>
+<div class="src">Layout: MRPAAO 2004, Ch. II Figure 3 — superseded by the Local Assessment Manual; reference layout. Form {{ form.code }} v{{ form.version }}.</div>
+{% if r.formCode != form.code %}<div class="draft">This run is a {{ r.kind }} register; print it with form {{ r.formCode }}.</div>{% endif %}
+{% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% endif %}
+<h1>PRE TAX MAPPING CONTROL ROLL</h1>
+<table class="hd">
+  <tr><td>{{ ix.lguName | default: r.province }}{% if ix.municipalityName %} — {{ ix.municipalityName }}{% endif %}</td>
+      <td>District / Municipality No. <b>{{ ix.municipality | default: "—" }}</b></td>
+      <td>As of <b>{{ r.asOf | date_ph }}</b></td></tr>
+  <tr><td>Barangay of <b>{{ r.barangay }}</b></td><td>Barangay No. <b>{{ ix.barangay | default: "—" }}</b></td><td></td></tr>
+</table>
+<table>
+  <tr><th colspan="4">Assessor's Lot No.</th><th rowspan="2">Declared Owner</th><th rowspan="2">Address of Owner / Administrator</th><th rowspan="2">T.D. No.</th>
+      <th colspan="2">Survey (Cad / PLS etc.)</th><th rowspan="2">Title No.</th><th colspan="2">Area</th><th rowspan="2">Kind of Land</th><th rowspan="2">Improvement</th><th rowspan="2">Remarks</th></tr>
+  <tr><th class="tick" title="Office tie-up">✓</th><th>Temp.</th><th class="tick" title="Field confirmation">✓</th><th>Final</th>
+      <th>Before</th><th>After</th><th>Declared</th><th>Tax-mapped (sqm)</th></tr>
+  {% for x in rows %}
+  <tr><td class="tick"></td><td>{{ x.temporaryPin | default: "—" }}</td><td class="tick"></td><td>{{ x.finalPin | default: "" }}</td>
+      <td>{{ x.owner }}</td><td>{{ x.ownerAddress | default: "—" }}</td><td>{{ x.tdNumber }}</td>
+      <td>{{ x.surveyBefore | default: "—" }}{% if x.lotNumber %} · Lot {{ x.lotNumber }}{% endif %}</td><td>{{ x.surveyAfter | default: "" }}</td>
+      <td>{{ x.titleNumber | default: "—" }}</td>
+      <td class="num">{% if x.areaDeclared %}{{ x.areaDeclared | num }} {{ x.areaUnit }}{% else %}—{% endif %}</td>
+      <td class="num">{% if x.areaTaxMapped %}{{ x.areaTaxMapped | num }}{% endif %}</td>
+      <td>{{ x.kindOfLand }}</td><td>{{ x.improvement }}</td><td>{{ x.remarks }}</td></tr>
+  {% else %}<tr><td colspan="15" class="empty">No land FAAS is in force in this barangay as of this date.</td></tr>{% endfor %}
+</table>
+<p style="font-size:8pt">Land FAAS listed: <b>{{ rows | size }}</b>.</p>
+<div class="foot">✓ left of the temporary PIN: office tie-up of the FAAS to its parcel on the base map; ✓ right: confirmed in the field (Ch. II §2 A, p.55).
+  Tax-mapped area is measured from the parcel's recorded geometry. Survey "after": the tax-mapped parcel's survey number where it differs from the declared one.
+  {% if r.remarks %}Remarks: {{ r.remarks }}. {% endif %}Printed {{ issue.issuedAt | date_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}. {{ form.legalBasis }}.</div>

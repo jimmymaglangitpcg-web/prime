@@ -38,6 +38,7 @@ public static class DependencyInjection
         services.AddScoped<IParcelService, ParcelService>();
         services.AddScoped<IGisService, GisService>();
         services.AddScoped<IReferenceLayerService, ReferenceLayerService>();
+        services.AddScoped<ITaxMapSheetService, TaxMapSheetService>();
         services.AddScoped<IBillingRuleService, BillingRuleService>();
         services.AddScoped<IBillService, BillService>();
         services.AddScoped<Features.PropertyIdentification.IPropertyIdentificationService, Features.PropertyIdentification.PropertyIdentificationService>();

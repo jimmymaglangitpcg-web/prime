@@ -85,6 +85,7 @@ public interface IApplicationDbContext
     /// <summary>Read by forms and approvals for signatory names.</summary>
     DbSet<AppUser> AppUsers { get; }
     DbSet<BarangayBoundary> BarangayBoundaries { get; }
+    DbSet<SectionBoundary> SectionBoundaries { get; }
     DbSet<ZoneBoundary> ZoneBoundaries { get; }
     DbSet<RoadSegment> RoadSegments { get; }
     DbSet<RealPropertyUnit> RealPropertyUnits { get; }

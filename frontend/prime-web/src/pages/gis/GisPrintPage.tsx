@@ -102,7 +102,7 @@ export function GisPrintPage() {
     // Provenance: the sources of the reference shapes actually on this sheet.
     map.on('rendercomplete', () => {
       const found = new Set<string>();
-      for (const name of ['zones', 'barangays', 'roads'] as const) {
+      for (const name of ['zones', 'barangays', 'sections', 'roads'] as const) {
         if (!dataLayers[name].getVisible()) {
           continue;
         }

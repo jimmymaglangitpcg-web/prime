@@ -267,6 +267,9 @@ export interface ParcelFeatureProperties {
   blockNumber: string | null;
   surveyNumber: string | null;
   barangayName: string;
+  /** The tax map section and parcel number once the parcel is placed in a section (step 10a-2). */
+  sectionIndexNumber: string | null;
+  parcelNumber: number | null;
 }
 
 export interface ParcelFeature {
@@ -285,16 +288,37 @@ export interface ParcelFeatureCollection {
   limit: number;
 }
 
-export type ReferenceLayerName = 'barangays' | 'zones' | 'roads';
+export type ReferenceLayerName = 'barangays' | 'zones' | 'roads' | 'sections';
 
 export interface ReferenceLayerFeatureProperties {
-  /** PSGC code, zone code, or road code. */
+  /** PSGC code, zone code, road code, or "psgcCode/section". */
   key: string;
   name: string | null;
   effectiveDate: string;
   endDate: string | null;
   source: string;
   sourceReference: string | null;
+}
+
+/** The tax map book's sheets (MRPAAO Ch. II §2 C.4; docs/analysis/property-identification.md §3.7). */
+export type TaxMapSheetKind = 'TaxMap' | 'SectionIndex' | 'BarangayIndex';
+export type TaxMapSheetRoute = 'tax-map' | 'section-index' | 'barangay-index';
+
+export interface TaxMapSheetDto {
+  kind: TaxMapSheetKind;
+  title: string;
+  asOf: string;
+  /** Province or city, municipality or district, barangay, section — with their index numbers. */
+  heading: { label: string; name: string | null; indexNumber: string | null }[];
+  /** WGS84 [minLon, minLat, maxLon, maxLat]; null when nothing on the sheet has a shape. */
+  extent: [number, number, number, number] | null;
+  features: {
+    type: 'Feature'; id: string; geometry: unknown;
+    /** role "area": the sheet's own boundary; "unit": a labelled section or barangay. */
+    properties: { label: string; name: string | null; role: 'area' | 'unit'; source: string; sourceReference: string | null };
+  }[];
+  /** What the sheet cannot show (no boundary, no index number). */
+  missing: string[];
 }
 
 export interface ReferenceLayerFeatureCollection {
@@ -1461,10 +1485,11 @@ export interface StructuralMaterialDto { id: string; code: string; name: string;
 
 // --- Registers (docs/analysis/mrpaao-forms-model.md §15) ---
 
-export type RegisterKind = 'TaxMapControlRoll' | 'AssessmentRollTaxable' | 'AssessmentRollExempt' | 'OwnershipRecordCard' | 'RecordOfAssessment';
+export type RegisterKind = 'TaxMapControlRoll' | 'PreTaxMapControlRoll' | 'AssessmentRollTaxable' | 'AssessmentRollExempt' | 'OwnershipRecordCard' | 'RecordOfAssessment';
 
 export const registerKindLabel: Record<RegisterKind, string> = {
   TaxMapControlRoll: 'Tax Map Control Roll',
+  PreTaxMapControlRoll: 'Pre-Tax Map Control Roll',
   AssessmentRollTaxable: 'Assessment Roll — Taxable',
   AssessmentRollExempt: 'Assessment Roll — Exempt',
   OwnershipRecordCard: 'Ownership Record Card',
@@ -1475,11 +1500,14 @@ export interface RegisterRunDto {
   id: string; kind: RegisterKind; formCode: string; asOf: string; fromDate: string | null;
   barangayId: string | null; barangayName: string | null; classificationId: string | null; classificationName: string | null;
   taxpayerId: string | null; taxpayerName: string | null; remarks: string | null; createdAt: string;
+  sectionId: string | null; sectionIndexNumber: string | null;
 }
 
 export interface CreateRegisterRunRequest {
   kind: RegisterKind; asOf: string; fromDate: string | null; barangayId: string | null;
   classificationId: string | null; taxpayerId: string | null; remarks: string | null;
+  /** Tax Map Control Roll only: one tax map section (the post-TMCR); null lists the whole barangay. */
+  sectionId?: string | null;
 }
 
 // --- Sworn statements (docs/analysis/mrpaao-forms-model.md §16) ---

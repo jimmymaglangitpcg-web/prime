@@ -92,7 +92,7 @@ public class RegistersTests(WebApplicationFactory<Program> factory) : IClassFixt
         html.ShouldContain("DEMO_REGISTEROWNER, Juan", Case.Insensitive);
         html.ShouldContain("500 sqm");
         html.ShouldContain(">DC<");
-        html.ShouldContain("Parcels listed: <b>1</b>");
+        html.ShouldContain("Entries: <b>1</b>");
         html.ShouldNotContain("print it with form");
         // Reprinting returns the same frozen issue.
         (await c.Forms.IssueAsync(new IssueFormRequest("TMCR", run.Id))).Value.Id.ShouldBe(issued.Value.Id);
@@ -106,7 +106,7 @@ public class RegistersTests(WebApplicationFactory<Program> factory) : IClassFixt
 
         var html = await PreviewAsync(c, await RunAsync(c, RegisterKind.TaxMapControlRoll, new DateOnly(2023, 12, 31)));
 
-        html.ShouldContain("No land parcel is declared in this barangay as of this date.");
+        html.ShouldContain("No parcel is listed in this barangay as of this date.");
         html.ShouldNotContain(c.Seed.TaxDeclaration.TaxDeclarationNumber);
     }
 

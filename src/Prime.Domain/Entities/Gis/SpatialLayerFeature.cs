@@ -37,6 +37,17 @@ public sealed class BarangayBoundary : SpatialLayerFeature
 }
 
 /// <summary>
+/// Tax map section boundary version (MRPAAO Ch. II §2; docs/analysis/property-identification.md
+/// §3.7): the extent of one tax map sheet. One current row per section.
+/// </summary>
+public sealed class SectionBoundary : SpatialLayerFeature
+{
+    public Guid SectionId { get; set; }
+    public TaxMapSection? Section { get; set; }
+    public MultiPolygon Geometry { get; set; } = null!;
+}
+
+/// <summary>
 /// Valuation-zone boundary polygon version (the zones SMV rates refer to).
 /// One current row per zone.
 /// </summary>

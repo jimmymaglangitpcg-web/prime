@@ -4,11 +4,11 @@ using Prime.Application.Features.Gis.ReferenceLayers;
 
 namespace Prime.WebApi.Controllers;
 
-/// <summary>Reference map layers — barangay boundaries, valuation zones, roads (docs/GIS.md §3).</summary>
+/// <summary>Reference map layers — barangay boundaries, valuation zones, roads, tax map sections (docs/GIS.md §3).</summary>
 [Route("api/gis/layers")]
 public class GisLayersController(IReferenceLayerService layerService) : ApiControllerBase
 {
-    /// <summary>Features valid on asOf (default today) in a WGS84 bbox, as GeoJSON. layer = barangays | zones | roads.</summary>
+    /// <summary>Features valid on asOf (default today) in a WGS84 bbox, as GeoJSON. layer = barangays | zones | roads | sections.</summary>
     [HttpGet("{layer}")]
     public async Task<ActionResult<ReferenceLayerFeatureCollection>> Get(
         string layer, [FromQuery] string? bbox, [FromQuery] DateOnly? asOf, [FromQuery] int? limit, CancellationToken cancellationToken) =>
@@ -42,5 +42,5 @@ public class GisLayersController(IReferenceLayerService layerService) : ApiContr
         Enum.TryParse(value, ignoreCase: true, out layer) && Enum.IsDefined(layer) && !int.TryParse(value, out _);
 
     private static Result<T> UnknownLayer<T>(string value) =>
-        Result.Failure<T>("LAYER_NOT_FOUND", $"Unknown layer \"{value}\". Use barangays, zones or roads.");
+        Result.Failure<T>("LAYER_NOT_FOUND", $"Unknown layer \"{value}\". Use barangays, zones, roads or sections.");
 }

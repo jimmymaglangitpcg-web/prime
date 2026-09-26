@@ -32,8 +32,8 @@ import { fetchParcelsAtPoint, fetchPropertyParcels, fetchPropertyProfile } from 
 import type { PagedResult, ParcelFeatureProperties, PropertyDto } from '../../lib/types';
 import { LegendSwatch } from './LegendSwatch';
 
-const ALL_VISIBLE: Record<MapLayerName, boolean> = { parcels: true, zones: true, barangays: true, roads: true };
-const REFERENCE_LAYERS = ['zones', 'barangays', 'roads'] as const;
+const ALL_VISIBLE: Record<MapLayerName, boolean> = { parcels: true, zones: true, barangays: true, sections: true, roads: true };
+const REFERENCE_LAYERS = ['zones', 'barangays', 'sections', 'roads'] as const;
 
 type Selection =
   | { origin: 'click'; parcels: ParcelFeatureProperties[] }
@@ -164,6 +164,8 @@ export function GisWorkspacePage() {
             blockNumber: p.blockNumber,
             surveyNumber: p.surveyNumber,
             barangayName: p.barangayName,
+            sectionIndexNumber: null,
+            parcelNumber: null,
           })),
         });
         if (features.length === 0) {

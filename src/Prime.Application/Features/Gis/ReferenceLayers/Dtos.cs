@@ -2,12 +2,14 @@ using System.Text.Json;
 
 namespace Prime.Application.Features.Gis.ReferenceLayers;
 
-/// <summary>Reference layers served beside parcels (docs/GIS.md §3). Route values: barangays, zones, roads.</summary>
+/// <summary>Reference layers served beside parcels (docs/GIS.md §3). Route values: barangays, zones, roads, sections.</summary>
 public enum ReferenceLayer
 {
     Barangays,
     Zones,
     Roads,
+    /// <summary>Tax map section boundaries (docs/analysis/property-identification.md §3.7).</summary>
+    Sections,
 }
 
 /// <summary>
@@ -15,7 +17,8 @@ public enum ReferenceLayer
 /// of each feature it contains, effective from <see cref="EffectiveDate"/>.
 /// Per-layer feature properties (docs/GIS.md §3):
 /// barangays → "psgcCode"; zones → "zoneCode"; roads → "code", optional
-/// "name" and "roadTypeCode".
+/// "name" and "roadTypeCode"; sections → "psgcCode" (the barangay's) and
+/// "section" (its 3-digit index number).
 /// </summary>
 public sealed record ImportReferenceLayerRequest(
     DateOnly EffectiveDate,
@@ -56,7 +59,7 @@ public sealed record ReferenceLayerFeature(
     JsonElement Geometry,
     ReferenceLayerFeatureProperties Properties);
 
-/// <param name="Key">psgcCode, zone code, or road code — the layer's business key.</param>
+/// <param name="Key">psgcCode, zone code, road code, or "psgcCode/section" — the layer's business key.</param>
 public sealed record ReferenceLayerFeatureProperties(
     string Key,
     string? Name,

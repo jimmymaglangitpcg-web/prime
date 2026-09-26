@@ -36,4 +36,6 @@ public sealed record ParcelFeatureProperties(
     string? LotNumber,
     string? BlockNumber,
     string? SurveyNumber,
-    string BarangayName);
+    string BarangayName,
+    string? SectionIndexNumber = null,
+    int? ParcelNumber = null);

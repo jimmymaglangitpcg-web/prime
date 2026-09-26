@@ -103,6 +103,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<NoticeOfAssessment> NoticesOfAssessment => Set<NoticeOfAssessment>();
     public DbSet<NoticeOfAssessmentItem> NoticeOfAssessmentItems => Set<NoticeOfAssessmentItem>();
     public DbSet<BarangayBoundary> BarangayBoundaries => Set<BarangayBoundary>();
+    public DbSet<SectionBoundary> SectionBoundaries => Set<SectionBoundary>();
     public DbSet<ZoneBoundary> ZoneBoundaries => Set<ZoneBoundary>();
     public DbSet<RoadSegment> RoadSegments => Set<RoadSegment>();
     public DbSet<RealPropertyUnit> RealPropertyUnits => Set<RealPropertyUnit>();

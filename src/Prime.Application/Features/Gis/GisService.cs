@@ -90,6 +90,8 @@ public sealed class GisService(IApplicationDbContext db) : IGisService
                 p.BlockNumber,
                 p.SurveyNumber,
                 BarangayName = p.Barangay!.Name,
+                SectionIndexNumber = p.Section != null ? p.Section.IndexNumber : null,
+                p.ParcelNumber,
                 p.Geometry,
             })
             .Take(take)
@@ -99,7 +101,8 @@ public sealed class GisService(IApplicationDbContext db) : IGisService
             "Feature",
             r.Id,
             JsonSerializer.SerializeToElement(r.Geometry!, GeoJsonOptions),
-            new ParcelFeatureProperties(r.Id, r.PropertyId, r.PropertyIdentificationNumber, r.LotNumber, r.BlockNumber, r.SurveyNumber, r.BarangayName)))
+            new ParcelFeatureProperties(r.Id, r.PropertyId, r.PropertyIdentificationNumber, r.LotNumber, r.BlockNumber, r.SurveyNumber, r.BarangayName,
+                r.SectionIndexNumber, r.ParcelNumber)))
             .ToList();
     }
 

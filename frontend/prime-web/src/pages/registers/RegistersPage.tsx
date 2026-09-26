@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Card, DatePicker, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
+import { useSections } from '../../api/propertyIdentification';
 import { useCreateRegisterRun, useRegisterRuns } from '../../api/registers';
 import { useClassifications } from '../../api/referenceData';
 import { useTaxpayerSearch } from '../../api/taxpayers';
@@ -14,6 +15,7 @@ interface RunForm {
   provinceId?: string;
   municipalityId?: string;
   barangayId?: string;
+  sectionId?: string;
   classificationId?: string;
   taxpayerId?: string;
   period?: [Dayjs, Dayjs];
@@ -37,6 +39,8 @@ export function RegistersPage() {
   const { data: classifications = [] } = useClassifications();
   const { data: taxpayers, isFetching: searching } = useTaxpayerSearch({ searchTerm: taxpayerTerm, pageSize: 10 }, { enabled: taxpayerTerm.length >= 2 });
   const create = useCreateRegisterRun();
+  const barangayId = Form.useWatch('barangayId', form);
+  const { data: sections = [] } = useSections(kind === 'TaxMapControlRoll' ? barangayId : undefined);
 
   const byOwner = kind === 'OwnershipRecordCard';
   const periodic = kind === 'RecordOfAssessment';
@@ -49,6 +53,7 @@ export function RegistersPage() {
       {
         kind: values.kind, asOf: asOf!.format('YYYY-MM-DD'), fromDate: from ? from.format('YYYY-MM-DD') : null,
         barangayId: byOwner ? null : values.barangayId ?? null, classificationId: periodic ? values.classificationId ?? null : null,
+        sectionId: kind === 'TaxMapControlRoll' ? values.sectionId ?? null : null,
         taxpayerId: byOwner ? values.taxpayerId ?? null : null, remarks: values.remarks || null,
       },
       { onSuccess: () => form.resetFields(['remarks']) },
@@ -78,7 +83,13 @@ export function RegistersPage() {
             <LocationSelect provinceFieldName="provinceId" municipalityFieldName="municipalityId" barangayFieldName="barangayId"
               provinceId={provinceId} municipalityId={municipalityId}
               onProvinceChange={(id) => { setProvinceId(id); setMunicipalityId(undefined); form.setFieldsValue({ municipalityId: undefined, barangayId: undefined }); }}
-              onMunicipalityChange={(id) => { setMunicipalityId(id); form.setFieldsValue({ barangayId: undefined }); }} />
+              onMunicipalityChange={(id) => { setMunicipalityId(id); form.setFieldsValue({ barangayId: undefined, sectionId: undefined }); }} />
+          )}
+          {kind === 'TaxMapControlRoll' && (
+            <Form.Item name="sectionId" label="Tax map section (post-TMCR; leave empty for the whole barangay)" style={{ maxWidth: 420 }}>
+              <Select allowClear disabled={!barangayId} placeholder={barangayId ? 'Whole barangay' : 'Choose the barangay first'}
+                options={sections.map((s) => ({ value: s.id, label: `Section ${s.indexNumber}${s.retiredOn ? ` (retired ${s.retiredOn})` : ''}` }))} />
+            </Form.Item>
           )}
           {periodic && (
             <Form.Item name="classificationId" label="Classification" rules={[{ required: true, message: 'Choose the classification' }]} style={{ maxWidth: 420 }}>
@@ -105,7 +116,7 @@ export function RegistersPage() {
         <Table<RegisterRunDto> rowKey="id" size="small" loading={isLoading} dataSource={runs} scroll={{ x: true }}
           columns={[
             { title: 'Register', dataIndex: 'kind', render: (k: RegisterKind) => registerKindLabel[k] },
-            { title: 'Scope', render: (_, r) => r.taxpayerName ?? [r.barangayName, r.classificationName].filter(Boolean).join(' · ') },
+            { title: 'Scope', render: (_, r) => r.taxpayerName ?? [r.barangayName, r.sectionIndexNumber && `Section ${r.sectionIndexNumber}`, r.classificationName].filter(Boolean).join(' · ') },
             { title: 'Period', render: (_, r) => (r.fromDate ? <>{r.fromDate} – {r.asOf} {r.kind !== 'RecordOfAssessment' && <Tag>supplement</Tag>}</> : <>as of {r.asOf}</>) },
             { title: 'Remarks', dataIndex: 'remarks' },
             { title: 'Created', dataIndex: 'createdAt', render: (d: string) => dayjs(d).format('YYYY-MM-DD HH:mm') },

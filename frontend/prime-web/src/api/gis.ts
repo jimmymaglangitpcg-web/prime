@@ -5,6 +5,8 @@ import type {
   PropertyProfileDto,
   ReferenceLayerFeatureCollection,
   ReferenceLayerName,
+  TaxMapSheetDto,
+  TaxMapSheetRoute,
 } from '../lib/types';
 
 /** Formats a WGS84 coordinate for a query string (7 dp ≈ 1 cm). */
@@ -25,6 +27,11 @@ export function fetchPropertyParcels(propertyId: string): Promise<ParcelDto[]> {
 
 export function fetchPropertyProfile(propertyId: string): Promise<PropertyProfileDto> {
   return apiGet<PropertyProfileDto>(`/api/properties/${propertyId}`);
+}
+
+/** A tax map or index map sheet (id = section, barangay or municipality, by kind). */
+export function fetchTaxMapSheet(kind: TaxMapSheetRoute, id: string, asOf: string, districtId?: string | null): Promise<TaxMapSheetDto> {
+  return apiGet<TaxMapSheetDto>(`/api/gis/sheets/${kind}/${id}`, { asOf, districtId });
 }
 
 /** Reference-layer versions valid on `asOf` (YYYY-MM-DD) within a WGS84 bbox. */
