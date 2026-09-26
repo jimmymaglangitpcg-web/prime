@@ -1,0 +1,51 @@
+{% comment %}
+  Assessment Roll — Taxable Properties, after the MRPAAO Attachment 6 (p.160–161). Superseded manual: reference
+  layout (docs/analysis/mrpaao-forms-model.md §15). Rows are derived from the
+  FAAS in force on the run's date; issuing the run freezes them.
+{% endcomment %}
+{% assign r = register %}
+<style>
+  @page { size: landscape; }
+  .src { font-size: 8pt; border: 1px solid #555; padding: 2px 6px; margin-bottom: 6px; }
+  .draft { border: 2px solid #b00; color: #b00; font-weight: bold; text-align: center; padding: 3px; margin-bottom: 6px; }
+  h1 { font-size: 12.5pt; text-align: center; margin: 4px 0 6px; }
+  .lgu { text-align: center; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 6px; }
+  td, th { border: 1px solid #000; padding: 2px 4px; font-size: 8pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: center; }
+  .num { text-align: right; white-space: nowrap; }
+  .hd td { border: none; font-size: 9pt; padding: 1px 4px; }
+  .empty { text-align: center; font-style: italic; }
+  .foot { font-size: 7.5pt; margin-top: 6px; }
+</style>
+<div class="src">Layout: MRPAAO 2004, Attachment 6 — superseded by the Local Assessment Manual; reference layout. Form {{ form.code }} v{{ form.version }}.</div>
+{% if r.formCode != form.code %}<div class="draft">This run is a {{ r.kind }} register; print it with form {{ r.formCode }}.</div>{% endif %}
+{% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% endif %}
+<h1>ASSESSMENT ROLL — TAXABLE PROPERTIES</h1>
+<table class="hd">
+  <tr><td>Province: <b>{{ r.province }}</b> <small>({{ r.provinceCode | default: "—" }})</small></td>
+      <td>City/Municipality: <b>{{ r.municipality }}</b> <small>({{ r.municipalityCode | default: "—" }})</small></td>
+      <td>Barangay: <b>{{ r.barangay }}</b> <small>({{ r.barangayCode | default: "—" }})</small></td>
+      <td>As of <b>{{ r.asOf | date_ph }}</b></td></tr>
+</table>
+<table class="hd"><tr><td>General revision: <b>{{ r.revisionYear | default: "—" }}</b></td>
+  <td>{% if r.fromDate %}SUPPLEMENT — FAAS entered from {{ r.fromDate | date_ph }} to {{ r.asOf | date_ph }}{% else %}All FAAS in force{% endif %}</td></tr></table>
+<table>
+  <tr><th rowspan="2">ARP No.</th><th rowspan="2">TD No.</th><th rowspan="2">PIN</th><th rowspan="2">Lot / Blk</th><th rowspan="2">Declared Owner</th>
+      <th rowspan="2">Owner's Address</th><th rowspan="2">Kind</th><th rowspan="2">Class</th><th rowspan="2">Assessed Value</th>
+      <th colspan="2">Previous</th><th colspan="2">Effectivity</th><th rowspan="2">Remarks</th></tr>
+  <tr><th>ARP No.</th><th>TD No.</th><th>Qtr</th><th>Yr</th></tr>
+  {% assign total = 0 %}
+  {% for x in rows %}
+  <tr><td>{{ x.arpNumber | default: "—" }}</td><td>{{ x.tdNumber }}</td><td>{{ x.pin }}</td><td>{{ x.lotBlock }}</td><td>{{ x.owner }}</td>
+      <td>{{ x.ownerAddress | default: "—" }}</td><td style="text-align:center">{{ x.kind }}</td><td>{{ x.classCode }}</td>
+      <td class="num">{% if x.assessedValue %}{{ x.assessedValue | money }}{% assign total = total | plus: x.assessedValue %}{% else %}—{% endif %}</td>
+      <td>{{ x.previousArpNumber | default: "—" }}</td><td>{{ x.previousTdNumber | default: "—" }}</td><td style="text-align:center">{{ x.effectivity.quarter }}</td><td>{{ x.effectivity.year }}</td><td>{{ x.remarks }}</td></tr>
+  {% else %}<tr><td colspan="14" class="empty">No FAAS to list for this barangay and period.</td></tr>{% endfor %}
+  <tr><td colspan="8" class="num"><b>TOTAL ({{ rows | size }})</b></td><td class="num"><b>{{ total | money }}</b></td><td colspan="5"></td></tr>
+</table>
+<p style="font-size:8pt">Kind: L — land, B — building, M — machinery, O — other improvement.</p>
+<table class="hd" style="margin-top:28px"><tr><td style="width:50%"></td>
+  <td style="text-align:center"><div style="border-top:1px solid #000; display:inline-block; min-width:260px; padding-top:2px">Provincial/City/Municipal Assessor</div></td></tr></table>
+<div class="foot">Location codes are PSGC codes (the manual's location index numbers are not recorded — DOMAIN VERIFICATION REQUIRED).
+  {% if r.remarks %}Remarks: {{ r.remarks }}. {% endif %}Printed {{ issue.issuedAt | date_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}. {{ form.legalBasis }}.</div>

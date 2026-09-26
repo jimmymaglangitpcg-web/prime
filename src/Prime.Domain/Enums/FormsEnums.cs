@@ -45,6 +45,8 @@ public enum FormSubjectType
     StatementOfAccount = 4,
     /// <summary>A FAAS as the MRPAAO prints it: a Tax Declaration with the assessment it declares; the subject id is the TD.</summary>
     Faas = 5,
+    /// <summary>A dated register run (TMCR, Assessment Roll, ORC, ROA); the subject id is the run.</summary>
+    Register = 6,
 }
 
 /// <summary>Records whose approval can follow a configured <c>ApprovalChain</c>.</summary>

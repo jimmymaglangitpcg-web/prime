@@ -52,6 +52,8 @@ public static class DependencyInjection
         services.AddScoped<IFormDataProvider, AppraisalRecordFormDataProvider>();
         services.AddScoped<IFormDataProvider, StatementOfAccountFormDataProvider>();
         services.AddScoped<IFormDataProvider, FaasFormDataProvider>();
+        services.AddScoped<IFormDataProvider, Features.Registers.RegisterFormDataProvider>();
+        services.AddScoped<Features.Registers.IRegisterService, Features.Registers.RegisterService>();
         services.AddScoped<IFormDataProvider, TaxBillFormDataProvider>();
         services.AddScoped<IFormDataProvider, TaxDeclarationFormDataProvider>();
         services.AddScoped<IRealPropertyUnitService, RealPropertyUnitService>();

@@ -1118,6 +1118,14 @@ MRPAAO's descriptive reasons (owner, address, location changed), and the
 Attachment 10 layout (v2) (plan §14). Migration `NoticeItems` is applied
 locally only.
 
+Step 5b is committed as `29e0d34`.
+
+**Step 6 done (2026-09-25, uncommitted):** the MRPAAO registers (TMCR, Assessment
+Roll taxable/exempt, Ownership Record Card, Record of Assessment) as dated
+register runs, printed through the forms engine, and a Registers page (plan
+§15). Migration `RegisterRuns` is applied locally only. Next: step 7 (Sworn
+Statement).
+
 **Step 5a done (2026-09-25):** MRPAAO layouts for the FAAS
 (land, building, machinery; subject = the TD) and the TD (v3), with the
 new `Mrpaao` form authority (plan §13). No migration. Integration tests

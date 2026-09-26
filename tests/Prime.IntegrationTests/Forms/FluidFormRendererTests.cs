@@ -78,6 +78,11 @@ public class FluidFormRendererTests
     [InlineData("FAAS_BUILDING.v1.liquid")]
     [InlineData("FAAS_MACHINERY.v1.liquid")]
     [InlineData("NOTICE_OF_ASSESSMENT.v2.liquid")]
+    [InlineData("TMCR.v1.liquid")]
+    [InlineData("AR_TAXABLE.v1.liquid")]
+    [InlineData("AR_EXEMPT.v1.liquid")]
+    [InlineData("ORC.v1.liquid")]
+    [InlineData("ROA.v1.liquid")]
     public void ProvisionalTemplates_AreEmbeddedAndParse(string file) =>
         renderer.Validate(ProvisionalFormSeeder.ReadTemplate(file)).ShouldBeNull();
 

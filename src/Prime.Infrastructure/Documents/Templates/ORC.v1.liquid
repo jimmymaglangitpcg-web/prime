@@ -1,0 +1,46 @@
+{% comment %}
+  Ownership Record Card, after the MRPAAO Attachment 8 (p.164–166). Superseded manual: reference
+  layout (docs/analysis/mrpaao-forms-model.md §15). Rows are derived from the
+  FAAS in force on the run's date; issuing the run freezes them.
+{% endcomment %}
+{% assign r = register %}
+<style>
+  @page { size: landscape; }
+  .src { font-size: 8pt; border: 1px solid #555; padding: 2px 6px; margin-bottom: 6px; }
+  .draft { border: 2px solid #b00; color: #b00; font-weight: bold; text-align: center; padding: 3px; margin-bottom: 6px; }
+  h1 { font-size: 12.5pt; text-align: center; margin: 4px 0 6px; }
+  .lgu { text-align: center; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 6px; }
+  td, th { border: 1px solid #000; padding: 2px 4px; font-size: 8pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: center; }
+  .num { text-align: right; white-space: nowrap; }
+  .hd td { border: none; font-size: 9pt; padding: 1px 4px; }
+  .empty { text-align: center; font-style: italic; }
+  .foot { font-size: 7.5pt; margin-top: 6px; }
+</style>
+<div class="src">Layout: MRPAAO 2004, Attachment 8 — superseded by the Local Assessment Manual; reference layout. Form {{ form.code }} v{{ form.version }}.</div>
+{% if r.formCode != form.code %}<div class="draft">This run is a {{ r.kind }} register; print it with form {{ r.formCode }}.</div>{% endif %}
+{% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% endif %}
+<h1>OWNERSHIP RECORD CARD</h1>
+<table class="hd">
+  <tr><td>Owner: <b>{{ r.owner.name }}</b></td><td>TIN: {{ r.owner.tin | default: "—" }}</td><td>As of <b>{{ r.asOf | date_ph }}</b></td></tr>
+  <tr><td colspan="2">Address: {{ r.owner.address | default: "(not recorded)" }}</td><td>Tel.: {{ r.owner.contactNumber | default: "—" }}</td></tr>
+</table>
+<table>
+  <tr><th>Date of Entry</th><th>Kind</th><th>Class</th><th>PIN</th><th>Title No.</th><th>Lot / Blk</th><th>ARP No.</th><th>TD No.</th>
+      <th>Previous Owner</th><th>Location</th><th>Area</th><th>Market Value</th><th>Assessed Value</th><th>Remarks</th></tr>
+  {% assign mv = 0 %}{% assign av = 0 %}
+  {% for x in rows %}
+  <tr><td>{{ x.enteredOn | date_ph }}</td><td style="text-align:center">{{ x.kind }}</td><td>{{ x.classCode }}</td><td>{{ x.pin }}</td>
+      <td>{{ x.titleNumber | default: "—" }}</td><td>{{ x.lotBlock }}</td><td>{{ x.arpNumber | default: "—" }}</td><td>{{ x.tdNumber }}</td>
+      <td>{{ x.previousOwner | default: "—" }}</td><td>{{ x.location }}</td>
+      <td class="num">{% if x.area %}{{ x.area | num }} {{ x.areaUnit }}{% else %}—{% endif %}</td>
+      <td class="num">{% if x.marketValue %}{{ x.marketValue | money }}{% assign mv = mv | plus: x.marketValue %}{% else %}—{% endif %}</td>
+      <td class="num">{% if x.assessedValue %}{{ x.assessedValue | money }}{% assign av = av | plus: x.assessedValue %}{% else %}—{% endif %}</td>
+      <td>{{ x.remarks }}</td></tr>
+  {% else %}<tr><td colspan="14" class="empty">This owner has no declared property in force as of this date.</td></tr>{% endfor %}
+  <tr><td colspan="11" class="num"><b>TOTAL</b></td><td class="num"><b>{{ mv | money }}</b></td><td class="num"><b>{{ av | money }}</b></td><td></td></tr>
+</table>
+<table class="hd" style="margin-top:28px"><tr><td style="width:50%"></td>
+  <td style="text-align:center"><div style="border-top:1px solid #000; display:inline-block; min-width:260px; padding-top:2px">Provincial/City/Municipal Assessor</div></td></tr></table>
+<div class="foot">{% if r.remarks %}Remarks: {{ r.remarks }}. {% endif %}Printed {{ issue.issuedAt | date_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}. {{ form.legalBasis }}.</div>

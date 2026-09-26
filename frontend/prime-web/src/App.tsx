@@ -11,6 +11,7 @@ import { GisWorkspacePage } from './pages/gis/GisWorkspacePage';
 import { GisPrintPage } from './pages/gis/GisPrintPage';
 import { StatementOfAccountPage } from './pages/billing/StatementOfAccountPage';
 import { FormDocumentPage } from './pages/documents/FormDocumentPage';
+import { RegistersPage } from './pages/registers/RegistersPage';
 import { FormsAdminPage } from './pages/admin/FormsAdminPage';
 
 function DashboardPlaceholder() {
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/gis/print" element={<GisPrintPage />} />
         <Route path="/documents/preview" element={<FormDocumentPage />} />
         <Route path="/documents/:id" element={<FormDocumentPage />} />
+        <Route path="/registers" element={<RegistersPage />} />
         <Route path="/admin/forms" element={<FormsAdminPage />} />
       </Routes>
     </AppShell>

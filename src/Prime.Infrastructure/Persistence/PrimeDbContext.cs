@@ -57,6 +57,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<StructuralPart> StructuralParts => Set<StructuralPart>();
     public DbSet<StructuralMaterial> StructuralMaterials => Set<StructuralMaterial>();
     public DbSet<TransferTaxClearance> TransferTaxClearances => Set<TransferTaxClearance>();
+    public DbSet<Prime.Domain.Entities.Registers.RegisterRun> RegisterRuns => Set<Prime.Domain.Entities.Registers.RegisterRun>();
     public DbSet<LandImprovement> LandImprovements => Set<LandImprovement>();
     public DbSet<LandAdjustment> LandAdjustments => Set<LandAdjustment>();
     public DbSet<AdjustmentFactor> AdjustmentFactors => Set<AdjustmentFactor>();

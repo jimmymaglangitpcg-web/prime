@@ -1139,3 +1139,26 @@ export type SetTransferTaxClearanceRequest = TransferTaxClearanceDto;
 
 export interface StructuralMaterialDto { id: string; code: string; name: string; structuralPartId: string; sortOrder: number }
 
+
+// --- Registers (docs/analysis/mrpaao-forms-model.md §15) ---
+
+export type RegisterKind = 'TaxMapControlRoll' | 'AssessmentRollTaxable' | 'AssessmentRollExempt' | 'OwnershipRecordCard' | 'RecordOfAssessment';
+
+export const registerKindLabel: Record<RegisterKind, string> = {
+  TaxMapControlRoll: 'Tax Map Control Roll',
+  AssessmentRollTaxable: 'Assessment Roll — Taxable',
+  AssessmentRollExempt: 'Assessment Roll — Exempt',
+  OwnershipRecordCard: 'Ownership Record Card',
+  RecordOfAssessment: 'Record of Assessment',
+};
+
+export interface RegisterRunDto {
+  id: string; kind: RegisterKind; formCode: string; asOf: string; fromDate: string | null;
+  barangayId: string | null; barangayName: string | null; classificationId: string | null; classificationName: string | null;
+  taxpayerId: string | null; taxpayerName: string | null; remarks: string | null; createdAt: string;
+}
+
+export interface CreateRegisterRunRequest {
+  kind: RegisterKind; asOf: string; fromDate: string | null; barangayId: string | null;
+  classificationId: string | null; taxpayerId: string | null; remarks: string | null;
+}

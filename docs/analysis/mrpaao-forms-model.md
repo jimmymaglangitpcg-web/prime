@@ -1104,3 +1104,76 @@ with checkboxes.
   layout, the combined dialog loads the owner's candidates, and there are
   no console errors.
 
+## 15. Step 6 — the registers (2026-09-25)
+
+**Model.**
+- A **register run** (`RegisterRuns`) records one register's kind, scope and
+  date, and nothing else. Its rows are never kept by hand.
+- The kinds are the Tax Map Control Roll (Att. 5), the Assessment Roll —
+  Taxable (Att. 6) and — Exempt (Att. 7), the Ownership Record Card (Att. 8)
+  and the Record of Assessment (Att. 9).
+- The scope depends on the kind:
+  - TMCR and the Assessment Rolls: a barangay;
+  - ORC: a taxpayer;
+  - ROA: a barangay and a classification.
+  The database enforces these rules (`CK_RegisterRuns_Scope`,
+  `CK_RegisterRuns_Period`), and so does the service (`VALIDATION_FAILED`).
+- `FromDate`:
+  - the ROA's period start;
+  - an Assessment Roll *supplement* (e.g. quarterly): only FAAS entered on or
+    after it.
+- Printing a run issues it as a form (`FormSubjectType.Register`, subject =
+  the run). The issued snapshot freezes the rows, and a reprint returns the
+  same issue. A later register is a new run.
+
+**Rows: the FAAS in force at `AsOf`.**
+- A TD is in force when it is effective by that date and approved by then,
+  and it is still approved or was cancelled after that date. Per unit, the
+  latest such TD counts.
+- Its values come from the assessment it declares, or else from the unit's
+  latest posted assessment effective by then.
+- The date of entry is the TD's approval (or creation) on the LGU calendar.
+- Owners are the unit's own current parties, or else the property's (§7).
+- ARP No. follows `Faas:NumberSource`.
+
+| Register | Rows |
+|---|---|
+| TMCR | One per land TD in the barangay: assessor's lot no. (last PIN segment), survey/lot/block, title, area, class code, declared owner, ARP, TD, the number of buildings, machinery (X), other improvements (land improvement kinds), remarks = transaction code |
+| AR Taxable / Exempt | One per TD in the barangay by taxability: ARP, TD, full unit PIN, lot/block, owner and address, kind L/B/M/O, class, AV, previous ARP/TD (taxable) or legal basis (exempt: *not recorded*, since exemptions are not yet modelled), effectivity quarter/year, remarks; total AV; revision year = the SMV of the barangay's latest posted assessment |
+| ORC | One per unit the owner holds: date of entry, kind, class, PIN, title, lot/block, ARP, TD, previous owner (owners of the previous TD at its entry), location, area, MV, AV; totals |
+| ROA | Each TD of the barangay and classification entered in [FromDate, AsOf], including ones cancelled since: date, ARP, TD, owner at entry, PIN, location, land area (taxable or exempt), MV and AV split land/building/machinery, year taxes begin (effectivity year; exempt: none), transaction code; totals |
+
+**Forms.**
+- Five MRPAAO layouts, in landscape: `TMCR`, `AR_TAXABLE`, `AR_EXEMPT`,
+  `ORC`, `ROA` (v1).
+- Printing a run with another register's form shows a warning, as the FAAS
+  forms do.
+
+**API and UI.**
+- `POST /api/registers` creates a run, and `GET /api/registers` lists the
+  latest 200.
+- A new **Registers** page creates runs (the fields change with the kind),
+  lists them, and previews or issues each one.
+
+**DOMAIN VERIFICATION REQUIRED / gaps.**
+- The manual's location index numbers and register page numbering are not
+  recorded, so the forms show PSGC codes.
+- The exempt roll's legal basis waits for exemptions (CLAUDE.md §43).
+- Rows are built per run in one request, with per-row queries. A large
+  barangay needs the background-job mechanism (CLAUDE.md §73) and
+  set-based queries before production use.
+- Runs cannot be cancelled. An issued run can be cancelled through the
+  issued form.
+
+**Verification.**
+- 6 integration tests (`RegistersTests`): a TMCR issued and frozen; empty
+  before the TD took effect; taxable vs exempt; a supplement window; the
+  ORC; the ROA period with totals; scope validation; the wrong-form
+  warning.
+- The five templates parse (`FluidFormRendererTests`).
+- Full suite: 101 domain, 37 application and 160 integration tests pass.
+- The frontend production build and lint pass.
+- Browser (Playwright): a TMCR run was created and previewed, and an ROA
+  run was created with a period and issued, with no console errors.
+- Migration `RegisterRuns` (additive: one table) is applied locally only.
+
