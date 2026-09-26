@@ -81,3 +81,36 @@ public class CollectionSetupController(ICollectionSetupService setup) : ApiContr
     public async Task<ActionResult<RevenueAccountMappingDto>> ApproveAccountMapping(Guid id, CancellationToken ct) =>
         HandleResult(await setup.ApproveAccountMappingAsync(id, ct));
 }
+
+/// <summary>Remittance, collection summary and reconciliation (docs/analysis/collection.md §4.7, step 9e).</summary>
+[Route("api/collections")]
+public class CollectionsController(ICollectionReportService reports) : ApiControllerBase
+{
+    [HttpPost("remittances")]
+    public async Task<ActionResult<RemittanceDto>> Remit(CreateRemittanceRequest request, CancellationToken ct) =>
+        HandleResult(await reports.CreateRemittanceAsync(request, ct));
+
+    [HttpGet("remittances")]
+    public async Task<ActionResult<IReadOnlyList<RemittanceDto>>> Remittances([FromQuery] DateOnly? date, [FromQuery] RemittanceStatus? status, CancellationToken ct) =>
+        HandleResult(await reports.ListRemittancesAsync(date, status, ct));
+
+    [HttpGet("remittances/{id:guid}")]
+    public async Task<ActionResult<RemittanceDto>> Remittance(Guid id, CancellationToken ct) => HandleResult(await reports.GetRemittanceAsync(id, ct));
+
+    [HttpPost("remittances/{id:guid}/accept")]
+    public async Task<ActionResult<RemittanceDto>> Accept(Guid id, DecideRemittanceRequest request, CancellationToken ct) =>
+        HandleResult(await reports.AcceptRemittanceAsync(id, request, ct));
+
+    [HttpPost("remittances/{id:guid}/return")]
+    public async Task<ActionResult<RemittanceDto>> Return(Guid id, DecideRemittanceRequest request, CancellationToken ct) =>
+        HandleResult(await reports.ReturnRemittanceAsync(id, request, ct));
+
+    [HttpGet("summary")]
+    public async Task<ActionResult<CollectionSummaryDto>> Summary([FromQuery] DateOnly from, [FromQuery] DateOnly to, [FromQuery] CollectionGroupBy groupBy,
+        CancellationToken ct) =>
+        HandleResult(await reports.SummaryAsync(from, to, groupBy, ct));
+
+    [HttpGet("reconciliation")]
+    public async Task<ActionResult<ReconciliationDto>> Reconciliation([FromQuery] DateOnly? date, CancellationToken ct) =>
+        HandleResult(await reports.ReconcileAsync(date, ct));
+}

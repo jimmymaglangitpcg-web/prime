@@ -9,8 +9,8 @@ public enum PaymentCancellationStatus
 
 /// <summary>
 /// Fixed when a cancellation is approved (docs/analysis/collection.md §4.4):
-/// a <see cref="Void"/> is approved on the payment's own date (and, from
-/// step 9e, before remittance); anything later is a <see cref="Reversal"/>.
+/// a <see cref="Void"/> is approved on the payment's own date, before the
+/// payment is remitted; anything else is a <see cref="Reversal"/>.
 /// </summary>
 public enum PaymentCancellationKind
 {

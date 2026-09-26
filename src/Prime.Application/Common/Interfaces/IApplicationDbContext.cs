@@ -60,6 +60,10 @@ public interface IApplicationDbContext
     DbSet<Prime.Domain.Entities.Collection.PaymentTender> PaymentTenders { get; }
     DbSet<Prime.Domain.Entities.Collection.PaymentAllocation> PaymentAllocations { get; }
     DbSet<Prime.Domain.Entities.Collection.PaymentCancellation> PaymentCancellations { get; }
+    DbSet<Prime.Domain.Entities.Collection.Remittance> Remittances { get; }
+    DbSet<Prime.Domain.Entities.Collection.RemittanceItem> RemittanceItems { get; }
+    DbSet<Prime.Domain.Entities.Collection.RemittanceModeTotal> RemittanceModeTotals { get; }
+    DbSet<Prime.Domain.Entities.Collection.RemittanceAccountTotal> RemittanceAccountTotals { get; }
     DbSet<Prime.Domain.Entities.Collection.PaymentMode> PaymentModes { get; }
     DbSet<Prime.Domain.Entities.Collection.RevenueAccountMapping> RevenueAccountMappings { get; }
     DbSet<NumberingScheme> NumberingSchemes { get; }

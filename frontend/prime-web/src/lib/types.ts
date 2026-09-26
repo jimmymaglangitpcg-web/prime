@@ -945,6 +945,67 @@ export interface RevenueAccountMappingDto {
   remarks: string | null;
 }
 
+export type RemittanceStatus = 'Submitted' | 'Accepted' | 'Returned';
+export type CollectionGroupBy = 'Date' | 'Cashier' | 'Mode' | 'TaxType' | 'TaxYear' | 'YearCategory' | 'Fund' | 'Account' | 'Barangay';
+
+export interface RemittanceDto {
+  id: string;
+  remittanceNumber: string | null;
+  cashierUserId: string;
+  cashierName: string | null;
+  collectionDate: string;
+  status: RemittanceStatus;
+  paymentCount: number;
+  totalAmount: number;
+  remarks: string | null;
+  submittedAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionRemarks: string | null;
+  modeTotals: { paymentModeId: string; modeCode: string; modeName: string; amount: number }[];
+  accountTotals: { accountCode: string; accountName: string; fund: string | null; amount: number }[];
+  items: { paymentId: string; officialReceiptNumber: string; payorName: string; amount: number; paymentStatus: PaymentStatus }[];
+}
+
+export interface CollectionSummaryRowDto {
+  key: string;
+  label: string;
+  receipts: number;
+  collected: number;
+  reversed: number;
+  net: number;
+}
+
+export interface CollectionSummaryDto {
+  from: string;
+  to: string;
+  groupBy: CollectionGroupBy;
+  rows: CollectionSummaryRowDto[];
+  totalCollected: number;
+  totalReversed: number;
+  net: number;
+}
+
+export interface ReconciliationRowDto {
+  cashierUserId: string | null;
+  cashierName: string | null;
+  receipts: number;
+  amountDue: number;
+  allocationTotal: number;
+  tenderedLessChange: number;
+  remitted: number;
+  unremitted: number;
+  unremittedReceipts: number;
+  voidedReceipts: number;
+  problems: string[];
+}
+
+export interface ReconciliationDto {
+  date: string;
+  cashiers: ReconciliationRowDto[];
+  balanced: boolean;
+}
+
 export interface CreateRevenueAccountMappingRequest {
   taxTypeId: string;
   component: BillingComponent;
@@ -968,7 +1029,8 @@ export type NumberedDocumentKind =
   | 'OfficialReceipt'
   | 'PropertyTransaction'
   | 'SwornStatement'
-  | 'PaymentTransaction';
+  | 'PaymentTransaction'
+  | 'Remittance';
 export type FormAuthority = 'PrimeProvisional' | 'Lam' | 'Blgf' | 'LguOrdinance' | 'Other' | 'Mrpaao';
 export type FormSubjectType = 'TaxBill' | 'TaxDeclaration' | 'NoticeOfAssessment' | 'Assessment' | 'StatementOfAccount' | 'Faas' | 'Register' | 'SwornStatement' | 'Payment';
 export type ApprovalSubjectType = 'Assessment' | 'TaxDeclaration' | 'PropertyTransaction';

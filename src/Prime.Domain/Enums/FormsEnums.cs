@@ -17,6 +17,8 @@ public enum NumberedDocumentKind
     SwornStatement = 7,
     /// <summary>The collection transaction number, separate from the OR number (DOF DO 054-2024 §7.1; docs/analysis/collection.md §3).</summary>
     PaymentTransaction = 8,
+    /// <summary>A cashier's remittance (docs/analysis/collection.md §4.7).</summary>
+    Remittance = 9,
 }
 
 /// <summary>Who prescribes a form version (docs/FORMS-REVISION-PLAN.md §4.1).</summary>

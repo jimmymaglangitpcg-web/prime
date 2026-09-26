@@ -7,14 +7,15 @@ import { formatMoney } from '../../lib/format';
 import type { PaymentCancellationDto, PaymentStatus, PaymentSummaryDto } from '../../lib/types';
 import { PaymentDrawer } from '../properties/sections/PaymentsSection';
 import { paymentStatusColor } from '../../lib/collection';
+import { ReconciliationTab, RemittancesTab, SummaryTab } from './CollectionReportTabs';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error)?.message);
 
 /**
  * Collection (CLAUDE.md §41; docs/analysis/collection.md §6): the day's
- * receipts and the void/reversal/correction requests waiting for a decision
- * by someone other than the requester. Remittance, the collection summary
- * and reconciliation arrive with step 9e.
+ * receipts, the void/reversal/correction requests waiting for a decision by
+ * someone other than the requester, remittances, the collection summary and
+ * reconciliation.
  */
 export function CollectionPage() {
   const pending = usePaymentCancellations('Pending');
@@ -24,6 +25,9 @@ export function CollectionPage() {
       <Tabs items={[
         { key: 'receipts', label: 'Receipts', children: <ReceiptsTab /> },
         { key: 'requests', label: `Cancellation requests (${pending.data?.length ?? 0})`, children: <RequestsTab /> },
+        { key: 'remittances', label: 'Remittances', children: <RemittancesTab /> },
+        { key: 'summary', label: 'Summary', children: <SummaryTab /> },
+        { key: 'reconciliation', label: 'Reconciliation', children: <ReconciliationTab /> },
       ]} />
     </Space>
   );
@@ -121,7 +125,7 @@ function RequestsTab() {
         {decide.isError && <Alert type="error" showIcon title="Not decided" description={errorText(decide.error)} style={{ marginBottom: 12 }} />}
         {deciding?.decision === 'approve' && (
           <Typography.Paragraph>
-            OR {deciding.request.paymentOfficialReceiptNumber} will be {deciding.request.paymentDate === dayjs().format('YYYY-MM-DD') ? 'voided' : 'reversed'} and
+            OR {deciding.request.paymentOfficialReceiptNumber} will be voided (same day, not yet remitted) or otherwise reversed, and
             what it paid becomes due again{deciding.request.isCorrection ? '; the corrected receipt is issued in the same step' : ''}.
           </Typography.Paragraph>
         )}

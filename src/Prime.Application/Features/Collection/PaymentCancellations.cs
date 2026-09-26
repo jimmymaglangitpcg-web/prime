@@ -11,7 +11,7 @@ namespace Prime.Application.Features.Collection;
 /// Void, reversal and correction (docs/analysis/collection.md §4.4–§4.5;
 /// CLAUDE.md §46): a request with a reason, decided by someone other than
 /// the requester. On approval the payment becomes Voided (approved on the
-/// payment's own date) or Reversed (later), gets a cancellation transaction
+/// payment's own date, before it is remitted) or Reversed (otherwise), gets a cancellation transaction
 /// number, and its allocations stop counting, so what it settled is owed
 /// again. A correction also posts its replacement in the same transaction,
 /// dated like the payment it corrects, so the charges are those of the
@@ -108,7 +108,10 @@ public sealed partial class PaymentService
             }
 
             var now = clock.UtcNow;
-            var kind = clock.LocalDate(now) == payment.PaymentDate ? PaymentCancellationKind.Void : PaymentCancellationKind.Reversal;
+            // A void is same-day and before remittance; anything else is a reversal (§4.4).
+            var kind = clock.LocalDate(now) == payment.PaymentDate && payment.RemittanceId is null
+                ? PaymentCancellationKind.Void
+                : PaymentCancellationKind.Reversal;
             var context = await NumberContexts.ForPropertyAsync(db, payment.Allocations[0].PropertyId, clock.Today.Year, cancellationToken);
             var number = await numbering.GenerateIfConfiguredAsync(NumberedDocumentKind.PaymentTransaction, context, clock.Today, cancellationToken);
             if (number.IsFailure)

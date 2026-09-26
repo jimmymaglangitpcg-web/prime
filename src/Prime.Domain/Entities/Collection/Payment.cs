@@ -53,6 +53,13 @@ public sealed class Payment : AuditableEntity
     public DateTimeOffset? CancelledAt { get; set; }
     /// <summary>For a correction's replacement: the payment it corrects (voided or reversed in the same step).</summary>
     public Guid? ReplacesPaymentId { get; set; }
+    /// <summary>The submitted or accepted remittance covering this payment; cleared when that remittance is returned.</summary>
+    public Guid? RemittanceId { get; set; }
+    /// <summary>
+    /// Row version (PostgreSQL <c>xmin</c>; no physical column — the Parcel precedent):
+    /// remitting and voiding the same payment at once cannot both succeed (CLAUDE.md §66).
+    /// </summary>
+    public uint Version { get; set; }
     public string? Remarks { get; set; }
 
     public List<PaymentTender> Tenders { get; set; } = [];

@@ -42,6 +42,10 @@ public sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.HasMany(x => x.Cancellations).WithOne(x => x.Payment).HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Payment>().WithMany().HasForeignKey(x => x.ReplacesPaymentId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => x.ReplacesPaymentId).IsUnique().HasFilter("\"ReplacesPaymentId\" IS NOT NULL");
+        builder.HasOne<Remittance>().WithMany().HasForeignKey(x => x.RemittanceId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.RemittanceId);
+        // Npgsql maps a uint row version to the xmin system column (no physical column).
+        builder.Property(x => x.Version).IsRowVersion();
 
         builder.HasIndex(x => new { x.PaymentDate, x.CashierUserId });
         builder.HasIndex(x => x.PayorTaxpayerId);
@@ -119,6 +123,67 @@ public sealed class PaymentCancellationConfiguration : IEntityTypeConfiguration<
         // One open request per payment.
         builder.HasIndex(x => x.PaymentId).IsUnique().HasFilter("\"Status\" = 'Pending'").HasDatabaseName("UX_PaymentCancellations_Pending");
         builder.HasIndex(x => x.Status);
+    }
+}
+
+public sealed class RemittanceConfiguration : IEntityTypeConfiguration<Remittance>
+{
+    public void Configure(EntityTypeBuilder<Remittance> builder)
+    {
+        builder.ToTable("Remittances", t =>
+        {
+            t.HasCheckConstraint("CK_Remittances_Totals", "\"TotalAmount\" > 0 AND \"PaymentCount\" > 0");
+            t.HasCheckConstraint("CK_Remittances_Decision", "(\"Status\" = 'Submitted') = (\"DecidedAt\" IS NULL)");
+        });
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.RemittanceNumber).HasMaxLength(100);
+        builder.HasIndex(x => x.RemittanceNumber).IsUnique().HasFilter("\"RemittanceNumber\" IS NOT NULL");
+        builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.TotalAmount).HasPrecision(18, 2);
+        builder.Property(x => x.Remarks).HasMaxLength(1000);
+        builder.Property(x => x.DecisionRemarks).HasMaxLength(1000);
+        builder.HasMany(x => x.Items).WithOne().HasForeignKey(x => x.RemittanceId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(x => x.ModeTotals).WithOne().HasForeignKey(x => x.RemittanceId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(x => x.AccountTotals).WithOne().HasForeignKey(x => x.RemittanceId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => new { x.CollectionDate, x.CashierUserId });
+    }
+}
+
+public sealed class RemittanceItemConfiguration : IEntityTypeConfiguration<RemittanceItem>
+{
+    public void Configure(EntityTypeBuilder<RemittanceItem> builder)
+    {
+        builder.ToTable("RemittanceItems");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.HasOne(x => x.Payment).WithMany().HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => new { x.RemittanceId, x.PaymentId }).IsUnique();
+        builder.HasIndex(x => x.PaymentId);
+    }
+}
+
+public sealed class RemittanceModeTotalConfiguration : IEntityTypeConfiguration<RemittanceModeTotal>
+{
+    public void Configure(EntityTypeBuilder<RemittanceModeTotal> builder)
+    {
+        builder.ToTable("RemittanceModeTotals");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.HasOne(x => x.PaymentMode).WithMany().HasForeignKey(x => x.PaymentModeId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => new { x.RemittanceId, x.PaymentModeId }).IsUnique();
+    }
+}
+
+public sealed class RemittanceAccountTotalConfiguration : IEntityTypeConfiguration<RemittanceAccountTotal>
+{
+    public void Configure(EntityTypeBuilder<RemittanceAccountTotal> builder)
+    {
+        builder.ToTable("RemittanceAccountTotals");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Amount).HasPrecision(18, 2);
+        builder.Property(x => x.AccountCode).HasMaxLength(50).IsRequired();
+        builder.Property(x => x.AccountName).HasMaxLength(300).IsRequired();
+        builder.Property(x => x.Fund).HasMaxLength(100);
     }
 }
 

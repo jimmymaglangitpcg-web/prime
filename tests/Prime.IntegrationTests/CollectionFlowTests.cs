@@ -544,6 +544,165 @@ public class CollectionFlowTests(WebApplicationFactory<Program> factory) : IClas
         statement.Payments.Single().Amount.ShouldBe(500m);
     }
 
+    // --- Remittance, summary, reconciliation (step 9e) ---
+
+    /// <summary>Two receipts by one cashier: 500 of tax part-paid in cash (600 tendered, 100 change), then the remaining 1,500 by check.</summary>
+    private static async Task<(PaymentDto Part, PaymentDto Remainder)> TwoReceiptsAsync(IPaymentService payments, PaySeed s)
+    {
+        var part = await payments.PostAsync(Pay(s, 500m, [new PaymentTenderRequest(s.Cash.Id, 600m)], items: [new PaymentItemRequest(s.Seed.RpuId, 2026, 1, 500m)]));
+        part.IsSuccess.ShouldBeTrue(part.IsSuccess ? null : part.Message);
+        var rest = await payments.PostAsync(Pay(s, 1_500m, [new PaymentTenderRequest(s.Check.Id, 1_500m, "DEMO-CHK-9")]));
+        rest.IsSuccess.ShouldBeTrue(rest.IsSuccess ? null : rest.Message);
+        return (part.Value, rest.Value);
+    }
+
+    [Fact]
+    public async Task Remittance_FreezesTotals_IsAcceptedByAnother_AndItsReceiptsCanOnlyBeReversed()
+    {
+        var (db, services, transaction) = await BeginAsync(March15);
+        await using var _ = transaction;
+        var s = await SeedBillAsync(services, db, new DateOnly(2026, 3, 15));
+        var payments = services.GetRequiredService<IPaymentService>();
+        var reports = services.GetRequiredService<ICollectionReportService>();
+        var (user, maker, checker) = Users(services);
+        var (part, rest) = await TwoReceiptsAsync(payments, s);
+
+        var remitted = await reports.CreateRemittanceAsync(new CreateRemittanceRequest(null, "DEMO end of day"));
+
+        remitted.IsSuccess.ShouldBeTrue(remitted.IsSuccess ? null : remitted.Message);
+        var r = remitted.Value;
+        r.Status.ShouldBe(RemittanceStatus.Submitted);
+        r.CashierUserId.ShouldBe(maker);
+        r.CollectionDate.ShouldBe(new DateOnly(2026, 3, 15));
+        r.PaymentCount.ShouldBe(2);
+        r.TotalAmount.ShouldBe(2_000m);
+        r.ModeTotals.Select(m => (m.PaymentModeId, m.Amount)).ShouldBe([(s.Cash.Id, 500m), (s.Check.Id, 1_500m)], ignoreOrder: true);
+        r.AccountTotals.Sum(a => a.Amount).ShouldBe(2_000m);
+        r.Items.Select(i => i.PaymentId).ShouldBe([part.Id, rest.Id], ignoreOrder: true);
+        (await reports.CreateRemittanceAsync(new CreateRemittanceRequest(null, null))).Code.ShouldBe("REMITTANCE_NOTHING_TO_REMIT");
+        (await reports.AcceptRemittanceAsync(r.Id, new DecideRemittanceRequest(null))).Code.ShouldBe("CANNOT_DECIDE_OWN_REMITTANCE");
+
+        user.AppUserId = checker;
+        (await reports.AcceptRemittanceAsync(r.Id, new DecideRemittanceRequest("DEMO counted"))).Value.Status.ShouldBe(RemittanceStatus.Accepted);
+
+        // Same day, but remitted: a cancellation is now a reversal, not a void.
+        user.AppUserId = maker;
+        var request = (await payments.RequestCancellationAsync(part.Id, new RequestPaymentCancellationRequest("DEMO dishonoured"))).Value;
+        user.AppUserId = checker;
+        (await payments.ApproveCancellationAsync(request.Id, new DecidePaymentCancellationRequest(null))).Value.Kind.ShouldBe(PaymentCancellationKind.Reversal);
+    }
+
+    [Fact]
+    public async Task ReturnedRemittance_FreesItsReceipts_AndKeepsItsHistory()
+    {
+        var (db, services, transaction) = await BeginAsync(March15);
+        await using var _ = transaction;
+        var s = await SeedBillAsync(services, db, new DateOnly(2026, 3, 15));
+        var payments = services.GetRequiredService<IPaymentService>();
+        var reports = services.GetRequiredService<ICollectionReportService>();
+        var (user, maker, checker) = Users(services);
+        await TwoReceiptsAsync(payments, s);
+        var first = (await reports.CreateRemittanceAsync(new CreateRemittanceRequest(null, null))).Value;
+
+        user.AppUserId = checker;
+        (await reports.ReturnRemittanceAsync(first.Id, new DecideRemittanceRequest(null))).Code.ShouldBe("VALIDATION_FAILED");
+        var returned = (await reports.ReturnRemittanceAsync(first.Id, new DecideRemittanceRequest("DEMO short by 100"))).Value;
+        returned.Status.ShouldBe(RemittanceStatus.Returned);
+        returned.Items.Count.ShouldBe(2);
+
+        user.AppUserId = maker;
+        var second = await reports.CreateRemittanceAsync(new CreateRemittanceRequest(null, "DEMO recounted"));
+        second.IsSuccess.ShouldBeTrue(second.IsSuccess ? null : second.Message);
+        second.Value.TotalAmount.ShouldBe(2_000m);
+    }
+
+    [Fact]
+    public async Task PendingCancellation_BlocksRemittance()
+    {
+        var (db, services, transaction) = await BeginAsync(March15);
+        await using var _ = transaction;
+        var s = await SeedBillAsync(services, db, new DateOnly(2026, 3, 15));
+        var payments = services.GetRequiredService<IPaymentService>();
+        Users(services);
+        var (part, _) = await TwoReceiptsAsync(payments, s);
+        (await payments.RequestCancellationAsync(part.Id, new RequestPaymentCancellationRequest("DEMO"))).IsSuccess.ShouldBeTrue();
+
+        (await services.GetRequiredService<ICollectionReportService>().CreateRemittanceAsync(new CreateRemittanceRequest(null, null)))
+            .Code.ShouldBe("REMITTANCE_PENDING_CANCELLATIONS");
+    }
+
+    [Fact]
+    public async Task Summary_CountsCollections_ShowsReversalsNegative_AndLeavesVoidsOut()
+    {
+        var (db, services, transaction) = await BeginAsync(March15);
+        await using var _ = transaction;
+        var s = await SeedBillAsync(services, db, new DateOnly(2026, 3, 15));
+        var payments = services.GetRequiredService<IPaymentService>();
+        var reports = services.GetRequiredService<ICollectionReportService>();
+        var (user, maker, checker) = Users(services);
+        var (part, _) = await TwoReceiptsAsync(payments, s);
+        var remittance = (await reports.CreateRemittanceAsync(new CreateRemittanceRequest(null, null))).Value;
+        user.AppUserId = checker;
+        await reports.AcceptRemittanceAsync(remittance.Id, new DecideRemittanceRequest(null));
+        // The part-payment is reversed (remitted) …
+        user.AppUserId = maker;
+        var reversal = (await payments.RequestCancellationAsync(part.Id, new RequestPaymentCancellationRequest("DEMO"))).Value;
+        user.AppUserId = checker;
+        await payments.ApproveCancellationAsync(reversal.Id, new DecidePaymentCancellationRequest(null));
+        // … and paid again, then that receipt is voided (not remitted, same day).
+        user.AppUserId = maker;
+        var again = (await payments.PostAsync(Pay(s, 500m, items: [new PaymentItemRequest(s.Seed.RpuId, 2026, 1, 500m)]))).Value;
+        var voidRequest = (await payments.RequestCancellationAsync(again.Id, new RequestPaymentCancellationRequest("DEMO"))).Value;
+        user.AppUserId = checker;
+        (await payments.ApproveCancellationAsync(voidRequest.Id, new DecidePaymentCancellationRequest(null))).Value.Kind.ShouldBe(PaymentCancellationKind.Void);
+        var day = new DateOnly(2026, 3, 15);
+
+        var byTaxType = (await reports.SummaryAsync(day, day, CollectionGroupBy.TaxType)).Value;
+        var basic = byTaxType.Rows.Single(r => r.Key == s.Basic.Code);
+        basic.Collected.ShouldBe(1_000m);    // 250 + 750; the voided 250 is not counted
+        basic.Reversed.ShouldBe(-250m);
+        basic.Net.ShouldBe(750m);
+        basic.Receipts.ShouldBe(2);
+
+        var byMode = (await reports.SummaryAsync(day, day, CollectionGroupBy.Mode)).Value;
+        var cash = byMode.Rows.Single(r => r.Key == s.Cash.Code);
+        cash.Collected.ShouldBe(500m);       // 600 tendered less 100 change
+        cash.Reversed.ShouldBe(-500m);
+        byMode.Rows.Single(r => r.Key == s.Check.Code).Net.ShouldBe(1_500m);
+
+        var byCashier = (await reports.SummaryAsync(day, day, CollectionGroupBy.Cashier)).Value;
+        byCashier.Rows.Single(r => r.Key == maker.ToString()).Net.ShouldBe(1_500m);
+
+        (await reports.SummaryAsync(day, day.AddDays(-1), CollectionGroupBy.Date)).Code.ShouldBe("VALIDATION_FAILED");
+        (await reports.SummaryAsync(day, day.AddDays(400), CollectionGroupBy.Date)).Code.ShouldBe("VALIDATION_FAILED");
+    }
+
+    [Fact]
+    public async Task Reconciliation_FlagsUnremittedReceipts_UntilTheyAreRemitted()
+    {
+        var (db, services, transaction) = await BeginAsync(March15);
+        await using var _ = transaction;
+        var s = await SeedBillAsync(services, db, new DateOnly(2026, 3, 15));
+        var payments = services.GetRequiredService<IPaymentService>();
+        var reports = services.GetRequiredService<ICollectionReportService>();
+        var (_, maker, _) = Users(services);
+        await TwoReceiptsAsync(payments, s);
+
+        var before = (await reports.ReconcileAsync(new DateOnly(2026, 3, 15))).Value.Cashiers.Single(c => c.CashierUserId == maker);
+        before.Receipts.ShouldBe(2);
+        before.AmountDue.ShouldBe(2_000m);
+        before.AllocationTotal.ShouldBe(2_000m);
+        before.TenderedLessChange.ShouldBe(2_000m);
+        before.UnremittedReceipts.ShouldBe(2);
+        before.Problems.ShouldHaveSingleItem().ShouldContain("not yet remitted");
+
+        await reports.CreateRemittanceAsync(new CreateRemittanceRequest(null, null));
+        var after = (await reports.ReconcileAsync(new DateOnly(2026, 3, 15))).Value.Cashiers.Single(c => c.CashierUserId == maker);
+        after.Remitted.ShouldBe(2_000m);
+        after.Unremitted.ShouldBe(0m);
+        after.Problems.ShouldBeEmpty();
+    }
+
     // --- HTTP surface ---
 
     [Fact]

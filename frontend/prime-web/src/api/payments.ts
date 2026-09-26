@@ -3,7 +3,7 @@ import { apiGet, apiPost } from '../lib/apiClient';
 import type {
   CreatePaymentModeRequest, CreateRevenueAccountMappingRequest, OutstandingDto, PaymentCancellationDto, PaymentCancellationStatus,
   PaymentDto, PaymentItemRequest, PaymentModeDto, PaymentQuoteDto, PaymentReplacementRequest, PaymentStatus, PaymentSummaryDto,
-  PostPaymentRequest, RevenueAccountMappingDto,
+  PostPaymentRequest, RevenueAccountMappingDto, CollectionGroupBy, CollectionSummaryDto, ReconciliationDto, RemittanceDto, RemittanceStatus,
 } from '../lib/types';
 
 // Collection (docs/analysis/collection.md §4). Every change to payments also changes
@@ -135,5 +135,45 @@ export function useApproveAccountMapping() {
   return useMutation({
     mutationFn: (id: string) => apiPost<RevenueAccountMappingDto>(`/api/collection/account-mappings/${id}/approve`, {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['collection', 'account-mappings'] }),
+  });
+}
+
+// --- Remittance, summary, reconciliation (step 9e) ---
+
+export function useRemittances(date: string | undefined, status?: RemittanceStatus) {
+  return useQuery({
+    queryKey: ['payments', 'remittances', date, status],
+    queryFn: () => apiGet<RemittanceDto[]>('/api/collections/remittances', { date, status }),
+  });
+}
+
+export function useCreateRemittance() {
+  const invalidate = useInvalidateCollection();
+  return useMutation({
+    mutationFn: (request: { collectionDate: string | null; remarks: string | null }) => apiPost<RemittanceDto>('/api/collections/remittances', request),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDecideRemittance() {
+  const invalidate = useInvalidateCollection();
+  return useMutation({
+    mutationFn: ({ id, decision, remarks }: { id: string; decision: 'accept' | 'return'; remarks: string | null }) =>
+      apiPost<RemittanceDto>(`/api/collections/remittances/${id}/${decision}`, { remarks }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useCollectionSummary(from: string, to: string, groupBy: CollectionGroupBy) {
+  return useQuery({
+    queryKey: ['payments', 'summary', from, to, groupBy],
+    queryFn: () => apiGet<CollectionSummaryDto>('/api/collections/summary', { from, to, groupBy }),
+  });
+}
+
+export function useReconciliation(date: string) {
+  return useQuery({
+    queryKey: ['payments', 'reconciliation', date],
+    queryFn: () => apiGet<ReconciliationDto>('/api/collections/reconciliation', { date }),
   });
 }

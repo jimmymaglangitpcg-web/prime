@@ -42,6 +42,7 @@ public static class DependencyInjection
         services.AddScoped<IBillService, BillService>();
         services.AddScoped<Features.Collection.IPaymentService, Features.Collection.PaymentService>();
         services.AddScoped<Features.Collection.ICollectionSetupService, Features.Collection.CollectionSetupService>();
+        services.AddScoped<Features.Collection.ICollectionReportService, Features.Collection.CollectionReportService>();
         services.AddScoped<INumberingService, NumberingService>();
         services.AddScoped<IApprovalChainService, ApprovalChainService>();
         services.AddScoped<IFormService, FormService>();

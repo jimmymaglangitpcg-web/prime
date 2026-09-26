@@ -475,4 +475,148 @@ integration tests including concurrent posting).
   132 domain, 37 application and 201 integration tests pass; oxlint is clean
   and the production build passes.
 
-Next: 9e (remittance, collection summary, reconciliation).
+9d was committed and pushed as `4261372`.
+
+**9e done (2026-09-26, uncommitted):**
+- **Remittance** (`Remittance`, `RemittanceItem`, `RemittanceModeTotal`,
+  `RemittanceAccountTotal`; `RemittanceStatus` Submitted/Accepted/Returned;
+  migration `Remittances`, additive, local dev database only):
+  - The acting cashier remits their posted, unremitted receipts of one date in
+    one step, which counts as submitted. Totals are frozen by mode of payment
+    (net of change, via the pure `TenderNetting`: change comes out of the modes
+    that allow it, in tender order) and by revenue account.
+  - It is refused while a void or correction request on one of those receipts
+    is pending (`REMITTANCE_PENDING_CANCELLATIONS`), and when there is nothing
+    to remit.
+  - Another user accepts it, or returns it with a reason, which frees its
+    receipts; the items keep the history
+    (`CANNOT_DECIDE_OWN_REMITTANCE`).
+  - Optional numbering: `NumberedDocumentKind.Remittance` (9).
+- **Void vs reversal** now also needs "not yet remitted": a same-day
+  cancellation of a remitted receipt is a Reversal.
+- **Concurrency:** `Payment.Version` is PostgreSQL `xmin` (no DDL; the
+  ParcelConcurrencyToken precedent). Remitting and voiding the same receipt
+  at once cannot both succeed (`REMITTANCE_CONFLICT` /
+  `PAYMENT_CANCELLATION_CONFLICT`).
+- **Collection summary** (`GET /api/collections/summary?from&to&groupBy=`),
+  grouped by Date, Cashier, Mode, TaxType, TaxYear, YearCategory, Fund,
+  Account or Barangay, over at most 366 days:
+  - Collected: receipts not voided, on their payment date.
+  - Reversed: negative, on the LGU date the reversal was approved.
+  - Voided receipts are never counted.
+- **Reconciliation** (`GET /api/collections/reconciliation?date=`), per cashier:
+  receipts, amount, allocation-line total, tendered less change, remitted and
+  unremitted, and voided count. It lists every disagreement:
+  - allocation lines ≠ amount;
+  - tendered − change ≠ amount;
+  - a remittance's total ≠ its receipts, its mode totals or its account totals;
+  - receipts not yet remitted.
+- API: `POST|GET /api/collections/remittances`,
+  `GET /api/collections/remittances/{id}`,
+  `POST /api/collections/remittances/{id}/accept|return`, plus the summary and
+  reconciliation above.
+- UI: the Collection page gains **Remittances** (remit my receipts for a
+  date; accept or return; details by mode, account and receipt), **Summary**
+  (range, group-by, totals, CSV download) and **Reconciliation** (per
+  cashier, Balanced / Needs attention, with the issues listed).
+- Tests:
+  - 4 unit tests (`TenderNettingTests`);
+  - 5 integration tests: remit, accept, then only a reversal is possible;
+    return frees the receipts; a pending request blocks remitting; the summary
+    by tax type, mode and cashier (collected, reversed negative, voided left
+    out); reconciliation before and after remitting;
+  - the summary and reconciliation assertions only read each test's own tax
+    types, modes and cashier, since the dev database holds committed receipts
+    dated on the same pinned day.
+
+  Full suite: 136 domain, 37 application and 206 integration tests pass;
+  oxlint is clean and the production build passes.
+- **Verified in a browser** against the dev database:
+  - Reconciliation flagged today's unremitted receipt (OR …00007, 1,090.00).
+  - Remitting worked; the cashier accepting their own remittance was refused,
+    and the dev checker accepted it. The cash total was 1,090.00 net of the
+    10.00 change.
+  - Reconciliation then showed OK.
+  - The summary showed 545.00 per tax type and 1,090.00 by mode, with the
+    voided receipt left out, and the CSV downloaded.
+
+**9f done (2026-09-26, uncommitted; no migration):**
+- `tests/Prime.IntegrationTests/EndToEndFlowTests.cs` runs the CLAUDE.md §74
+  flow through the application services the API calls, with their real
+  workflows, in one rolled-back transaction with the clock pinned to
+  15 March 2026:
+  - property, then taxpayer and ownership, parcel, land RPU and land;
+  - SMV, schedule and assessment level (the creator's own approval refused;
+    approved by the checker);
+  - valuation (MV 500,000), then assessment (AV 100,000) through submit,
+    approve (the creator's own approval refused) and post;
+  - the TD, submitted and approved;
+  - a bill (1,800.00 with the prompt discount), posted;
+  - a partial payment of 500.00, a quote of 1,500.00 for the rest (no
+    discount on a part-paid installment), and payment of the rest with
+    change;
+  - balance 0, the statement, the receipt issued, then remit, accept and
+    reconcile, with no problems.
+
+  The dev database's approved configuration is retired inside the
+  transaction, so only DEMO rules apply. It is done at service level, not
+  over HTTP, because committed DEMO billing rules would supersede the dev
+  database's own.
+- **UI run** against the dev database: a new DEMO property
+  (`DEMO-E2E-EDE9F5`) was registered, valued, assessed (MV 300,000,
+  AV 60,000), posted and declared (TD approved) through the running API,
+  with checker steps sent using the dev act-as-checker header. Then in the
+  browser:
+  - a bill was generated and posted from the Billing tab: 1,194.00, which is
+    1,200.00 tax, plus 36.00 and 18.00 interest on the two overdue quarters,
+    less 30.00 discount on each of the two on-time quarters;
+  - the property was paid in full from the Payments tab (1,194.00, change
+    806.00);
+  - the statement showed paid 1,200.00, outstanding 0.00 and due 0.00, with
+    no console errors.
+
+  An earlier attempt of that script, which failed on a missing ownership
+  type, left one extra DEMO property (PIN `DEMO-E2E-…`, no RPU) in the dev
+  database.
+- Full suite: 136 domain, 37 application and 207 integration tests pass.
+
+## 11. Phase 9 exit review (2026-09-26)
+
+Roadmap exit criteria:
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| CLAUDE.md §74 flow CREATE PROPERTY → … → PAY → VERIFY BALANCE passes | Met | `EndToEndFlowTests`, plus the UI run above |
+| Overpayment, partial and reversal (§75) covered by tests | Met | Over-tendering gives change, and money is never applied beyond what is owed (`CollectionCalculatorTests`, `CollectionFlowTests`). Partial: calculator, flow and E2E. Reversal, void and correction: `CollectionFlowTests` |
+| Posting atomic under concurrent submission | Met | `ConcurrentPosting_OfOneInstallment_SavesExactlyOnePayment`: 4 simultaneous posts save one payment; the same idempotency key yields one payment |
+
+CLAUDE.md §40 (payment) and §41 (collection):
+
+| Item | Status |
+|---|---|
+| Full, partial, multiple-year, multiple tax components | Done |
+| Advance payment | Done: calculator unit tests (advance discount and category); in the service it needs a posted bill for that year. No integration test pays a future year |
+| Reversal, void, correction; duplicate submission protection | Done |
+| Daily, cashier, payment summary, tax-type and tax-year collection | Done (Collection page receipts by date; summary by date, cashier, mode, tax type, tax year, year category, fund, account, barangay) |
+| Property collection | Done (Payments tab, Statement of Account) |
+| Taxpayer collection | **Gap:** no summary by payor or taxpayer yet; one more `CollectionGroupBy` value would add it |
+| Collection reconciliation | Done |
+
+Still open, carried forward:
+- **DOMAIN VERIFICATION REQUIRED:**
+  - the charge rules of §9 and §10 (charges follow principal; no discount
+    on part of an installment; allocation order; the fixed penalty once per
+    installment and tax type);
+  - a correction dated like the original;
+  - the void/reversal cut-off;
+  - the official receipt and RCD layouts;
+  - the BLGF eOR numbering format;
+  - the LGU chart of accounts.
+- Out of scope (§8): payment under protest, refunds and credits,
+  compromise/levy/auction, EPCS/online channels, real role gating
+  (Phase 12), PDF/Excel exports (Phase 11).
+- Supabase lacks the migrations `Payments`, `PaymentCancellations` and
+  `Remittances`.
+
+**Phase 9 is complete with DEMO values**, apart from the taxpayer-collection
+gap above.
