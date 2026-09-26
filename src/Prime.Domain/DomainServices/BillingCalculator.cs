@@ -1,4 +1,3 @@
-using System.Globalization;
 using Prime.Domain.Entities.Billing;
 using Prime.Domain.Enums;
 
@@ -30,7 +29,8 @@ namespace Prime.Domain.DomainServices;
 /// An overdue installment never gets a discount.</item>
 /// </list>
 /// Interest and penalty are computed on the installment's tax only. Nothing
-/// is assumed paid — payments are Phase 9.
+/// is assumed paid; a payment's own charges come from
+/// <see cref="CollectionCalculator"/>, through the same <see cref="BillingCharges"/> steps.
 ///
 /// Money is rounded to 2 decimals per line with
 /// <see cref="MidpointRounding.AwayFromZero"/> (the AssessmentService
@@ -155,15 +155,16 @@ public static class BillingCalculator
 
                 if (input.AsOfDate <= dueDate)
                 {
-                    lines.AddRange(Discounts(input, options, rate.TaxTypeId, installment.Sequence, dueDate, tax));
+                    lines.AddRange(BillingCharges.Discounts(input.DiscountRules, options.AllowDiscountStacking, input.TaxYear,
+                        input.AsOfDate, rate.TaxTypeId, installment.Sequence, dueDate, tax));
                 }
                 else
                 {
-                    if (Penalty(input, rate.TaxTypeId, installment.Sequence, dueDate, tax) is { } penalty)
+                    if (BillingCharges.Penalty(input.PenaltyRules, input.AsOfDate, rate.TaxTypeId, installment.Sequence, dueDate, tax) is { } penalty)
                     {
                         lines.Add(penalty);
                     }
-                    if (Interest(input, rate.TaxTypeId, installment.Sequence, dueDate, tax) is { } interest)
+                    if (BillingCharges.Interest(input.InterestRules, input.AsOfDate, rate.TaxTypeId, installment.Sequence, dueDate, tax) is { } interest)
                     {
                         lines.Add(interest);
                     }
@@ -245,78 +246,6 @@ public static class BillingCalculator
         return shares;
     }
 
-    private static IEnumerable<BillingLine> Discounts(BillingCalculationInput input, BillingCalculationOptions options,
-        Guid taxTypeId, int sequence, DateOnly dueDate, decimal tax)
-    {
-        var candidates = new List<BillingLine>();
-
-        if (MostSpecific(input.DiscountRules.Where(d => d.Kind == DiscountKind.PromptPayment).ToList(), d => d.TaxTypeId, taxTypeId) is { } prompt)
-        {
-            candidates.Add(DiscountLine(prompt, taxTypeId, sequence, dueDate, tax,
-                $"prompt payment: paid on/before due date {Format(dueDate)}"));
-        }
-
-        if (MostSpecific(input.DiscountRules.Where(d => d.Kind == DiscountKind.AdvancePayment).ToList(), d => d.TaxTypeId, taxTypeId) is { } advance)
-        {
-            var cutoff = new DateOnly(input.TaxYear + advance.CutoffYearOffset!.Value, advance.CutoffMonth!.Value, advance.CutoffDay!.Value);
-            if (input.AsOfDate <= cutoff)
-            {
-                candidates.Add(DiscountLine(advance, taxTypeId, sequence, dueDate, tax,
-                    $"advance payment: whole year paid on/before {Format(cutoff)}"));
-            }
-        }
-
-        if (options.AllowDiscountStacking || candidates.Count <= 1)
-        {
-            return candidates;
-        }
-        // Largest discount = most negative amount; ties keep the prompt-payment rule (first added).
-        return [candidates.OrderBy(c => c.Amount).First()];
-    }
-
-    private static BillingLine DiscountLine(DiscountRule rule, Guid taxTypeId, int sequence, DateOnly dueDate, decimal tax, string reason) =>
-        new(sequence, dueDate, taxTypeId, BillingComponent.Discount, rule.Id, rule.Rate, tax,
-            -Money(tax * rule.Rate / 100m), null,
-            $"{Format(rule.Rate)}% of {Format(tax)} — {reason}");
-
-    private static BillingLine? Penalty(BillingCalculationInput input, Guid taxTypeId, int sequence, DateOnly dueDate, decimal tax)
-    {
-        var rule = MostSpecific(input.PenaltyRules, r => r.TaxTypeId, taxTypeId);
-        var daysOverdue = input.AsOfDate.DayNumber - dueDate.DayNumber;
-        if (rule is null || daysOverdue <= rule.AppliesAfterDays)
-        {
-            return null;
-        }
-
-        return rule.Rate is { } rate
-            ? new BillingLine(sequence, dueDate, taxTypeId, BillingComponent.Penalty, rule.Id, rate, tax,
-                Money(tax * rate / 100m), null,
-                $"{Format(rate)}% of {Format(tax)} — {daysOverdue} days past due {Format(dueDate)}")
-            : new BillingLine(sequence, dueDate, taxTypeId, BillingComponent.Penalty, rule.Id, null, tax,
-                rule.FixedAmount!.Value, null,
-                $"fixed {Format(rule.FixedAmount!.Value)} — {daysOverdue} days past due {Format(dueDate)}");
-    }
-
-    private static BillingLine? Interest(BillingCalculationInput input, Guid taxTypeId, int sequence, DateOnly dueDate, decimal tax)
-    {
-        var rule = MostSpecific(input.InterestRules, r => r.TaxTypeId, taxTypeId);
-        if (rule is null)
-        {
-            return null;
-        }
-        var elapsed = DelinquentMonths(dueDate, input.AsOfDate, rule.MonthCounting);
-        var months = rule.MaxMonths is { } max ? Math.Min(elapsed, max) : elapsed;
-        if (months == 0)
-        {
-            return null;
-        }
-
-        var capped = months < elapsed ? $" (capped at {months} of {elapsed})" : "";
-        return new BillingLine(sequence, dueDate, taxTypeId, BillingComponent.Interest, rule.Id, rule.RatePerMonth, tax,
-            Money(tax * rule.RatePerMonth / 100m * months), months,
-            $"{Format(rule.RatePerMonth)}%/month × {months} months{capped} on {Format(tax)} past due {Format(dueDate)}");
-    }
-
     /// <summary>The rates that apply to at least one line: general ones, and those of a line's classification.</summary>
     private static List<TaxRate> ApplicableRates(BillingCalculationInput input)
     {
@@ -324,9 +253,8 @@ public static class BillingCalculator
         return input.TaxRates.Where(r => r.ClassificationId is null || classifications.Contains(r.ClassificationId)).ToList();
     }
 
-    /// <summary>The rule scoped to <paramref name="taxTypeId"/> if any, else the one scoped to every tax type (null).</summary>
     private static T? MostSpecific<T>(IReadOnlyList<T> rules, Func<T, Guid?> scope, Guid taxTypeId) where T : class =>
-        rules.FirstOrDefault(r => scope(r) == taxTypeId) ?? rules.FirstOrDefault(r => scope(r) is null);
+        BillingCharges.MostSpecific(rules, scope, taxTypeId);
 
     private static void AddScopeConflicts<T>(List<string> problems, string name, IEnumerable<T> rules, Func<T, Guid?> scope)
     {
@@ -336,9 +264,7 @@ public static class BillingCalculator
         }
     }
 
-    private static decimal Money(decimal value) => Math.Round(value, 2, MidpointRounding.AwayFromZero);
+    private static decimal Money(decimal value) => BillingCharges.Money(value);
 
-    private static string Format(decimal value) => value.ToString("#,0.00####", CultureInfo.InvariantCulture);
-
-    private static string Format(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    private static string Format(decimal value) => BillingCharges.Format(value);
 }

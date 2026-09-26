@@ -1023,6 +1023,13 @@ API first starts against Supabase, which still has not been exercised.
 
 ## Immediate next action
 
+**Current (2026-09-26):** everything through `b2e369b` (value and assess)
+is committed and pushed; Supabase has all 28 migrations. **Phase 9 —
+Collection started:** the design is in docs/analysis/collection.md
+(uncommitted); all 8 recommendations were approved. **Step 9a is done**
+(the shared charge steps, `CollectionCalculator`, 31 unit tests; uncommitted).
+Next: 9b, payments in the database and API. See §10 of that doc. The paragraphs below are the earlier history.
+
 Phases 0–8 are complete with DEMO values (Phase 8 — Billing finished
 2026-09-25; see its status block and docs/BILLING.md §6.1 for the defaults
 awaiting LGU/legal confirmation). Commits through `3301667` (A5) are
