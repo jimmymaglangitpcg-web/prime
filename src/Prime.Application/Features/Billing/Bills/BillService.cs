@@ -23,6 +23,7 @@ public sealed class BillService(
     ICurrentUserService currentUser,
     IOptions<BillingOptions> options,
     INumberingService numbering,
+    ICollectionLock collectionLock,
     IClock clock) : IBillService
 {
     /// <summary>
@@ -194,6 +195,8 @@ public sealed class BillService(
         var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
         try
         {
+            // What is owed changes: no payment of this unit and year may be allocated meanwhile.
+            await collectionLock.LockAsync([(bill.RpuId, bill.TaxYear)], cancellationToken);
             if (previous is not null)
             {
                 previous.Status = WorkflowStatus.Cancelled;
@@ -254,12 +257,39 @@ public sealed class BillService(
             return Result.Failure<TaxBillDto>("BILL_ALREADY_CANCELLED", "The bill is already cancelled.");
         }
 
-        bill.Status = WorkflowStatus.Cancelled;
-        bill.CancelledAt = DateTimeOffset.UtcNow;
-        bill.CancelledBy = currentUser.AppUserId;
-        bill.CancellationReason = reason;
-        currentUser.Reason = reason;
-        await db.SaveChangesAsync(cancellationToken);
+        var ownsTransaction = db.Database.CurrentTransaction is null;
+        var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
+        try
+        {
+            // docs/analysis/collection.md §3: payments follow the installment, so a posted
+            // bill they settle may be superseded by a new bill, but not simply cancelled.
+            await collectionLock.LockAsync([(bill.RpuId, bill.TaxYear)], cancellationToken);
+            if (bill.Status == WorkflowStatus.Posted && await db.PaymentAllocations.AnyAsync(a =>
+                    a.RpuId == bill.RpuId && a.TaxYear == bill.TaxYear
+                    && db.Payments.Any(p => p.Id == a.PaymentId && p.Status == PaymentStatus.Posted), cancellationToken))
+            {
+                return Result.Failure<TaxBillDto>("BILL_HAS_PAYMENTS",
+                    "Payments stand against this unit and tax year. Post a recomputed bill to replace this one instead of cancelling it.");
+            }
+
+            bill.Status = WorkflowStatus.Cancelled;
+            bill.CancelledAt = clock.UtcNow;
+            bill.CancelledBy = currentUser.AppUserId;
+            bill.CancellationReason = reason;
+            currentUser.Reason = reason;
+            await db.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync();
+            }
+        }
 
         return Result.Success(await MapAsync(bill.Id, cancellationToken));
     }

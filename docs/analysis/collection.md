@@ -278,3 +278,76 @@ place (`CollectionCalculator` for 1–4, `PaymentService` for 5–8).
 
 Next: 9b (entities, migration, `PaymentService`, quote/post/read API,
 integration tests including concurrent posting).
+
+**9b done (2026-09-26, uncommitted):**
+- Entities in `Prime.Domain/Entities/Collection/`: `Payment`, `PaymentTender`,
+  `PaymentAllocation`, `PaymentMode` and `RevenueAccountMapping`, plus the
+  `PaymentStatus` enum. Migration `Payments` is additive (5 new tables) and
+  is applied to the local dev database only.
+- Database constraints:
+  - unique transaction number, OR number (every status) and idempotency key;
+  - tendered = due + change, and the amount due is positive;
+  - discounts are the only negative allocation lines;
+  - one open approved account mapping per (tax type, component, year category).
+- `NumberedDocumentKind.PaymentTransaction` (8) for the transaction number.
+  Posting is refused without an approved scheme for it. The OR number comes
+  from the `OfficialReceipt` scheme, or is typed when the scheme allows
+  manual entry (or when no scheme exists).
+- `Lgu:LocationCode` is frozen on each payment, with `Lgu:Office`.
+- `ICollectionLock` is implemented as `CollectionLock`: PostgreSQL
+  transaction-level advisory locks per (unit, tax year), taken in a fixed
+  order. Payment posting takes it. Bill posting and cancelling take it too:
+  a posted bill with standing payments can't be cancelled
+  (`BILL_HAS_PAYMENTS`), but a recomputed bill can supersede it and the
+  payments carry over.
+- `PaymentService`:
+  - It loads each posted bill, what standing payments settled, and the
+    discount, penalty and interest rules in force on the bill's
+    `RulesAsOfDate`.
+  - `CollectionCalculator` allocates, and each line is coded to its revenue
+    account (refused if unmapped).
+  - On posting, it re-quotes under the lock, checks the expected total and
+    the tenders, and draws the numbers in the same transaction.
+  - A repeated idempotency key returns the first payment; the same key with
+    a different amount is refused.
+- `CollectionSetupService`: payment modes (create, list) and revenue account
+  mappings (create, list, approve through `ConfigurationApproval`).
+- API:
+  - `GET /api/properties/{id}/outstanding?asOf=`
+  - `POST /api/payments/quote`
+  - `POST /api/payments`
+  - `GET /api/payments/{id}`
+  - `GET /api/payments?date=&cashierUserId=&status=`
+  - `GET /api/properties/{id}/payments`
+  - `GET|POST /api/collection/payment-modes`
+  - `GET|POST /api/collection/account-mappings`
+  - `POST /api/collection/account-mappings/{id}/approve`
+- Error codes: `PAYMENT_ALREADY_SETTLED` (409), `PAYMENT_QUOTE_CHANGED` (409),
+  `PAYMENT_IDEMPOTENCY_CONFLICT` (409), `PAYMENT_OR_NUMBER_DUPLICATE` (409),
+  `PAYMENT_POST_CONFLICT` (409), `PAYMENT_BILL_NOT_FOUND` (404),
+  `PAYMENT_INVALID_SELECTION`, `PAYMENT_ACCOUNT_NOT_MAPPED`,
+  `PAYMENT_TENDER_INVALID`, `PAYMENT_MODE_NOT_FOUND`,
+  `PAYMENT_TRANSACTION_NUMBERING_NOT_CONFIGURED`, `BILL_HAS_PAYMENTS`.
+- The frontend's `NumberedDocumentKind` type and the Forms admin list gain
+  `SwornStatement` (previously missing) and `PaymentTransaction`.
+- Tests: `tests/Prime.IntegrationTests/CollectionFlowTests.cs`, 12 cases,
+  with the LGU clock pinned through `TimeProvider`:
+  - on-time payment with discount, change, receipt and transaction numbers,
+    account codes, and a zero balance afterwards;
+  - late payment with interest to the payment date;
+  - a partial payment followed by the rest;
+  - idempotency, and a stale quote;
+  - each refusal;
+  - a typed receipt number and its duplicate;
+  - supersession keeping payments;
+  - HTTP validation;
+  - **concurrent posting**: two submissions with the same key and two with
+    different keys at once save exactly one payment.
+
+  The concurrency test **commits** DEMO rows to the dev database (a fresh
+  property, bill, tax type, mode and mappings, reusing any receipt and
+  transaction numbering in force), since uncommitted rows are invisible to a
+  second connection. Full suite: 132 domain, 37 application and 194
+  integration tests pass; the frontend production build passes.
+
+Next: 9c (void, reversal and correction with maker-checker).

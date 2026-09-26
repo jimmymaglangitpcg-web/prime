@@ -15,6 +15,8 @@ public enum NumberedDocumentKind
     PropertyTransaction = 6,
     /// <summary>The Sworn Statement Index No. (MRPAAO Att. 11).</summary>
     SwornStatement = 7,
+    /// <summary>The collection transaction number, separate from the OR number (DOF DO 054-2024 §7.1; docs/analysis/collection.md §3).</summary>
+    PaymentTransaction = 8,
 }
 
 /// <summary>Who prescribes a form version (docs/FORMS-REVISION-PLAN.md §4.1).</summary>

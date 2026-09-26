@@ -721,7 +721,9 @@ export type NumberedDocumentKind =
   | 'Faas'
   | 'NoticeOfAssessment'
   | 'OfficialReceipt'
-  | 'PropertyTransaction';
+  | 'PropertyTransaction'
+  | 'SwornStatement'
+  | 'PaymentTransaction';
 export type FormAuthority = 'PrimeProvisional' | 'Lam' | 'Blgf' | 'LguOrdinance' | 'Other' | 'Mrpaao';
 export type FormSubjectType = 'TaxBill' | 'TaxDeclaration' | 'NoticeOfAssessment' | 'Assessment' | 'StatementOfAccount' | 'Faas';
 export type ApprovalSubjectType = 'Assessment' | 'TaxDeclaration' | 'PropertyTransaction';

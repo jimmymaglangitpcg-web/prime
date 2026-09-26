@@ -31,7 +31,7 @@ const statusColor: Partial<Record<WorkflowStatus, string>> = { Draft: 'default',
 const statusTag = (s: WorkflowStatus) => <Tag color={statusColor[s]}>{s}</Tag>;
 const period = (x: { effectiveDate: string; endDate: string | null }) => `${x.effectiveDate} → ${x.endDate ?? 'open'}`;
 
-const kinds: NumberedDocumentKind[] = ['PropertyIdentificationNumber', 'TaxDeclaration', 'TaxBill', 'Faas', 'NoticeOfAssessment', 'OfficialReceipt', 'PropertyTransaction'];
+const kinds: NumberedDocumentKind[] = ['PropertyIdentificationNumber', 'TaxDeclaration', 'TaxBill', 'Faas', 'NoticeOfAssessment', 'OfficialReceipt', 'PropertyTransaction', 'SwornStatement', 'PaymentTransaction'];
 const authorities: FormAuthority[] = ['PrimeProvisional', 'Lam', 'Blgf', 'LguOrdinance', 'Other', 'Mrpaao'];
 const subjects: FormSubjectType[] = ['TaxBill', 'TaxDeclaration', 'NoticeOfAssessment', 'Assessment'];
 

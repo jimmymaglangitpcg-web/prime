@@ -86,6 +86,7 @@ public static class DependencyInjection
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IClock, LguClock>();
         services.AddScoped<INumberSequenceAllocator, NumberSequenceAllocator>();
+        services.AddScoped<ICollectionLock, CollectionLock>();
         services.AddSingleton<IFormRenderer, FluidFormRenderer>();
         services.AddHostedService<ProvisionalFormSeeder>();
 

@@ -56,6 +56,11 @@ public interface IApplicationDbContext
     DbSet<TaxBillTaxType> TaxBillTaxTypes { get; }
     DbSet<TaxBillTaxTypeLine> TaxBillTaxTypeLines { get; }
     DbSet<TaxBillDetail> TaxBillDetails { get; }
+    DbSet<Prime.Domain.Entities.Collection.Payment> Payments { get; }
+    DbSet<Prime.Domain.Entities.Collection.PaymentTender> PaymentTenders { get; }
+    DbSet<Prime.Domain.Entities.Collection.PaymentAllocation> PaymentAllocations { get; }
+    DbSet<Prime.Domain.Entities.Collection.PaymentMode> PaymentModes { get; }
+    DbSet<Prime.Domain.Entities.Collection.RevenueAccountMapping> RevenueAccountMappings { get; }
     DbSet<NumberingScheme> NumberingSchemes { get; }
     DbSet<NumberSequence> NumberSequences { get; }
     DbSet<FormDefinition> FormDefinitions { get; }

@@ -16,6 +16,9 @@ public sealed class LguOptions
     /// <summary>The local legislature for the TD's printed note, e.g. "Sangguniang Panlalawigan" (MRPAAO Att. 4).</summary>
     public string? SanggunianName { get; set; }
 
+    /// <summary>The collecting office's location code printed on receipts (DOF DO 054-2024 §7.1 eOR "location and location code"); the LGU's to supply.</summary>
+    public string? LocationCode { get; set; }
+
     /// <summary>IANA time zone of the LGU, e.g. "Asia/Manila". Defines "today" for business dates (<c>IClock</c>).</summary>
     public string? TimeZone { get; set; }
 }

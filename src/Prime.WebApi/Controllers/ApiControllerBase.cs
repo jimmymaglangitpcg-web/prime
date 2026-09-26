@@ -31,6 +31,8 @@ public abstract class ApiControllerBase : ControllerBase
             not null when result.Code.EndsWith("_DUPLICATE") => StatusCodes.Status409Conflict,
             not null when result.Code.Contains("EXCEEDS") => StatusCodes.Status409Conflict,
             not null when result.Code.EndsWith("_CONFLICT") => StatusCodes.Status409Conflict,
+            // Collection: the state changed under the cashier (docs/analysis/collection.md §3).
+            not null when result.Code.EndsWith("_ALREADY_SETTLED") || result.Code.EndsWith("_QUOTE_CHANGED") => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest,
         };
 

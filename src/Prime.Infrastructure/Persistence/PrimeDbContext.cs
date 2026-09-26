@@ -73,6 +73,11 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<TaxBillTaxType> TaxBillTaxTypes => Set<TaxBillTaxType>();
     public DbSet<TaxBillTaxTypeLine> TaxBillTaxTypeLines => Set<TaxBillTaxTypeLine>();
     public DbSet<TaxBillDetail> TaxBillDetails => Set<TaxBillDetail>();
+    public DbSet<Prime.Domain.Entities.Collection.Payment> Payments => Set<Prime.Domain.Entities.Collection.Payment>();
+    public DbSet<Prime.Domain.Entities.Collection.PaymentTender> PaymentTenders => Set<Prime.Domain.Entities.Collection.PaymentTender>();
+    public DbSet<Prime.Domain.Entities.Collection.PaymentAllocation> PaymentAllocations => Set<Prime.Domain.Entities.Collection.PaymentAllocation>();
+    public DbSet<Prime.Domain.Entities.Collection.PaymentMode> PaymentModes => Set<Prime.Domain.Entities.Collection.PaymentMode>();
+    public DbSet<Prime.Domain.Entities.Collection.RevenueAccountMapping> RevenueAccountMappings => Set<Prime.Domain.Entities.Collection.RevenueAccountMapping>();
     public DbSet<NumberingScheme> NumberingSchemes => Set<NumberingScheme>();
     public DbSet<NumberSequence> NumberSequences => Set<NumberSequence>();
     public DbSet<FormDefinition> FormDefinitions => Set<FormDefinition>();
