@@ -11,6 +11,8 @@ import { GisWorkspacePage } from './pages/gis/GisWorkspacePage';
 import { GisPrintPage } from './pages/gis/GisPrintPage';
 import { StatementOfAccountPage } from './pages/billing/StatementOfAccountPage';
 import { FormDocumentPage } from './pages/documents/FormDocumentPage';
+import { SwornStatementPage } from './pages/swornStatements/SwornStatementPage';
+import { SwornStatementsPage } from './pages/swornStatements/SwornStatementsPage';
 import { RegistersPage } from './pages/registers/RegistersPage';
 import { FormsAdminPage } from './pages/admin/FormsAdminPage';
 
@@ -45,6 +47,8 @@ export default function App() {
         <Route path="/documents/preview" element={<FormDocumentPage />} />
         <Route path="/documents/:id" element={<FormDocumentPage />} />
         <Route path="/registers" element={<RegistersPage />} />
+        <Route path="/sworn-statements" element={<SwornStatementsPage />} />
+        <Route path="/sworn-statements/:id" element={<SwornStatementPage />} />
         <Route path="/admin/forms" element={<FormsAdminPage />} />
       </Routes>
     </AppShell>

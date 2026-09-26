@@ -13,6 +13,8 @@ public enum NumberedDocumentKind
     NoticeOfAssessment = 4,
     OfficialReceipt = 5,
     PropertyTransaction = 6,
+    /// <summary>The Sworn Statement Index No. (MRPAAO Att. 11).</summary>
+    SwornStatement = 7,
 }
 
 /// <summary>Who prescribes a form version (docs/FORMS-REVISION-PLAN.md §4.1).</summary>
@@ -47,6 +49,8 @@ public enum FormSubjectType
     Faas = 5,
     /// <summary>A dated register run (TMCR, Assessment Roll, ORC, ROA); the subject id is the run.</summary>
     Register = 6,
+    /// <summary>A sworn statement of market value (MRPAAO Att. 11); the subject id is the statement.</summary>
+    SwornStatement = 7,
 }
 
 /// <summary>Records whose approval can follow a configured <c>ApprovalChain</c>.</summary>

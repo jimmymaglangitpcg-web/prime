@@ -9,6 +9,7 @@ import { ParcelsSection } from './sections/ParcelsSection';
 import { RpuSection } from './sections/RpuSection';
 import { BillingSection } from './sections/BillingSection';
 import { TransactionsSection } from './sections/TransactionsSection';
+import { SwornStatementsSection } from './sections/SwornStatementsSection';
 import { NoticesSection } from './sections/NoticesSection';
 
 /**
@@ -84,6 +85,7 @@ export function PropertyProfilePage() {
             { key: 'rpus', label: `RPUs (${profile.rpus.length})`, children: <RpuSection propertyId={property.id} rpus={profile.rpus} /> },
             { key: 'transactions', label: 'Transactions', children: <TransactionsSection propertyId={property.id} rpus={profile.rpus} taxDeclarations={profile.taxDeclarations} /> },
             { key: 'notices', label: 'Notices', children: <NoticesSection propertyId={property.id} rpus={profile.rpus} owners={profile.owners.filter((o) => o.isCurrent && o.role === 'Owner' && o.taxpayerId)} /> },
+            { key: 'sworn', label: 'Sworn statements', children: <SwornStatementsSection propertyId={property.id} /> },
             { key: 'billing', label: 'Billing', children: <BillingSection propertyId={property.id} rpus={profile.rpus} /> },
           ]}
         />

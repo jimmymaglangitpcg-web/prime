@@ -1120,6 +1120,16 @@ locally only.
 
 Step 5b is committed as `29e0d34`.
 
+Step 6 is committed as `e7f3ad8`.
+
+**Step 7 done (2026-09-26, uncommitted):** the owner's Sworn Statement of
+market value (MRPAAO Att. 11): statements with declared land, buildings,
+machinery and trees; filing, correction, cancellation, linking NEW items to
+their RPU; the Att. 11 form; a Sworn Statements page and a property tab
+showing declared against appraised values (plan §16–§17). Migration
+`SwornStatements` is applied locally only. All seven MRPAAO forms-model
+steps are now implemented.
+
 **Step 6 done (2026-09-25, uncommitted):** the MRPAAO registers (TMCR, Assessment
 Roll taxable/exempt, Ownership Record Card, Record of Assessment) as dated
 register runs, printed through the forms engine, and a Registers page (plan

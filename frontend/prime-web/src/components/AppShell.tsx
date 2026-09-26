@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Layout, Menu, Typography } from 'antd';
-import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined } from '@ant-design/icons';
+import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const { Header, Sider, Content } = Layout;
@@ -10,6 +10,7 @@ const navItems = [
   { key: '/properties', icon: <HomeOutlined />, label: 'Properties' },
   { key: '/taxpayers', icon: <TeamOutlined />, label: 'Taxpayers' },
   { key: '/gis', icon: <GlobalOutlined />, label: 'Tax Map' },
+  { key: '/sworn-statements', icon: <AuditOutlined />, label: 'Sworn Statements' },
   { key: '/registers', icon: <BookOutlined />, label: 'Registers' },
   { key: '/admin/forms', icon: <FileTextOutlined />, label: 'Forms & Numbering' },
   { key: '/health', icon: <HeartOutlined />, label: 'System Health' },

@@ -83,6 +83,7 @@ public class FluidFormRendererTests
     [InlineData("AR_EXEMPT.v1.liquid")]
     [InlineData("ORC.v1.liquid")]
     [InlineData("ROA.v1.liquid")]
+    [InlineData("SWORN_STATEMENT.v1.liquid")]
     public void ProvisionalTemplates_AreEmbeddedAndParse(string file) =>
         renderer.Validate(ProvisionalFormSeeder.ReadTemplate(file)).ShouldBeNull();
 

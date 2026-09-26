@@ -51,6 +51,7 @@ public sealed class ProvisionalFormSeeder(IServiceScopeFactory scopes, ILogger<P
         ("AR_EXEMPT", 1, "Assessment Roll — Exempt Properties", FormSubjectType.Register, FormAuthority.Mrpaao, "MRPAAO Attachment 7 (p.162–163)"),
         ("ORC", 1, "Ownership Record Card", FormSubjectType.Register, FormAuthority.Mrpaao, "MRPAAO Attachment 8 (p.164–166)"),
         ("ROA", 1, "Record of Assessment", FormSubjectType.Register, FormAuthority.Mrpaao, "MRPAAO Attachment 9 (p.166–167)"),
+        ("SWORN_STATEMENT", 1, "Sworn Statement of the True Current and Fair Market Value of Real Properties", FormSubjectType.SwornStatement, FormAuthority.Mrpaao, "MRPAAO Attachment 11 (p.243–244)"),
     ];
 
     /// <summary>Authorities PRIME installs itself; any other version (e.g. the LAM's) is never touched.</summary>

@@ -1,8 +1,8 @@
 # PRIME — Forms Model from the MRPAAO (2004/2006)
 
-Status: **steps 1–5 implemented 2026-09-25** (§6–§14; commits `c5b3f8d`
-step 1, `81ce318` steps 2–3, `f9376c6` steps 4–5a). Steps 6 (registers)
-and 7 (sworn statement) are outlines.
+Status: **all seven steps implemented** (§6–§17): step 1 `c5b3f8d`, steps
+2–3 `81ce318`, steps 4–5a `f9376c6`, step 5b `29e0d34`, step 6 `e7f3ad8`
+(2026-09-25); step 7, the sworn statement, 2026-09-26 (§16–§17).
 
 Decision (user, 2026-09-25): the forms follow the **Manual on Real
 Property Appraisal and Assessment Operations** (`docs/References/ManualRPAandAO.pdf`,
@@ -1177,3 +1177,253 @@ with checkboxes.
   run was created with a period and issued, with no console errors.
 - Migration `RegisterRuns` (additive: one table) is applied locally only.
 
+## 16. Step 7 design — the Sworn Statement (for review, 2026-09-26)
+
+Source: MRPAAO Attachment 11 (manual p.243–244, PDF p.254–255), "Sworn
+Statement of the True Current and Fair Market Value of Real Properties
+(Taxable or Exempt), required under Section 202/203 of RA 7160". The manual
+also cites it as support for appraisal:
+- buildings without a building permit or certificate (p.117, §6.A.1(d));
+- machinery, whose appraisal rests on the owner's actual cost (p.119,
+  §7.C.1; doubtful values may be checked with BOC, BIR or SEC, p.120).
+
+The manual's body does not state the §202/§203 filing periods, and RA 12001
+may have changed them. **DOMAIN VERIFICATION REQUIRED:** PRIME records the
+basis of a filing but enforces no deadline.
+
+### 16.1 What the form holds
+
+| Part | Fields (Att. 11) |
+|---|---|
+| Header | Sworn Statement Index No. |
+| Declarant | Name, citizenship, civil status, postal address, TIN; capacity: owner, administrator or authorized representative |
+| Scope | City/municipality and province (Note 1: one statement covers one city or municipality); "owned by" (the owners' names, when filed by an administrator or representative) |
+| A. Land | Existing TD No. (or "NEW", Note 3), lot, block, cadastral/PLS no., title, area (ha or sqm), classification, location, declared value |
+| B. Buildings and other structures | Existing TD No., total floor area, storeys, general description, year completed/occupied, actual use, owner of the lot, location, declared value |
+| C. Machinery | Existing TD No., description, date acquired, date operation commenced, original acquisition cost, cost of installation on site, value of depreciation, location, declared value |
+| Other improvements (perennial trees/plants) | Existing TD No., kind, number productive and non-productive, annual product per tree/plant, ages, declared value |
+| Execution | Signed on (day, place); two witnesses (required only when the affiant thumbmarks) |
+| Jurat | Sworn on, CTC No., issued on and at, administering officer and TIN |
+
+### 16.2 Model (one additive migration)
+
+**`SwornStatement`**
+- `Number`: the index no. A new `NumberedDocumentKind.SwornStatement` is
+  assigned on filing if a scheme is in force; otherwise it is entered by
+  hand, or left blank.
+- Declarant:
+  - `DeclarantName`, `Citizenship`, `CivilStatus`, `PostalAddress`,
+    `DeclarantTin` (as written on the statement);
+  - an optional `DeclarantTaxpayerId`, since an administrator or
+    representative is often not a registered taxpayer.
+- `Capacity` (Owner, Administrator, AuthorizedRepresentative) and
+  `OwnerNames`, required unless the capacity is Owner.
+- `MunicipalityId` (the province follows from it).
+- `FilingBasis`: §202 declaration, §203 new property or improvement, or
+  other; the user records it and PRIME infers nothing.
+- Execution: `SignedOn`, `SignedAt`, `Thumbmarked`, `Witness1`, `Witness2`.
+- Jurat:
+  - `SwornOn`, `SwornAt`, `AdministeringOfficer`, `OfficerTin`;
+  - `IdentityDocument`, `IdentityDocumentIssuedOn` and `IdentityDocumentIssuedAt`
+    replace the form's fixed "CTC No." with free text, since which identity
+    evidence a jurat requires is a notarial rule (DOMAIN VERIFICATION
+    REQUIRED).
+- `ReceivedOn`: the date the assessor's office received it (Note 2).
+- `Status`, `Remarks`, and audit fields.
+
+**`SwornStatementItem`**: one table for the four kinds.
+- `Kind` (Land, Building, Machinery, OtherImprovement) and `Sequence`.
+- The existing declaration:
+  - `TaxDeclarationId`: a TD in PRIME, which must be approved; the property,
+    unit and location are taken from it.
+  - `ExistingTdNumber`: text, for a number PRIME does not have, e.g. before
+    data migration.
+  - Neither set: **NEW** (Note 3).
+- `PropertyId` and `RpuId`: filled from the TD, or linked later once a NEW
+  property is registered (§16.4).
+- `Location` and `DeclaredMarketValue` (numeric(18,2), ≥ 0).
+- Kind columns, all nullable, with a check constraint naming the ones each
+  kind requires:
+  - Land: lot, block, cadastral no., title, area, area unit, classification
+    (lookup);
+  - Building: floor area, storeys, description, year completed, actual use
+    (lookup), lot owner name;
+  - Machinery: description, date acquired, date operation commenced,
+    acquisition cost, installation cost, depreciation;
+  - OtherImprovement: kind (the `ImprovementKind` lookup), productive and
+    non-productive counts, annual product, ages.
+
+### 16.3 Lifecycle
+
+- **Draft**: encoded, and editable. Items can be added and removed, since a
+  draft is not yet a record.
+- **Filed**: locked. Filing requires:
+  - at least one item;
+  - the declarant and capacity;
+  - the signing date and the jurat (sworn on, administering officer);
+  - two witnesses when thumbmarked;
+  - the received date;
+  - every linked TD in the statement's city or municipality (Note 1;
+    `SWORN_STATEMENT_OTHER_LGU`).
+- **Cancelled**: with a reason, and never deleted.
+
+There is no approval step: it is the owner's declaration, not the
+assessor's act.
+
+Corrections are a new statement that names the one it replaces (`SupersedesId`).
+
+### 16.4 How PRIME uses it
+
+- **Declared values are information only.** They never feed valuation,
+  which follows the SMV and the valuation rules. The appraisal record and
+  the unit show the declared value next to the appraised value, and the
+  statement it came from.
+- **Property Profile:** a Sworn Statements section lists the statements
+  whose items reference the property or its units.
+- **NEW items:** once the property or unit is registered, a user links the
+  item to its RPU. PRIME does not create properties from a statement; that
+  stays with registration and property transactions.
+- **Machinery:** the stated acquisition, installation and depreciation
+  figures stay on the statement. Copying them into the machinery record is
+  a later, explicit action, and not in this step.
+
+### 16.5 Form
+
+`SWORN_STATEMENT` v1 follows the MRPAAO Attachment 11 layout, under the
+`Mrpaao` authority, with a new `FormSubjectType.SwornStatement` (subject =
+the statement).
+- A draft previews it, so it can be printed pre-filled for the affiant to
+  sign and swear.
+- A filed statement can be issued, which freezes it as received.
+- Notes 1–4 are printed as in the manual.
+
+### 16.6 API and UI
+
+**API**
+- `POST /api/sworn-statements`, and `PUT` to change a draft's header.
+- `POST /{id}/items` and `DELETE /{id}/items/{itemId}` (draft only).
+- `POST /{id}/file` and `POST /{id}/cancel` (with a reason).
+- `POST /{id}/items/{itemId}/link` (an RPU, for a NEW item).
+- `GET` with filters (city/municipality, declarant, TD number, received
+  date), paged. `GET /api/properties/{id}/sworn-statements`.
+
+**UI**
+- A **Sworn Statements** page:
+  - a list with filters;
+  - an intake form in the order of the paper form (declarant, then items by
+    kind, each item picking an existing TD by number or marked NEW, then
+    execution and jurat);
+  - Print (preview), File, and Issue.
+- The property's Sworn Statements section.
+
+### 16.7 Delivery
+
+1. **7a:** entities, migration, service, API, integration tests.
+2. **7b:** the `SWORN_STATEMENT` template.
+3. **7c:** the page, the property section, the declared-versus-appraised
+   display, and a browser check.
+
+### 16.8 Open for review
+
+1. One items table for the four kinds, with a check constraint per kind,
+   rather than four tables.
+2. Draft → Filed → Cancelled with no approval step, and corrections by a
+   superseding statement.
+3. Declared values are information only and never feed valuation.
+4. The declarant is free text with an optional taxpayer link.
+5. The filing basis is recorded and no deadline is enforced.
+6. NEW items are linked to an RPU later; statements create no properties.
+7. The jurat's identity document is free text, not a fixed CTC field.
+8. Scanned signed copies wait for document storage (not built yet).
+
+### 16.9 Decisions (user, 2026-09-26: "yes")
+
+All eight proposals in §16.8 were accepted as written.
+
+## 17. Step 7 — implementation status (2026-09-26)
+
+Implemented as designed in §16, with these specifics:
+
+**Model and API (7a).**
+- The entities are `SwornStatement` and `SwornStatementItem`, added by the
+  migration `SwornStatements` (additive: two tables).
+- New enum values: `NumberedDocumentKind.SwornStatement` and
+  `FormSubjectType.SwornStatement`.
+- The status also has **Superseded**:
+  - filing a correction (`SupersedesId`) marks the corrected statement
+    Superseded;
+  - cancelling a filed correction puts the corrected one back to Filed;
+  - there is only one live correction per statement
+    (`UX_SwornStatements_Supersedes_Live`).
+- Database rules:
+  - a filed statement has its signing date, jurat and received date;
+  - owners are named unless the declarant is the owner;
+  - a thumbmarked statement has witnesses;
+  - each item kind has its required columns;
+  - a TD in PRIME and a typed TD number are never both set;
+  - amounts are not negative.
+- An item's kind must fit the unit (`SWORN_STATEMENT_KIND_MISMATCH`):
+  - trees and plants go on a Land or OtherImprovement unit;
+  - a building goes on a Building or OtherImprovement unit.
+  A linked TD must be approved (`TAX_DECLARATION_NOT_IN_FORCE`) and in the
+  statement's city/municipality (`SWORN_STATEMENT_OTHER_LGU`).
+- Filing checks everything at once (`SWORN_STATEMENT_INCOMPLETE` lists what
+  is missing). The index number is generated when a `SwornStatement`
+  numbering scheme is in force; otherwise it is typed or left blank.
+- API: `/api/sworn-statements` (search, get, create, update, items
+  add/remove/link, file, cancel) and `/api/properties/{id}/sworn-statements`
+  (non-draft statements that declare the property).
+
+**Form (7b).**
+- `SWORN_STATEMENT` v1 follows the Att. 11 layout, in landscape, under the
+  `Mrpaao` authority.
+- A draft previews with "DRAFT — FOR SIGNING; NOT YET FILED"; a filed
+  statement issues, with its index number as the document number.
+- Notes 1–3 are printed. Note 4 ("Original acquisition cost of
+  Machinery …") is cut off in the PDF text, so it is not reproduced
+  (verify against the printed manual).
+
+**UI (7c).**
+- A **Sworn Statements** page lists statements, with search by declarant,
+  owner or number, by exact TD number, and by status.
+- The statement page:
+  - the header form follows the paper form (declarant, execution, jurat,
+    received date);
+  - properties are added by part;
+  - an existing TD is chosen by finding the property, then its RPU, which
+    uses the RPU's approved TD;
+  - Preview, File (with an optional index number), Issue, Correct (new
+    statement), Cancel (with a reason), and Link to unit for a NEW item.
+- The Property Profile has a **Sworn statements** tab. Each declared value
+  sits next to the unit's latest posted market value and the difference.
+
+**Verification.**
+- 6 integration tests (`SwornStatementTests`):
+  - declare an existing TD and a NEW building, then file;
+  - filing requirements (items, jurat, received date, witnesses) and
+    representative owners;
+  - kind, in-force and one-LGU checks;
+  - correction and restore on cancel;
+  - link a NEW item, and search;
+  - preview a draft, then issue once filed.
+- The template parses (`FluidFormRendererTests`).
+- Full suite: 101 domain, 37 application and 167 integration tests pass.
+- The frontend production build and lint pass.
+- Browser (Playwright): a statement was created, with a land TD from PRIME
+  and a NEW building; it was filed, the building was linked to its RPU, the
+  form was issued, and the property tab showed declared against appraised,
+  with no console errors.
+- The browser check renamed two dialog fields that were both labelled
+  "Unit" to "RPU" and "Area unit".
+- Dev DB: the check left one filed DEMO statement and two incomplete DEMO
+  drafts.
+- Migration `SwornStatements` is applied locally only.
+
+**Gaps.**
+- Scanned signed copies wait for document storage.
+- The filing periods (§202/§203) and the jurat's identity evidence remain
+  DOMAIN VERIFICATION REQUIRED.
+- Copying machinery costs from a statement into the machinery record is not
+  built (§16.4).
+
+With step 7, all seven steps of the MRPAAO forms model are implemented.

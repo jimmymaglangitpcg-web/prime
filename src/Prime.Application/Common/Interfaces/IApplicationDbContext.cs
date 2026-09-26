@@ -41,6 +41,8 @@ public interface IApplicationDbContext
     DbSet<StructuralMaterial> StructuralMaterials { get; }
     DbSet<TransferTaxClearance> TransferTaxClearances { get; }
     DbSet<Prime.Domain.Entities.Registers.RegisterRun> RegisterRuns { get; }
+    DbSet<Prime.Domain.Entities.SwornStatements.SwornStatement> SwornStatements { get; }
+    DbSet<Prime.Domain.Entities.SwornStatements.SwornStatementItem> SwornStatementItems { get; }
     DbSet<LandImprovement> LandImprovements { get; }
     DbSet<LandAdjustment> LandAdjustments { get; }
     DbSet<AdjustmentFactor> AdjustmentFactors { get; }

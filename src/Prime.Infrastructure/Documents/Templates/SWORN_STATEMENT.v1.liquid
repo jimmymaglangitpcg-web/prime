@@ -1,0 +1,114 @@
+{% comment %}
+  Sworn Statement of the True Current and Fair Market Value of Real Properties,
+  after the MRPAAO Attachment 11 (p.243–244). Superseded manual: reference
+  layout (docs/analysis/mrpaao-forms-model.md §16). A draft previews, printed
+  pre-filled for the affiant to sign and swear; a filed statement is issued.
+{% endcomment %}
+{% assign s = statement %}
+<style>
+  @page { size: landscape; }
+  .src { font-size: 8pt; border: 1px solid #555; padding: 2px 6px; margin-bottom: 6px; }
+  .draft { border: 2px solid #b00; color: #b00; font-weight: bold; text-align: center; padding: 3px; margin-bottom: 6px; }
+  h1 { font-size: 11.5pt; text-align: center; margin: 4px 0 0; }
+  .sub { text-align: center; font-size: 9pt; }
+  p { font-size: 9.5pt; margin: 5px 0; line-height: 1.5; }
+  .fill { border-bottom: 1px solid #000; padding: 0 4px; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; margin: 2px 0 8px; }
+  td, th { border: 1px solid #000; padding: 2px 4px; font-size: 8pt; vertical-align: top; }
+  th { background: #eee; text-align: center; }
+  .num { text-align: right; white-space: nowrap; }
+  .part { font-weight: bold; font-size: 9pt; margin-top: 8px; }
+  .sig { display: inline-block; min-width: 230px; border-top: 1px solid #000; text-align: center; font-size: 8.5pt; padding-top: 2px; }
+  .notes { font-size: 7.5pt; margin-top: 8px; }
+</style>
+<div class="src">Layout: MRPAAO 2004, Attachment 11 — superseded by the Local Assessment Manual; reference layout. Form {{ form.code }} v{{ form.version }}.</div>
+{% if s.status == "Draft" %}<div class="draft">DRAFT — FOR SIGNING; NOT YET FILED</div>{% endif %}
+{% if s.status == "Cancelled" %}<div class="draft">CANCELLED — {{ s.cancellationReason }}</div>{% endif %}
+{% if s.status == "Superseded" %}<div class="draft">SUPERSEDED BY A LATER STATEMENT</div>{% endif %}
+<p style="text-align:right">SWORN STATEMENT INDEX NO. <span class="fill">{{ s.number | default: "________" }}</span></p>
+<h1>SWORN STATEMENT OF THE TRUE CURRENT AND FAIR MARKET VALUE OF REAL PROPERTIES</h1>
+<div class="sub">(Taxable or Exempt)<br>(Required under Section 202/203 of Republic Act No. 7160)</div>
+{% if s.supersedesId %}<p style="font-size:8.5pt">This statement corrects Sworn Statement No. {{ s.supersedesNumber | default: "(unnumbered)" }}.</p>{% endif %}
+
+<p>I, <span class="fill">{{ s.declarantName }}</span>, of legal age, <span class="fill">{{ s.citizenship | default: "________" }}</span>
+  and <span class="fill">{{ s.civilStatus | default: "________" }}</span> and with postal address at
+  <span class="fill">{{ s.postalAddress | default: "________" }}</span>, after having been duly sworn to in accordance with law hereby depose and say:</p>
+<p>1. That I am the <span class="fill">{% case s.capacity %}{% when "Owner" %}Owner{% when "Administrator" %}Administrator{% else %}Authorized Representative{% endcase %}</span>
+  of the following real properties, (lands, buildings, machineries or other improvements) located in the city/municipality of
+  <span class="fill">{{ s.municipalityName }}</span>, province of <span class="fill">{{ s.provinceName }}</span>
+  owned by <span class="fill">{% if s.capacity == "Owner" %}{{ s.ownerNames | default: s.declarantName }}{% else %}{{ s.ownerNames }}{% endif %}</span>
+  of which the description and true current and fair market value/s are as follows:</p>
+
+<div class="part">A. LAND (Residential, Commercial, Industrial, Agricultural, Special)</div>
+<table>
+  <tr><th>Existing Tax Dec. No.</th><th>Lot No.</th><th>Block No.</th><th>Cadastral/ PLS No.</th><th>Title</th><th>Area Ha./Sq.M.</th>
+      <th>Classification</th><th>Location of Property (St./Dist./Barangay)</th><th>Total Current and Fair Market Value</th></tr>
+  {% for i in land %}
+  <tr><td>{% if i.isNew %}NEW{% else %}{{ i.tdNumber }}{% endif %}</td><td>{{ i.lotNumber }}</td><td>{{ i.blockNumber }}</td><td>{{ i.cadastralNumber }}</td>
+      <td>{{ i.titleNumber }}</td><td class="num">{{ i.area | num }} {{ i.areaUnit }}</td><td>{{ i.classificationName }}</td><td>{{ i.location }}</td>
+      <td class="num">{{ i.declaredMarketValue | money }}</td></tr>
+  {% else %}<tr><td colspan="9">&nbsp;</td></tr>{% endfor %}
+</table>
+
+<div class="part">B. BUILDING AND OTHER STRUCTURES</div>
+<table>
+  <tr><th>Existing Tax Dec. No.</th><th>Total Floor Area in (Sq.M.)</th><th>No. Storey</th><th>General Description</th><th>Year Completed/ Occupied</th>
+      <th>Actual Use</th><th>Owner of Lot Where Bldg. Is Located</th><th>Location of Property (No./St./Dist/Barangay)</th><th>True Current and Fair Market Value</th></tr>
+  {% for i in buildings %}
+  <tr><td>{% if i.isNew %}NEW{% else %}{{ i.tdNumber }}{% endif %}</td><td class="num">{{ i.floorArea | num }}</td><td class="num">{{ i.storeys }}</td>
+      <td>{{ i.description }}</td><td>{{ i.yearCompleted }}</td><td>{{ i.actualUseName }}</td><td>{{ i.lotOwnerName }}</td><td>{{ i.location }}</td>
+      <td class="num">{{ i.declaredMarketValue | money }}</td></tr>
+  {% else %}<tr><td colspan="9">&nbsp;</td></tr>{% endfor %}
+</table>
+
+<div class="part">C. MACHINERIES</div>
+<table>
+  <tr><th>Existing Tax Dec. No.</th><th>Description</th><th>Date Acquired</th><th>Date Commenced Operation</th><th>Original Acquisition Cost</th>
+      <th>Cost of Installation on Site</th><th>Value of Depreciation</th><th>Location of Property (St/Dist/Barangay)</th><th>True Current and Fair Market Value</th></tr>
+  {% for i in machinery %}
+  <tr><td>{% if i.isNew %}NEW{% else %}{{ i.tdNumber }}{% endif %}</td><td>{{ i.description }}</td><td>{{ i.dateAcquired | date_ph }}</td>
+      <td>{{ i.dateOperationCommenced | date_ph }}</td><td class="num">{{ i.acquisitionCost | money }}</td><td class="num">{{ i.installationCost | money }}</td>
+      <td class="num">{{ i.depreciation | money }}</td><td>{{ i.location }}</td><td class="num">{{ i.declaredMarketValue | money }}</td></tr>
+  {% else %}<tr><td colspan="9">&nbsp;</td></tr>{% endfor %}
+</table>
+
+<div class="part">OTHER IMPROVEMENTS (Perennial Trees/Plants)</div>
+<table>
+  <tr><th rowspan="2">Existing Tax Dec. No.</th><th rowspan="2">Kinds of Trees/ Plants</th><th colspan="2">No. of Trees/Hec.</th>
+      <th rowspan="2">Annual Product per Tree/Plant</th><th rowspan="2">No. of Trees/Hec. &amp; Ages</th><th rowspan="2">Location of Property</th>
+      <th rowspan="2">True Current and Fair Market Value</th></tr>
+  <tr><th>Productive</th><th>Non-Productive</th></tr>
+  {% for i in trees %}
+  <tr><td>{% if i.isNew %}NEW{% else %}{{ i.tdNumber }}{% endif %}</td><td>{{ i.improvementKindName }}</td><td class="num">{{ i.productiveCount }}</td>
+      <td class="num">{{ i.nonProductiveCount }}</td><td>{{ i.annualProduct }}</td><td>{{ i.ages }}</td><td>{{ i.location }}</td>
+      <td class="num">{{ i.declaredMarketValue | money }}</td></tr>
+  {% else %}<tr><td colspan="8">&nbsp;</td></tr>{% endfor %}
+</table>
+<p style="text-align:right; font-size:9pt">Total declared: <b>{{ s.totalDeclaredValue | money }}</b></p>
+
+<p>2. That I am executing this sworn statement in compliance with Republic Act No. 7160.</p>
+<p>IN WITNESS WHEREOF, I have hereunto affixed my signature this <span class="fill">{% if s.signedOn %}{{ s.signedOn | date_ph }}{% else %}____ day of ________{% endif %}</span>
+  at <span class="fill">{{ s.signedAt | default: "________" }}</span>{% if s.thumbmarked %}, with the signatures of two (2) witnesses to the thumbmark{% endif %}.</p>
+<table style="border:none; margin-top:24px">
+  <tr><td style="border:none; width:34%; text-align:center">{% if s.thumbmarked %}<div class="sig">{{ s.witness1 | default: "&nbsp;" }}<br>(Witness)</div>{% endif %}</td>
+      <td style="border:none; width:33%; text-align:center">{% if s.thumbmarked %}<div class="sig">{{ s.witness2 | default: "&nbsp;" }}<br>(Witness)</div>{% endif %}</td>
+      <td style="border:none; text-align:center"><div class="sig">{{ s.declarantName }}<br>Signature<br>TIN {{ s.declarantTin | default: "________" }}</div></td></tr>
+</table>
+<p>SUBSCRIBED AND SWORN to before me this <span class="fill">{% if s.swornOn %}{{ s.swornOn | date_ph }}{% else %}____ day of ________{% endif %}</span>
+  at <span class="fill">{{ s.swornAt | default: "________" }}</span>, affiant exhibiting <span class="fill">{{ s.identityDocument | default: "________" }}</span>
+  issued on <span class="fill">{% if s.identityDocumentIssuedOn %}{{ s.identityDocumentIssuedOn | date_ph }}{% else %}________{% endif %}</span>
+  at <span class="fill">{{ s.identityDocumentIssuedAt | default: "________" }}</span>, Philippines.</p>
+<table style="border:none; margin-top:24px"><tr><td style="border:none; width:60%"></td>
+  <td style="border:none; text-align:center"><div class="sig">{{ s.administeringOfficer | default: "&nbsp;" }}<br>(Signature of Administering Officer)<br>TIN {{ s.officerTin | default: "________" }}</div></td></tr></table>
+{% if s.receivedOn %}<p style="font-size:8.5pt">Received by the Assessor's Office on <b>{{ s.receivedOn | date_ph }}</b>.</p>{% endif %}
+<div class="notes"><b>Note:</b>
+  <ol>
+    <li>Include in this sworn statement only real property owned or administered by the affiant in one municipality or city.</li>
+    <li>Prepare three (3) copies and after having been subscribed to by the affiant, submit the same to the Provincial, City, Municipal Assessor, or
+      Municipal Deputy Assessor or Ex-Officio Deputy Assessor of the province, city or municipality where the property is located; the original and
+      duplicate to be retained by receiving office and the triplicate to be returned to the affiant after receipt thereof has been duly acknowledged.</li>
+    <li>Write "NEW" under column "Existing Tax Dec. No." for property not previously declared.</li>
+  </ol>
+  The identity document replaces the manual's fixed "Community Tax Certificate No." field (DOMAIN VERIFICATION REQUIRED: identity evidence for a jurat).
+</div>
+<div style="font-size:7.5pt">Printed {{ issue.issuedAt | date_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}. {{ form.legalBasis }}.</div>

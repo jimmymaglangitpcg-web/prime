@@ -1162,3 +1162,83 @@ export interface CreateRegisterRunRequest {
   kind: RegisterKind; asOf: string; fromDate: string | null; barangayId: string | null;
   classificationId: string | null; taxpayerId: string | null; remarks: string | null;
 }
+
+// --- Sworn statements (docs/analysis/mrpaao-forms-model.md §16) ---
+
+export type SwornStatementStatus = 'Draft' | 'Filed' | 'Superseded' | 'Cancelled';
+export type DeclarantCapacity = 'Owner' | 'Administrator' | 'AuthorizedRepresentative';
+export type SwornStatementFilingBasis = 'Section202' | 'Section203' | 'Other';
+export type SwornStatementItemKind = 'Land' | 'Building' | 'Machinery' | 'OtherImprovement';
+
+export const declarantCapacityLabel: Record<DeclarantCapacity, string> = {
+  Owner: 'Owner',
+  Administrator: 'Administrator',
+  AuthorizedRepresentative: 'Authorized representative',
+};
+export const filingBasisLabel: Record<SwornStatementFilingBasis, string> = {
+  Section202: 'LGC §202 — declaration by the owner or administrator',
+  Section203: 'LGC §203 — new property or improvement',
+  Other: 'Other',
+};
+export const swornItemKindLabel: Record<SwornStatementItemKind, string> = {
+  Land: 'A. Land',
+  Building: 'B. Building / structure',
+  Machinery: 'C. Machinery',
+  OtherImprovement: 'Trees / plants',
+};
+
+export interface SaveSwornStatementRequest {
+  declarantName: string; declarantTaxpayerId: string | null; citizenship: string | null; civilStatus: string | null;
+  postalAddress: string | null; declarantTin: string | null; capacity: DeclarantCapacity; ownerNames: string | null;
+  municipalityId: string; filingBasis: SwornStatementFilingBasis;
+  signedOn: string | null; signedAt: string | null; thumbmarked: boolean; witness1: string | null; witness2: string | null;
+  swornOn: string | null; swornAt: string | null; administeringOfficer: string | null; officerTin: string | null;
+  identityDocument: string | null; identityDocumentIssuedOn: string | null; identityDocumentIssuedAt: string | null;
+  receivedOn: string | null; supersedesId: string | null; remarks: string | null;
+}
+
+export interface AddSwornStatementItemRequest {
+  kind: SwornStatementItemKind; taxDeclarationId: string | null; existingTdNumber: string | null; location: string | null; declaredMarketValue: number;
+  lotNumber?: string | null; blockNumber?: string | null; cadastralNumber?: string | null; titleNumber?: string | null;
+  area?: number | null; areaUnit?: string | null; classificationId?: string | null;
+  floorArea?: number | null; storeys?: number | null; description?: string | null; yearCompleted?: number | null; actualUseId?: string | null; lotOwnerName?: string | null;
+  dateAcquired?: string | null; dateOperationCommenced?: string | null; acquisitionCost?: number | null; installationCost?: number | null; depreciation?: number | null;
+  improvementKindId?: string | null; productiveCount?: number | null; nonProductiveCount?: number | null; annualProduct?: string | null; ages?: string | null;
+}
+
+export interface SwornStatementItemDto {
+  id: string; kind: SwornStatementItemKind; sequence: number; taxDeclarationId: string | null; tdNumber: string | null; isNew: boolean;
+  propertyId: string | null; rpuId: string | null; rpuNumber: string | null; location: string | null; declaredMarketValue: number;
+  lotNumber: string | null; blockNumber: string | null; cadastralNumber: string | null; titleNumber: string | null; area: number | null; areaUnit: string | null;
+  classificationId: string | null; classificationName: string | null;
+  floorArea: number | null; storeys: number | null; description: string | null; yearCompleted: number | null; actualUseId: string | null; actualUseName: string | null;
+  lotOwnerName: string | null; dateAcquired: string | null; dateOperationCommenced: string | null;
+  acquisitionCost: number | null; installationCost: number | null; depreciation: number | null;
+  improvementKindId: string | null; improvementKindName: string | null; productiveCount: number | null; nonProductiveCount: number | null;
+  annualProduct: string | null; ages: string | null;
+}
+
+export interface SwornStatementDto extends SaveSwornStatementRequest {
+  id: string; number: string | null; status: SwornStatementStatus; municipalityName: string; provinceName: string;
+  supersedesNumber: string | null; supersededById: string | null; filedAt: string | null; cancelledAt: string | null; cancellationReason: string | null;
+  totalDeclaredValue: number; createdAt: string; items: SwornStatementItemDto[];
+}
+
+export interface SwornStatementSummaryDto {
+  id: string; number: string | null; status: SwornStatementStatus; declarantName: string; capacity: DeclarantCapacity; municipalityName: string;
+  receivedOn: string | null; itemCount: number; totalDeclaredValue: number; createdAt: string;
+}
+
+export interface SwornStatementSearchParams {
+  declarant?: string; tdNumber?: string; status?: SwornStatementStatus; municipalityId?: string; page?: number; pageSize?: number;
+}
+
+export const swornStatusColor: Record<SwornStatementStatus, string> = { Draft: 'default', Filed: 'green', Superseded: 'orange', Cancelled: 'red' };
+
+/** The unit types an item of each kind can declare (trees are declared on the land's FAAS, MRPAAO Att. 1). */
+export const unitTypesFor: Record<SwornStatementItemKind, RpuType[]> = {
+  Land: ['Land'],
+  Building: ['Building', 'OtherImprovement'],
+  Machinery: ['Machinery'],
+  OtherImprovement: ['Land', 'OtherImprovement'],
+};
