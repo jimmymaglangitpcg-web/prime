@@ -1,0 +1,61 @@
+{% comment %}
+  PRIME provisional layout (docs/FORMS-REVISION-PLAN.md A8). Neutral design
+  built only from PRIME data — no LAM content, no official layout. Preview
+  only: a statement is a point-in-time view (see
+  StatementOfAccountFormDataProvider). v2 (Phase 9): paid, outstanding and
+  the amount due as of the statement's date, and the receipts.
+{% endcomment %}
+{% assign s = statement %}
+<style>
+  .hdr { text-align: center; margin-bottom: 10px; }
+  .hdr .lgu { font-weight: bold; font-size: 12pt; }
+  .hdr h1 { font-size: 15pt; margin: 6px 0 2px; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+  th, td { border: 1px solid #555; padding: 3px 5px; font-size: 9.5pt; vertical-align: top; }
+  th { background: #eee; text-align: left; }
+  .num { text-align: right; white-space: nowrap; }
+  .meta td { border: none; padding: 1px 4px; }
+  .total td { font-weight: bold; }
+  .foot { font-size: 8pt; color: #333; margin-top: 10px; }
+</style>
+<div class="hdr">
+  {% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% else %}<div class="lgu">[LGU name not configured]</div>{% endif %}
+  {% if lgu.office %}<div>{{ lgu.office }}</div>{% endif %}
+  <h1>{{ form.title }}</h1>
+  <div>As of {{ s.generatedAt | date_ph }}</div>
+</div>
+
+<table class="meta">
+  <tr><td><b>PIN</b></td><td>{{ property.pin }}</td></tr>
+  <tr><td><b>Location</b></td><td>{% if property.street %}{{ property.street }}, {% endif %}{% if property.sitio %}{{ property.sitio }}, {% endif %}{{ property.barangay }}, {{ property.municipality }}, {{ property.province }}</td></tr>
+  <tr><td><b>Declared in the name of</b></td><td>{% for o in owners %}{{ o.name }}{% if o.role != "Owner" and o.role != "UnknownOwner" %} ({{ o.roleLabel }}){% endif %}{% if o.isOwner and o.sharePercent != 100 %} ({{ o.sharePercent | percent }}){% endif %}{% unless forloop.last %}; {% endunless %}{% else %}—{% endfor %}</td></tr>
+</table>
+
+<table>
+  <tr><th>Tax year</th><th>RPU</th><th>TD No.</th><th class="num">Assessed value</th><th class="num">Tax</th><th class="num">Paid</th><th class="num">Outstanding</th><th class="num">Due {{ s.asOfDate | date_ph }}</th></tr>
+  {% for b in s.bills %}
+  <tr><td>{{ b.taxYear }}</td><td>{{ b.rpuNumber }}</td><td>{{ b.taxDeclarationNumber }}</td>
+      <td class="num">{{ b.assessedValue | money }}</td><td class="num">{{ b.principalOwed | money }}</td><td class="num">{{ b.principalPaid | money }}</td>
+      <td class="num">{{ b.outstandingPrincipal | money }}</td><td class="num">{{ b.dueAsOf | money }}</td></tr>
+  {% else %}
+  <tr><td colspan="8">No posted bills.</td></tr>
+  {% endfor %}
+  <tr class="total"><td colspan="5" class="num">TOTAL</td><td class="num">{{ s.totalPrincipalPaid | money }}</td>
+      <td class="num">{{ s.totalOutstandingPrincipal | money }}</td><td class="num">{{ s.totalDueAsOf | money }}</td></tr>
+</table>
+
+<table>
+  <tr><th>OR No.</th><th>Date</th><th>Payor</th><th>Status</th><th class="num">Amount</th></tr>
+  {% for r in s.payments %}
+  <tr><td>{{ r.officialReceiptNumber }}</td><td>{{ r.paymentDate | date_ph }}</td><td>{{ r.payorName }}</td><td>{{ r.status }}</td><td class="num">{{ r.amount | money }}</td></tr>
+  {% else %}
+  <tr><td colspan="5">No payments recorded.</td></tr>
+  {% endfor %}
+</table>
+
+<div class="foot">
+  "Due" is what settling the outstanding tax would cost on {{ s.asOfDate | date_ph }}, with the discounts, penalties and interest of that date.
+  Paid and outstanding count tax only; voided and reversed receipts are listed but not counted.
+  Printed {{ issue.issuedAt | date_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}.
+  Form {{ form.code }} v{{ form.version }} — {{ form.legalBasis }}.
+</div>

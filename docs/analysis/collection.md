@@ -401,5 +401,78 @@ integration tests including concurrent posting).
 
   Full suite: 132 domain, 37 application and 199 integration tests pass.
 
-Next: 9d (receipt form, payment workspace, Payments tab, balance on the
-Statement of Account).
+9c was committed and pushed as `e6eab47`.
+
+**9d done (2026-09-26, uncommitted; no migration):**
+- **Receipt:** `FormSubjectType.Payment` (8) and `PaymentFormDataProvider`,
+  with the provisional `OFFICIAL_RECEIPT` v1 form. It shows:
+  - the office, location code, OR number, transaction number, and date and
+    time (new `datetime_ph` template filter);
+  - the payor, and the bill or TD numbers;
+  - the nature of collection by revenue account and fund;
+  - the amount in words, the lines, the tenders, tendered and change;
+  - a VOIDED or REVERSED banner.
+
+  Only a posted payment can be issued. Issuing is once per payment, so a
+  reprint returns the frozen receipt. The official layout (COA/BLGF eOR) is
+  DOMAIN VERIFICATION REQUIRED.
+- **Statement of Account:**
+  - `StatementLineDto` gains `PrincipalOwed`, `PrincipalPaid`,
+    `OutstandingPrincipal` and `DueAsOf`.
+  - `StatementOfAccountDto` gains `AsOfDate`, `TotalPrincipalPaid`,
+    `TotalOutstandingPrincipal`, `TotalDueAsOf` and `Payments` (every receipt,
+    with its status).
+  - `BillService` takes `IPaymentService`; there is no cycle, because payments
+    do not use billing.
+  - Form `STATEMENT_OF_ACCOUNT` v2 replaces the v1 layout, which assumed
+    nothing was paid; the seeder installs it.
+- **Frontend:**
+  - `api/payments.ts`.
+  - The payment workspace at `/collection/pay?propertyId=`:
+    - outstanding installments to tick, with an optional partial tax amount;
+    - the quote as of today, with each line's account code;
+    - the payor (prefilled from the first current owner), an optional OR
+      number for a pre-printed receipt, and several tenders with the change;
+    - a confirmation dialog, then the result with Print receipt.
+  - A **Payments** tab on the Property Profile: the receipts, a detail drawer
+    (tenders, lines, cancellation history), Print receipt, and requests to
+    void/reverse or to correct the payor details (same installments, amounts
+    and tenders).
+  - A **Collection** page (`/collection`): receipts by date, and the queue of
+    pending cancellation requests with approve/reject (maker-checker; the
+    dev-only act-as-checker switch works here).
+  - A **Collection Setup** admin page (`/admin/collection`): revenue account
+    mappings (one form can create several component × year pairs;
+    maker-checker approval) and modes of payment.
+  - The Statement of Account page shows paid, outstanding, due today and the
+    receipts, with a Take payment button.
+  - Navigation gains Collection and Collection Setup.
+- **Verified in a browser** (Playwright) against the dev database, on the
+  DEMO property `DEMO-BILL-AE94B8`:
+  - a payment mode was created through the setup page;
+  - installments 1–2 were paid late (1,090.00 = 560.00 + 530.00, matching the
+    API's amounts due), with change;
+  - installments 3–4 were paid on time with the discount (900.00), with
+    change 100.00, and the receipt was issued with every eOR field;
+  - a void was requested, refused when the requester tried to approve it,
+    and approved as the dev checker; the receipt was then listed as Voided;
+  - the statement showed paid 1,000.00, outstanding 1,000.00, due today
+    900.00, and the voided receipt listed but not counted.
+
+  The browser run found and fixed:
+  - receipt numbers in tables were `<a>` elements without an href (not
+    keyboard-reachable); they are now link buttons (CLAUDE.md §83);
+  - an antd Descriptions span warning in the payment drawer;
+  - a long account column that pushed the amount off-screen.
+- The dev database now has DEMO account mappings for `DEMO-BASIC`/`DEMO-SEF`
+  (24, approved), DEMO modes, and the payments above.
+- The concurrency test now reuses one DEMO tax type, mode and mapping set
+  (`DEMO-CONCURRENCY…`). Earlier runs had left six DEMO tax types, modes and
+  72 mappings in the dev database; they are still there.
+- Tests: 2 more in `CollectionFlowTests` (receipt issued once with the eOR
+  content, and a voided payment not issuable; statement paid/outstanding/
+  receipts). `BillingFlowTests` was updated for the v2 statement. Full suite:
+  132 domain, 37 application and 201 integration tests pass; oxlint is clean
+  and the production build passes.
+
+Next: 9e (remittance, collection summary, reconciliation).

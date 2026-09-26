@@ -483,6 +483,67 @@ public class CollectionFlowTests(WebApplicationFactory<Program> factory) : IClas
         (await payments.GetOutstandingAsync(s.Seed.PropertyId, null)).Value.TotalOutstandingPrincipal.ShouldBe(0m);
     }
 
+    // --- Receipt and statement of account (step 9d) ---
+
+    [Fact]
+    public async Task Receipt_IsIssuedOnce_WithTheEorContent_AndAVoidedPaymentCannotBeIssued()
+    {
+        var (db, services, transaction) = await BeginAsync(March15);
+        await using var _ = transaction;
+        var s = await SeedBillAsync(services, db, new DateOnly(2026, 3, 15));
+        var payments = services.GetRequiredService<IPaymentService>();
+        var forms = services.GetRequiredService<Prime.Application.Features.Forms.IFormService>();
+        var paid = (await payments.PostAsync(Pay(s, 1_800m, [new PaymentTenderRequest(s.Cash.Id, 2_000m)]))).Value;
+
+        var issued = await forms.IssueAsync(new Prime.Application.Features.Forms.IssueFormRequest("OFFICIAL_RECEIPT", paid.Id));
+
+        issued.IsSuccess.ShouldBeTrue(issued.IsSuccess ? null : issued.Message);
+        var html = issued.Value.Html!;
+        html.ShouldContain("PROVISIONAL");
+        html.ShouldContain(paid.OfficialReceiptNumber);
+        html.ShouldContain(paid.TransactionNumber);
+        html.ShouldContain("15 March 2026");                     // date and time of receipt
+        html.ShouldContain("DEMO-DEMO_BASIC-Tax-Current");       // coded to the revenue account
+        html.ShouldContain(s.Bill.TaxDeclarationNumber);        // bill / TD reference
+        html.ShouldContain("DEMO Cash");
+        html.ShouldContain("1,800.00");
+        html.ShouldContain("200.00");                            // change
+        (await forms.IssueAsync(new Prime.Application.Features.Forms.IssueFormRequest("OFFICIAL_RECEIPT", paid.Id))).Value.Id.ShouldBe(issued.Value.Id);
+
+        var (user, _, checker) = Users(services);
+        var other = (await payments.PostAsync(Pay(s, 1_800m))).Code;   // already settled: the first payment stands
+        other.ShouldBe("PAYMENT_ALREADY_SETTLED");
+        var request = (await payments.RequestCancellationAsync(paid.Id, new RequestPaymentCancellationRequest("DEMO"))).Value;
+        user.AppUserId = checker;
+        (await payments.ApproveCancellationAsync(request.Id, new DecidePaymentCancellationRequest(null))).IsSuccess.ShouldBeTrue();
+        var again = (await payments.PostAsync(Pay(s, 1_800m))).Value;
+        var preview = await forms.PreviewAsync("OFFICIAL_RECEIPT", paid.Id);
+        preview.Value.Html.ShouldContain("VOIDED");
+        (await forms.IssueAsync(new Prime.Application.Features.Forms.IssueFormRequest("OFFICIAL_RECEIPT", again.Id))).IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task StatementOfAccount_ShowsPaidOutstandingAndReceipts()
+    {
+        var (db, services, transaction) = await BeginAsync(March15);
+        await using var _ = transaction;
+        var s = await SeedBillAsync(services, db, new DateOnly(2026, 3, 15));
+        var payments = services.GetRequiredService<IPaymentService>();
+        var paid = (await payments.PostAsync(Pay(s, 500m, items: [new PaymentItemRequest(s.Seed.RpuId, 2026, 1, 500m)]))).Value;
+
+        var statement = (await services.GetRequiredService<IBillService>().GetStatementOfAccountAsync(s.Seed.PropertyId)).Value;
+
+        statement.AsOfDate.ShouldBe(new DateOnly(2026, 3, 15));
+        var line = statement.Bills.Single();
+        line.PrincipalOwed.ShouldBe(2_000m);
+        line.PrincipalPaid.ShouldBe(500m);
+        line.OutstandingPrincipal.ShouldBe(1_500m);
+        line.DueAsOf.ShouldBe(1_500m);                           // no discount on the rest of a part-paid installment
+        statement.TotalDueAsOf.ShouldBe(1_500m);
+        statement.Payments.Single().OfficialReceiptNumber.ShouldBe(paid.OfficialReceiptNumber);
+        statement.Payments.Single().Amount.ShouldBe(500m);
+    }
+
     // --- HTTP surface ---
 
     [Fact]
@@ -504,9 +565,10 @@ public class CollectionFlowTests(WebApplicationFactory<Program> factory) : IClas
     /// Two cashiers post the same installment at the same moment: exactly one
     /// payment is saved; the other is told it is already settled. The same
     /// submission sent twice at once yields one payment. This test commits DEMO
-    /// rows to the dev database (a fresh DEMO property, bill, tax types, modes and
-    /// mappings) because uncommitted rows are invisible to a second connection;
-    /// they reuse any receipt/transaction numbering scheme already in force.
+    /// rows to the dev database (a fresh DEMO property and bill each run, plus one
+    /// shared DEMO tax type, mode and account mappings) because uncommitted rows are
+    /// invisible to a second connection; it reuses any receipt/transaction numbering
+    /// scheme already in force.
     /// </summary>
     [Fact]
     public async Task ConcurrentPosting_OfOneInstallment_SavesExactlyOnePayment()
@@ -518,10 +580,16 @@ public class CollectionFlowTests(WebApplicationFactory<Program> factory) : IClas
             var db = scope.ServiceProvider.GetRequiredService<PrimeDbContext>();
             var seed = await BillingFlowTests.SeedPostedAssessmentAsync(scope.ServiceProvider, db, new DateOnly(2026, 1, 1));
             var tag = Guid.NewGuid().ToString("N")[..8];
-            var basic = new TaxType { Code = $"DB{tag}", Name = "DEMO_BASIC" };
-            var cash = new PaymentMode { Code = $"DC{tag}", Name = "DEMO Cash", AllowsChange = true };
-            db.AddRange(basic, cash);
-            db.AddRange(DemoMappings(basic));
+            // One shared DEMO tax type, mode and set of account mappings, reused by every run so
+            // repeated runs do not fill the dev database's pick-lists.
+            var basic = await db.TaxTypes.FirstOrDefaultAsync(x => x.Code == "DEMO-CONCURRENCY")
+                ?? db.TaxTypes.Add(new TaxType { Code = "DEMO-CONCURRENCY", Name = "DEMO_CONCURRENCY_TEST" }).Entity;
+            var cash = await db.PaymentModes.FirstOrDefaultAsync(x => x.Code == "DEMO-CONCURRENCY-CASH")
+                ?? db.PaymentModes.Add(new PaymentMode { Code = "DEMO-CONCURRENCY-CASH", Name = "DEMO Cash (concurrency test)", AllowsChange = true }).Entity;
+            if (!await db.RevenueAccountMappings.AnyAsync(x => x.TaxTypeId == basic.Id && x.Status == WorkflowStatus.Approved))
+            {
+                db.AddRange(DemoMappings(basic));
+            }
             AddNumbering(db, tag,
                 receipt: !await db.NumberingSchemes.InForceAsync(NumberedDocumentKind.OfficialReceipt, new DateOnly(2026, 3, 15)),
                 transaction: !await db.NumberingSchemes.InForceAsync(NumberedDocumentKind.PaymentTransaction, new DateOnly(2026, 3, 15)));

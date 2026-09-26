@@ -1031,9 +1031,12 @@ steps, `CollectionCalculator`, 31 unit tests) is committed and pushed
 (`babe5ab`). **Step 9b** (payments in the database and API; migration
 `Payments`) is committed and pushed (`ce6c613`). **Step 9c** (void,
 reversal and correction under maker-checker; migration
-`PaymentCancellations`) is done and uncommitted. Both migrations are on the
-local dev DB only. Next: 9d, the receipt and the payment screens. See §10 of
-that doc. The paragraphs below are the earlier history.
+`PaymentCancellations`) is committed and pushed (`e6eab47`). Both migrations
+are on the local dev DB only. **Step 9d** (the receipt form, the payment
+workspace, the Payments tab, the Collection and Collection Setup pages, and
+the balance on the Statement of Account) is done, browser-verified and
+uncommitted. Next: 9e, remittance, the collection summary and
+reconciliation. See §10 of that doc. The paragraphs below are the earlier history.
 
 Phases 0–8 are complete with DEMO values (Phase 8 — Billing finished
 2026-09-25; see its status block and docs/BILLING.md §6.1 for the defaults

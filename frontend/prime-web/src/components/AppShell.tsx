@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Alert, Layout, Menu, Switch, Tooltip, Typography } from 'antd';
-import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined } from '@ant-design/icons';
+import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { devActAsAvailable, isActingAsChecker, setActingAsChecker, subscribeActingAsChecker } from '../lib/devActAs';
@@ -14,8 +14,10 @@ const navItems = [
   { key: '/gis', icon: <GlobalOutlined />, label: 'Tax Map' },
   { key: '/sworn-statements', icon: <AuditOutlined />, label: 'Sworn Statements' },
   { key: '/registers', icon: <BookOutlined />, label: 'Registers' },
+  { key: '/collection', icon: <DollarOutlined />, label: 'Collection' },
   { key: '/admin/valuation', icon: <CalculatorOutlined />, label: 'Valuation Rules' },
   { key: '/admin/forms', icon: <FileTextOutlined />, label: 'Forms & Numbering' },
+  { key: '/admin/collection', icon: <BankOutlined />, label: 'Collection Setup' },
   { key: '/health', icon: <HeartOutlined />, label: 'System Health' },
 ];
 

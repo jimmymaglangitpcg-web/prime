@@ -52,6 +52,7 @@ export const useBuildingComponentTypes = () => useLookup('building-component-typ
 export const useTitleTypes = () => useLookup('title-types');
 export const usePropertyTypes = () => useLookup('property-types');
 export const useStructuralParts = () => useLookup('structural-parts');
+export const useTaxTypes = () => useLookup('tax-types');
 
 export function useStructuralMaterials() {
   return useQuery({

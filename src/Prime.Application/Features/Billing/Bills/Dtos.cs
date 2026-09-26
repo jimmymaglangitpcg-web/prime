@@ -69,12 +69,24 @@ public sealed record TaxBillDetailDto(
 /// for a property. Payments are Phase 9, so the balance is not yet
 /// reduced by anything paid.
 /// </summary>
+/// <summary>
+/// Posted bills with what has been paid on them and what settling the rest
+/// would cost on <see cref="AsOfDate"/> (docs/analysis/collection.md §6), plus
+/// the property's receipts.
+/// </summary>
 public sealed record StatementOfAccountDto(
     Guid PropertyId,
     string PropertyIdentificationNumber,
     DateTimeOffset GeneratedAt,
+    DateOnly AsOfDate,
     IReadOnlyList<StatementLineDto> Bills,
-    decimal TotalBilled);
+    decimal TotalBilled,
+    decimal TotalPrincipalPaid,
+    decimal TotalOutstandingPrincipal,
+    decimal TotalDueAsOf,
+    IReadOnlyList<StatementPaymentDto> Payments);
+
+public sealed record StatementPaymentDto(Guid PaymentId, string OfficialReceiptNumber, DateOnly PaymentDate, string PayorName, decimal Amount, string Status);
 
 public sealed record StatementLineDto(
     Guid BillId,
@@ -88,4 +100,10 @@ public sealed record StatementLineDto(
     decimal Discount,
     decimal Penalty,
     decimal Interest,
-    decimal Total);
+    decimal Total,
+    /// <summary>Principal (tax) owed on this bill and what standing payments have settled of it.</summary>
+    decimal PrincipalOwed,
+    decimal PrincipalPaid,
+    decimal OutstandingPrincipal,
+    /// <summary>Settling what is outstanding on the statement's as-of date; 0 when nothing is.</summary>
+    decimal DueAsOf);

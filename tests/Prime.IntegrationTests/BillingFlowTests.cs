@@ -233,6 +233,9 @@ public class BillingFlowTests(WebApplicationFactory<Program> factory) : IClassFi
         statement.Bills.Single().BillId.ShouldBe(june.Id);
         statement.Bills.Single().Interest.ShouldBe(120m);
         statement.TotalBilled.ShouldBe(2_120m);
+        statement.Bills.Single().PrincipalOwed.ShouldBe(2_000m);
+        statement.TotalOutstandingPrincipal.ShouldBe(2_000m);
+        statement.Payments.ShouldBeEmpty();
 
         // A8: the provisional statement form renders the same figures, preview only.
         var forms = services.GetRequiredService<IFormService>();
@@ -240,8 +243,9 @@ public class BillingFlowTests(WebApplicationFactory<Program> factory) : IClassFi
         preview.IsSuccess.ShouldBeTrue(preview.IsSuccess ? null : preview.Message);
         preview.Value.IssueBlocker.ShouldNotBeNull();
         preview.Value.Html.ShouldContain("PROVISIONAL");
-        preview.Value.Html.ShouldContain("TOTAL BILLED");
-        preview.Value.Html.ShouldContain("2,120.00");
+        // v2 (Phase 9): tax, paid, outstanding and the amount due today, and the receipts.
+        preview.Value.Html.ShouldContain("2,000.00");
+        preview.Value.Html.ShouldContain("No payments recorded.");
         (await forms.IssueAsync(new IssueFormRequest("STATEMENT_OF_ACCOUNT", seed.PropertyId))).Code.ShouldBe("FORM_SUBJECT_NOT_ISSUABLE");
     }
 

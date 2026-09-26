@@ -91,6 +91,14 @@ public sealed class FluidFormRenderer(IOptions<LguOptions> lgu) : IFormRenderer
                 ? TimeZoneInfo.ConvertTime(value, zone).ToString("d MMMM yyyy", Invariant)
                 : text);
         });
+        // Date and time on the LGU's clock, e.g. a receipt's time of payment (eOR: "date and time of receipt").
+        options.Filters.AddFilter("datetime_ph", (input, _, _) =>
+        {
+            var text = input.ToStringValue();
+            return new StringValue(DateTimeOffset.TryParse(text, Invariant, DateTimeStyles.AssumeUniversal, out var value)
+                ? TimeZoneInfo.ConvertTime(value, zone).ToString("d MMMM yyyy, h:mm tt", Invariant)
+                : text);
+        });
         return options;
     }
 

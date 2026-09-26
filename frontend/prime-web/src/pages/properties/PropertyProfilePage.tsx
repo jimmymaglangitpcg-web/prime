@@ -8,6 +8,7 @@ import { OwnersSection } from './sections/OwnersSection';
 import { ParcelsSection } from './sections/ParcelsSection';
 import { RpuSection } from './sections/RpuSection';
 import { BillingSection } from './sections/BillingSection';
+import { PaymentsSection } from './sections/PaymentsSection';
 import { TransactionsSection } from './sections/TransactionsSection';
 import { SwornStatementsSection } from './sections/SwornStatementsSection';
 import { NoticesSection } from './sections/NoticesSection';
@@ -87,6 +88,7 @@ export function PropertyProfilePage() {
             { key: 'notices', label: 'Notices', children: <NoticesSection propertyId={property.id} rpus={profile.rpus} owners={profile.owners.filter((o) => o.isCurrent && o.role === 'Owner' && o.taxpayerId)} /> },
             { key: 'sworn', label: 'Sworn statements', children: <SwornStatementsSection propertyId={property.id} /> },
             { key: 'billing', label: 'Billing', children: <BillingSection propertyId={property.id} rpus={profile.rpus} /> },
+            { key: 'payments', label: 'Payments', children: <PaymentsSection propertyId={property.id} /> },
           ]}
         />
       </Card>
@@ -95,8 +97,8 @@ export function PropertyProfilePage() {
         style={{ marginTop: 24 }}
         type="info"
         showIcon
-        title="Payments and delinquency are not shown yet"
-        description="Value, assess, approve and post under each RPU (Value and assess). Payments arrive with Phase 9 (Collection) and delinquency with Phase 10."
+        title="Delinquency is not shown yet"
+        description="Value, assess, approve and post under each RPU (Value and assess); bill on the Billing tab and take payments on the Payments tab. Delinquency aging arrives with Phase 10."
       />
     </div>
   );

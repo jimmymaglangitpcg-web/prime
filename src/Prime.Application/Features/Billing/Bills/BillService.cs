@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Features.Collection;
 using Prime.Application.Features.Numbering;
 using Prime.Domain.DomainServices;
 using Prime.Domain.Entities.Billing;
@@ -24,6 +25,7 @@ public sealed class BillService(
     IOptions<BillingOptions> options,
     INumberingService numbering,
     ICollectionLock collectionLock,
+    IPaymentService payments,
     IClock clock) : IBillService
 {
     /// <summary>
@@ -318,16 +320,29 @@ public sealed class BillService(
         var bills = await WithDetails().Where(x => x.PropertyId == propertyId && x.Status == WorkflowStatus.Posted)
             .OrderBy(x => x.TaxYear).ThenBy(x => x.Rpu!.RpuNumber)
             .ToListAsync(cancellationToken);
+        var today = clock.Today;
+        var outstanding = (await payments.GetOutstandingAsync(propertyId, today, cancellationToken)).Value;
         var lines = bills.Select(b =>
         {
             decimal Sum(BillingComponent c) => b.Details.Where(d => d.Component == c).Sum(d => d.Amount);
+            var installments = outstanding.Bills.SingleOrDefault(o => o.BillId == b.Id)?.Installments ?? [];
             return new StatementLineDto(b.Id, b.RpuId, b.Rpu!.RpuNumber, b.TaxDeclaration!.TaxDeclarationNumber, b.TaxYear, b.AsOfDate,
                 b.AssessedValue, Sum(BillingComponent.Tax), Sum(BillingComponent.Discount), Sum(BillingComponent.Penalty),
-                Sum(BillingComponent.Interest), b.Details.Sum(d => d.Amount));
+                Sum(BillingComponent.Interest), b.Details.Sum(d => d.Amount),
+                installments.Sum(i => i.PrincipalOwed), installments.Sum(i => i.PrincipalPaid), installments.Sum(i => i.Outstanding),
+                installments.Sum(i => i.DueIfPaidAsOf ?? 0m));
         }).ToList();
 
-        return Result.Success(new StatementOfAccountDto(property.Id, property.PropertyIdentificationNumber, DateTimeOffset.UtcNow,
-            lines, lines.Sum(l => l.Total)));
+        var receipts = await db.Payments.AsNoTracking()
+            .Where(p => p.Allocations.Any(a => a.PropertyId == propertyId))
+            .OrderBy(p => p.ReceivedAt)
+            .Select(p => new StatementPaymentDto(p.Id, p.OfficialReceiptNumber, p.PaymentDate, p.PayorName,
+                p.Allocations.Where(a => a.PropertyId == propertyId).Sum(a => a.Amount), p.Status.ToString()))
+            .ToListAsync(cancellationToken);
+
+        return Result.Success(new StatementOfAccountDto(property.Id, property.PropertyIdentificationNumber, clock.UtcNow, today,
+            lines, lines.Sum(l => l.Total), lines.Sum(l => l.PrincipalPaid), outstanding.TotalOutstandingPrincipal, outstanding.TotalDueAsOf,
+            receipts));
     }
 
     /// <summary>

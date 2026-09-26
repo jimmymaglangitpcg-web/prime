@@ -702,14 +702,259 @@ export interface StatementLineDto {
   penalty: number;
   interest: number;
   total: number;
+  principalOwed: number;
+  principalPaid: number;
+  outstandingPrincipal: number;
+  /** Settling what is outstanding on the statement's as-of date. */
+  dueAsOf: number;
+}
+
+export interface StatementPaymentDto {
+  paymentId: string;
+  officialReceiptNumber: string;
+  paymentDate: string;
+  payorName: string;
+  amount: number;
+  status: PaymentStatus;
 }
 
 export interface StatementOfAccountDto {
   propertyId: string;
   propertyIdentificationNumber: string;
   generatedAt: string;
+  asOfDate: string;
   bills: StatementLineDto[];
   totalBilled: number;
+  totalPrincipalPaid: number;
+  totalOutstandingPrincipal: number;
+  totalDueAsOf: number;
+  payments: StatementPaymentDto[];
+}
+
+// --- Collection (docs/analysis/collection.md) ---
+
+export type PaymentStatus = 'Posted' | 'Voided' | 'Reversed';
+export type CollectionYearCategory = 'Current' | 'Prior' | 'Advance';
+export type PaymentCancellationStatus = 'Pending' | 'Approved' | 'Rejected';
+export type PaymentCancellationKind = 'Void' | 'Reversal';
+
+export interface OutstandingInstallmentDto {
+  installmentSequence: number;
+  dueDate: string;
+  principalOwed: number;
+  principalPaid: number;
+  outstanding: number;
+  dueIfPaidAsOf: number | null;
+  overpaid: boolean;
+}
+
+export interface OutstandingBillDto {
+  billId: string;
+  billNumber: string | null;
+  rpuId: string;
+  rpuNumber: string;
+  taxDeclarationNumber: string;
+  taxYear: number;
+  installments: OutstandingInstallmentDto[];
+}
+
+export interface OutstandingDto {
+  propertyId: string;
+  asOfDate: string;
+  bills: OutstandingBillDto[];
+  totalOutstandingPrincipal: number;
+  totalDueAsOf: number;
+}
+
+export interface PaymentItemRequest {
+  rpuId: string;
+  taxYear: number;
+  installmentSequence: number;
+  principalAmount?: number | null;
+}
+
+export interface PaymentTenderRequest {
+  paymentModeId: string;
+  amount: number;
+  reference?: string | null;
+  bank?: string | null;
+  checkDate?: string | null;
+}
+
+export interface PostPaymentRequest {
+  idempotencyKey: string;
+  payorTaxpayerId: string | null;
+  payorName: string;
+  payorAddress: string | null;
+  items: PaymentItemRequest[];
+  tenders: PaymentTenderRequest[];
+  expectedTotal: number;
+  officialReceiptNumber?: string | null;
+  remarks?: string | null;
+}
+
+export interface PaymentAllocationDto {
+  lineNumber: number;
+  billId: string;
+  billNumber: string | null;
+  taxDeclarationNumber: string;
+  propertyId: string;
+  rpuId: string;
+  rpuNumber: string;
+  taxYear: number;
+  installmentSequence: number;
+  dueDate: string;
+  taxTypeId: string;
+  taxTypeCode: string;
+  taxTypeName: string;
+  component: BillingComponent;
+  ruleId: string;
+  ratePercent: number | null;
+  baseAmount: number;
+  amount: number;
+  months: number | null;
+  yearCategory: CollectionYearCategory;
+  explanation: string;
+  accountCode: string;
+  accountName: string;
+  fund: string | null;
+}
+
+export interface PaymentQuoteDto {
+  paymentDate: string;
+  allocations: PaymentAllocationDto[];
+  total: number;
+}
+
+export interface PaymentTenderDto {
+  paymentModeId: string;
+  modeCode: string;
+  modeName: string;
+  amount: number;
+  reference: string | null;
+  bank: string | null;
+  checkDate: string | null;
+}
+
+export interface PaymentReplacementRequest {
+  payorTaxpayerId: string | null;
+  payorName: string;
+  payorAddress: string | null;
+  items: PaymentItemRequest[];
+  tenders: PaymentTenderRequest[];
+  expectedTotal: number;
+  officialReceiptNumber?: string | null;
+  remarks?: string | null;
+}
+
+export interface PaymentCancellationDto {
+  id: string;
+  paymentId: string;
+  paymentOfficialReceiptNumber: string;
+  paymentTransactionNumber: string;
+  paymentDate: string;
+  paymentAmount: number;
+  payorName: string;
+  reason: string;
+  isCorrection: boolean;
+  replacement: PaymentReplacementRequest | null;
+  status: PaymentCancellationStatus;
+  kind: PaymentCancellationKind | null;
+  requestedBy: string | null;
+  requestedAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionRemarks: string | null;
+  transactionNumber: string | null;
+  replacementPaymentId: string | null;
+}
+
+export interface PaymentDto {
+  id: string;
+  transactionNumber: string;
+  officialReceiptNumber: string;
+  payorTaxpayerId: string | null;
+  payorName: string;
+  payorAddress: string | null;
+  paymentDate: string;
+  receivedAt: string;
+  office: string | null;
+  locationCode: string | null;
+  cashierUserId: string | null;
+  amountDue: number;
+  amountTendered: number;
+  change: number;
+  status: PaymentStatus;
+  cancelledAt: string | null;
+  replacesPaymentId: string | null;
+  replacedByPaymentId: string | null;
+  remarks: string | null;
+  tenders: PaymentTenderDto[];
+  allocations: PaymentAllocationDto[];
+  cancellations: PaymentCancellationDto[];
+}
+
+export interface PaymentSummaryDto {
+  id: string;
+  transactionNumber: string;
+  officialReceiptNumber: string;
+  payorName: string;
+  paymentDate: string;
+  receivedAt: string;
+  cashierUserId: string | null;
+  amountDue: number;
+  status: PaymentStatus;
+}
+
+export interface PaymentModeDto {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  requiresReference: boolean;
+  allowsChange: boolean;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface CreatePaymentModeRequest {
+  code: string;
+  name: string;
+  description: string | null;
+  requiresReference: boolean;
+  allowsChange: boolean;
+  sortOrder: number;
+}
+
+export interface RevenueAccountMappingDto {
+  id: string;
+  taxTypeId: string;
+  taxTypeCode: string;
+  component: BillingComponent;
+  yearCategory: CollectionYearCategory;
+  accountCode: string;
+  accountName: string;
+  fund: string | null;
+  legalBasis: string;
+  effectiveDate: string;
+  endDate: string | null;
+  status: WorkflowStatus;
+  createdBy: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  remarks: string | null;
+}
+
+export interface CreateRevenueAccountMappingRequest {
+  taxTypeId: string;
+  component: BillingComponent;
+  yearCategory: CollectionYearCategory;
+  accountCode: string;
+  accountName: string;
+  fund: string | null;
+  legalBasis: string;
+  effectiveDate: string;
+  remarks: string | null;
 }
 
 // --- Forms foundation (docs/FORMS-REVISION-PLAN.md) ---
@@ -725,7 +970,7 @@ export type NumberedDocumentKind =
   | 'SwornStatement'
   | 'PaymentTransaction';
 export type FormAuthority = 'PrimeProvisional' | 'Lam' | 'Blgf' | 'LguOrdinance' | 'Other' | 'Mrpaao';
-export type FormSubjectType = 'TaxBill' | 'TaxDeclaration' | 'NoticeOfAssessment' | 'Assessment' | 'StatementOfAccount' | 'Faas';
+export type FormSubjectType = 'TaxBill' | 'TaxDeclaration' | 'NoticeOfAssessment' | 'Assessment' | 'StatementOfAccount' | 'Faas' | 'Register' | 'SwornStatement' | 'Payment';
 export type ApprovalSubjectType = 'Assessment' | 'TaxDeclaration' | 'PropertyTransaction';
 
 interface ConfigurationHeader {

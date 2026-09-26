@@ -53,6 +53,8 @@ public enum FormSubjectType
     Register = 6,
     /// <summary>A sworn statement of market value (MRPAAO Att. 11); the subject id is the statement.</summary>
     SwornStatement = 7,
+    /// <summary>A collection's official receipt (docs/analysis/collection.md §5); the subject id is the payment.</summary>
+    Payment = 8,
 }
 
 /// <summary>Records whose approval can follow a configured <c>ApprovalChain</c>.</summary>
