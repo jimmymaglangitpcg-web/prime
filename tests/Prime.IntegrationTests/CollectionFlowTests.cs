@@ -339,6 +339,150 @@ public class CollectionFlowTests(WebApplicationFactory<Program> factory) : IClas
         outstanding.TotalOutstandingPrincipal.ShouldBe(1_500m);
     }
 
+    // --- Void, reversal, correction (step 9c) ---
+
+    private static (Prime.Infrastructure.Identity.CurrentUserService User, Guid Maker, Guid Checker) Users(IServiceProvider services)
+    {
+        var user = services.GetRequiredService<Prime.Infrastructure.Identity.CurrentUserService>();
+        var maker = Guid.NewGuid();
+        user.AppUserId = maker;
+        return (user, maker, Guid.NewGuid());
+    }
+
+    [Fact]
+    public async Task Void_SameDay_NeedsAnotherUser_GetsItsOwnTransactionNumber_AndRestoresTheBalance()
+    {
+        var (db, services, transaction) = await BeginAsync(March15);
+        await using var _ = transaction;
+        var s = await SeedBillAsync(services, db, new DateOnly(2026, 3, 15));
+        var payments = services.GetRequiredService<IPaymentService>();
+        var (user, _, checker) = Users(services);
+        var paid = (await payments.PostAsync(Pay(s, 1_800m))).Value;
+
+        var request = await payments.RequestCancellationAsync(paid.Id, new RequestPaymentCancellationRequest("DEMO wrong property"));
+        request.IsSuccess.ShouldBeTrue(request.IsSuccess ? null : request.Message);
+        (await payments.RequestCancellationAsync(paid.Id, new RequestPaymentCancellationRequest("again"))).Code.ShouldBe("PAYMENT_CANCELLATION_DUPLICATE");
+        (await payments.ApproveCancellationAsync(request.Value.Id, new DecidePaymentCancellationRequest(null))).Code.ShouldBe("CANNOT_APPROVE_OWN_PAYMENT_CANCELLATION");
+
+        user.AppUserId = checker;
+        var approved = await payments.ApproveCancellationAsync(request.Value.Id, new DecidePaymentCancellationRequest("DEMO ok"));
+
+        approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
+        approved.Value.Kind.ShouldBe(PaymentCancellationKind.Void);
+        approved.Value.Status.ShouldBe(PaymentCancellationStatus.Approved);
+        approved.Value.DecidedBy.ShouldBe(checker);
+        approved.Value.TransactionNumber.ShouldStartWith("DEMO-TXN-");
+        approved.Value.TransactionNumber.ShouldNotBe(paid.TransactionNumber);
+
+        var voided = (await payments.GetByIdAsync(paid.Id)).Value;
+        voided.Status.ShouldBe(PaymentStatus.Voided);
+        voided.CancelledAt.ShouldNotBeNull();
+        voided.Allocations.Count.ShouldBe(paid.Allocations.Count);   // kept on record
+        voided.Cancellations.Single().Id.ShouldBe(request.Value.Id);
+        (await payments.GetOutstandingAsync(s.Seed.PropertyId, null)).Value.TotalOutstandingPrincipal.ShouldBe(2_000m);
+        (await payments.RequestCancellationAsync(paid.Id, new RequestPaymentCancellationRequest("DEMO"))).Code.ShouldBe("PAYMENT_NOT_POSTED");
+    }
+
+    [Fact]
+    public async Task ApprovedOnALaterDay_IsAReversal()
+    {
+        var (db, services, transaction) = await BeginAsync(March15);
+        await using var _ = transaction;
+        var s = await SeedBillAsync(services, db, new DateOnly(2026, 3, 15));
+        var payments = services.GetRequiredService<IPaymentService>();
+        var (user, _, checker) = Users(services);
+        var paid = (await payments.PostAsync(Pay(s, 1_800m))).Value;
+        // As if received the day before (the clock is pinned to 15 March).
+        await db.Payments.Where(x => x.Id == paid.Id).ExecuteUpdateAsync(u => u.SetProperty(x => x.PaymentDate, new DateOnly(2026, 3, 14)));
+
+        var request = (await payments.RequestCancellationAsync(paid.Id, new RequestPaymentCancellationRequest("DEMO dishonoured check"))).Value;
+        user.AppUserId = checker;
+        var approved = (await payments.ApproveCancellationAsync(request.Id, new DecidePaymentCancellationRequest(null))).Value;
+
+        approved.Kind.ShouldBe(PaymentCancellationKind.Reversal);
+        (await payments.GetByIdAsync(paid.Id)).Value.Status.ShouldBe(PaymentStatus.Reversed);
+    }
+
+    [Fact]
+    public async Task Reject_NeedsReasons_KeepsThePayment_AndAllowsANewRequest()
+    {
+        var (db, services, transaction) = await BeginAsync(March15);
+        await using var _ = transaction;
+        var s = await SeedBillAsync(services, db, new DateOnly(2026, 3, 15));
+        var payments = services.GetRequiredService<IPaymentService>();
+        var (user, _, checker) = Users(services);
+        var paid = (await payments.PostAsync(Pay(s, 1_800m))).Value;
+        (await payments.RequestCancellationAsync(paid.Id, new RequestPaymentCancellationRequest(" "))).Code.ShouldBe("VALIDATION_FAILED");
+        var request = (await payments.RequestCancellationAsync(paid.Id, new RequestPaymentCancellationRequest("DEMO"))).Value;
+
+        user.AppUserId = checker;
+        (await payments.RejectCancellationAsync(request.Id, new DecidePaymentCancellationRequest(null))).Code.ShouldBe("VALIDATION_FAILED");
+        var rejected = (await payments.RejectCancellationAsync(request.Id, new DecidePaymentCancellationRequest("DEMO receipt is correct"))).Value;
+
+        rejected.Status.ShouldBe(PaymentCancellationStatus.Rejected);
+        rejected.TransactionNumber.ShouldBeNull();
+        (await payments.GetByIdAsync(paid.Id)).Value.Status.ShouldBe(PaymentStatus.Posted);
+        (await payments.ApproveCancellationAsync(request.Id, new DecidePaymentCancellationRequest(null))).Code.ShouldBe("PAYMENT_CANCELLATION_NOT_PENDING");
+        (await payments.RequestCancellationAsync(paid.Id, new RequestPaymentCancellationRequest("DEMO second thought"))).IsSuccess.ShouldBeTrue();
+        (await payments.ListCancellationsAsync(PaymentCancellationStatus.Pending)).Value.ShouldContain(c => c.PaymentId == paid.Id);
+    }
+
+    [Fact]
+    public async Task Correction_VoidsAndReissues_InOneApprovedStep_DatedLikeTheOriginal()
+    {
+        var (db, services, transaction) = await BeginAsync(March15);
+        await using var _ = transaction;
+        var s = await SeedBillAsync(services, db, new DateOnly(2026, 3, 15));
+        var payments = services.GetRequiredService<IPaymentService>();
+        var (user, _, checker) = Users(services);
+        var paid = (await payments.PostAsync(Pay(s, 1_800m) with { PayorName = "DEMO WRONG NAME" })).Value;
+        var replacement = new PaymentReplacementRequest(null, "DEMO RIGHT NAME", "DEMO Address", [Whole(s)], [new PaymentTenderRequest(s.Cash.Id, 1_800m)], 1_800m);
+
+        (await payments.RequestCorrectionAsync(paid.Id, new RequestPaymentCorrectionRequest("DEMO", replacement with { ExpectedTotal = 2_000m })))
+            .Code.ShouldBe("PAYMENT_QUOTE_CHANGED");
+        var request = await payments.RequestCorrectionAsync(paid.Id, new RequestPaymentCorrectionRequest("DEMO payor misspelled", replacement));
+        request.IsSuccess.ShouldBeTrue(request.IsSuccess ? null : request.Message);
+        request.Value.Replacement!.PayorName.ShouldBe("DEMO RIGHT NAME");
+
+        user.AppUserId = checker;
+        var approved = await payments.ApproveCancellationAsync(request.Value.Id, new DecidePaymentCancellationRequest(null));
+
+        approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
+        var reissued = (await payments.GetByIdAsync(approved.Value.ReplacementPaymentId!.Value)).Value;
+        reissued.PayorName.ShouldBe("DEMO RIGHT NAME");
+        reissued.ReplacesPaymentId.ShouldBe(paid.Id);
+        reissued.PaymentDate.ShouldBe(paid.PaymentDate);
+        reissued.OfficialReceiptNumber.ShouldNotBe(paid.OfficialReceiptNumber);
+        reissued.AmountDue.ShouldBe(1_800m);
+        var original = (await payments.GetByIdAsync(paid.Id)).Value;
+        original.Status.ShouldBe(PaymentStatus.Voided);
+        original.ReplacedByPaymentId.ShouldBe(reissued.Id);
+        (await payments.GetOutstandingAsync(s.Seed.PropertyId, null)).Value.TotalOutstandingPrincipal.ShouldBe(0m);
+    }
+
+    [Fact]
+    public async Task Correction_ThatCannotBePostedAtApproval_ChangesNothing()
+    {
+        var (db, services, transaction) = await BeginAsync(March15);
+        await using var _ = transaction;
+        var s = await SeedBillAsync(services, db, new DateOnly(2026, 3, 15));
+        var payments = services.GetRequiredService<IPaymentService>();
+        var (user, _, checker) = Users(services);
+        var paid = (await payments.PostAsync(Pay(s, 1_800m))).Value;
+        var replacement = new PaymentReplacementRequest(null, "DEMO", null, [Whole(s)], [new PaymentTenderRequest(s.Cash.Id, 1_800m)], 1_800m);
+        var request = (await payments.RequestCorrectionAsync(paid.Id, new RequestPaymentCorrectionRequest("DEMO", replacement))).Value;
+        // The revenue accounts are withdrawn before the checker approves.
+        await db.RevenueAccountMappings.Where(x => x.Status == WorkflowStatus.Approved)
+            .ExecuteUpdateAsync(u => u.SetProperty(x => x.Status, WorkflowStatus.Cancelled).SetProperty(x => x.ApprovedAt, (DateTimeOffset?)null));
+
+        user.AppUserId = checker;
+        (await payments.ApproveCancellationAsync(request.Id, new DecidePaymentCancellationRequest(null))).Code.ShouldBe("PAYMENT_ACCOUNT_NOT_MAPPED");
+
+        (await payments.GetByIdAsync(paid.Id)).Value.Status.ShouldBe(PaymentStatus.Posted);
+        (await payments.ListCancellationsAsync(PaymentCancellationStatus.Pending)).Value.ShouldContain(c => c.Id == request.Id);
+        (await payments.GetOutstandingAsync(s.Seed.PropertyId, null)).Value.TotalOutstandingPrincipal.ShouldBe(0m);
+    }
+
     // --- HTTP surface ---
 
     [Fact]

@@ -76,6 +76,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<Prime.Domain.Entities.Collection.Payment> Payments => Set<Prime.Domain.Entities.Collection.Payment>();
     public DbSet<Prime.Domain.Entities.Collection.PaymentTender> PaymentTenders => Set<Prime.Domain.Entities.Collection.PaymentTender>();
     public DbSet<Prime.Domain.Entities.Collection.PaymentAllocation> PaymentAllocations => Set<Prime.Domain.Entities.Collection.PaymentAllocation>();
+    public DbSet<Prime.Domain.Entities.Collection.PaymentCancellation> PaymentCancellations => Set<Prime.Domain.Entities.Collection.PaymentCancellation>();
     public DbSet<Prime.Domain.Entities.Collection.PaymentMode> PaymentModes => Set<Prime.Domain.Entities.Collection.PaymentMode>();
     public DbSet<Prime.Domain.Entities.Collection.RevenueAccountMapping> RevenueAccountMappings => Set<Prime.Domain.Entities.Collection.RevenueAccountMapping>();
     public DbSet<NumberingScheme> NumberingSchemes => Set<NumberingScheme>();

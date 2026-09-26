@@ -1029,8 +1029,11 @@ Collection started:** the design is in docs/analysis/collection.md
 (uncommitted); all 8 recommendations were approved. **Step 9a** (the shared charge
 steps, `CollectionCalculator`, 31 unit tests) is committed and pushed
 (`babe5ab`). **Step 9b** (payments in the database and API; migration
-`Payments`, local dev DB only) is done and uncommitted. Next: 9c, void,
-reversal and correction. See §10 of that doc. The paragraphs below are the earlier history.
+`Payments`) is committed and pushed (`ce6c613`). **Step 9c** (void,
+reversal and correction under maker-checker; migration
+`PaymentCancellations`) is done and uncommitted. Both migrations are on the
+local dev DB only. Next: 9d, the receipt and the payment screens. See §10 of
+that doc. The paragraphs below are the earlier history.
 
 Phases 0–8 are complete with DEMO values (Phase 8 — Billing finished
 2026-09-25; see its status block and docs/BILLING.md §6.1 for the defaults

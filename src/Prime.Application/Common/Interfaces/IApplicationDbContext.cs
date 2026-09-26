@@ -59,6 +59,7 @@ public interface IApplicationDbContext
     DbSet<Prime.Domain.Entities.Collection.Payment> Payments { get; }
     DbSet<Prime.Domain.Entities.Collection.PaymentTender> PaymentTenders { get; }
     DbSet<Prime.Domain.Entities.Collection.PaymentAllocation> PaymentAllocations { get; }
+    DbSet<Prime.Domain.Entities.Collection.PaymentCancellation> PaymentCancellations { get; }
     DbSet<Prime.Domain.Entities.Collection.PaymentMode> PaymentModes { get; }
     DbSet<Prime.Domain.Entities.Collection.RevenueAccountMapping> RevenueAccountMappings { get; }
     DbSet<NumberingScheme> NumberingSchemes { get; }

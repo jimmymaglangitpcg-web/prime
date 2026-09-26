@@ -49,10 +49,43 @@ public sealed class Payment : AuditableEntity
     public decimal Change { get; set; }
 
     public PaymentStatus Status { get; set; } = PaymentStatus.Posted;
+    /// <summary>When the approved void or reversal took effect.</summary>
+    public DateTimeOffset? CancelledAt { get; set; }
+    /// <summary>For a correction's replacement: the payment it corrects (voided or reversed in the same step).</summary>
+    public Guid? ReplacesPaymentId { get; set; }
     public string? Remarks { get; set; }
 
     public List<PaymentTender> Tenders { get; set; } = [];
     public List<PaymentAllocation> Allocations { get; set; } = [];
+    public List<PaymentCancellation> Cancellations { get; set; } = [];
+}
+
+/// <summary>
+/// A request to void or reverse a payment, or to correct it (void/reverse and
+/// reissue), and its maker-checker decision (docs/analysis/collection.md §4.4–§4.5;
+/// CLAUDE.md §46 "payment reversal"). The requester is <see cref="AuditableEntity"/>
+/// CreatedBy and can never decide it. Whether it is a void or a reversal is
+/// fixed on approval (<see cref="Kind"/>). An approved cancellation carries its
+/// own transaction number (DOF DO 054-2024 §7.1: a transaction number also for
+/// eOR cancellation). Requests are never deleted; a rejected one stays on record.
+/// </summary>
+public sealed class PaymentCancellation : AuditableEntity
+{
+    public Guid PaymentId { get; set; }
+    public Payment? Payment { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    /// <summary>A correction: the replacement payment is posted when this is approved.</summary>
+    public bool IsCorrection { get; set; }
+    /// <summary>The replacement as requested (JSON), for a correction.</summary>
+    public string? ReplacementRequestJson { get; set; }
+
+    public PaymentCancellationStatus Status { get; set; } = PaymentCancellationStatus.Pending;
+    public PaymentCancellationKind? Kind { get; set; }
+    public Guid? DecidedBy { get; set; }
+    public DateTimeOffset? DecidedAt { get; set; }
+    public string? DecisionRemarks { get; set; }
+    public string? TransactionNumber { get; set; }
+    public Guid? ReplacementPaymentId { get; set; }
 }
 
 /// <summary>One mode of payment within a payment (cash, a check, a transfer …).</summary>

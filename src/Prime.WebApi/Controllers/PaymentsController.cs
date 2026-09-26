@@ -32,6 +32,26 @@ public class PaymentsController(IPaymentService payments) : ApiControllerBase
         [FromQuery] PaymentStatus? status, CancellationToken ct) =>
         HandleResult(await payments.ListAsync(date, cashierUserId, status, ct));
 
+    [HttpPost("{id:guid}/cancellation-requests")]
+    public async Task<ActionResult<PaymentCancellationDto>> RequestCancellation(Guid id, RequestPaymentCancellationRequest request, CancellationToken ct) =>
+        HandleResult(await payments.RequestCancellationAsync(id, request, ct));
+
+    [HttpPost("{id:guid}/correction-requests")]
+    public async Task<ActionResult<PaymentCancellationDto>> RequestCorrection(Guid id, RequestPaymentCorrectionRequest request, CancellationToken ct) =>
+        HandleResult(await payments.RequestCorrectionAsync(id, request, ct));
+
+    [HttpGet("cancellation-requests")]
+    public async Task<ActionResult<IReadOnlyList<PaymentCancellationDto>>> Cancellations([FromQuery] PaymentCancellationStatus? status, CancellationToken ct) =>
+        HandleResult(await payments.ListCancellationsAsync(status, ct));
+
+    [HttpPost("cancellation-requests/{id:guid}/approve")]
+    public async Task<ActionResult<PaymentCancellationDto>> ApproveCancellation(Guid id, DecidePaymentCancellationRequest request, CancellationToken ct) =>
+        HandleResult(await payments.ApproveCancellationAsync(id, request, ct));
+
+    [HttpPost("cancellation-requests/{id:guid}/reject")]
+    public async Task<ActionResult<PaymentCancellationDto>> RejectCancellation(Guid id, DecidePaymentCancellationRequest request, CancellationToken ct) =>
+        HandleResult(await payments.RejectCancellationAsync(id, request, ct));
+
     [HttpGet("~/api/properties/{propertyId:guid}/payments")]
     public async Task<ActionResult<IReadOnlyList<PaymentSummaryDto>>> ListByProperty(Guid propertyId, CancellationToken ct) =>
         HandleResult(await payments.ListByPropertyAsync(propertyId, ct));

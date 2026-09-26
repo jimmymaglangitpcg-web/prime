@@ -19,6 +19,13 @@ public interface IPaymentService
     Task<Result<PaymentDto>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<Result<IReadOnlyList<PaymentSummaryDto>>> ListByPropertyAsync(Guid propertyId, CancellationToken cancellationToken = default);
     Task<Result<IReadOnlyList<PaymentSummaryDto>>> ListAsync(DateOnly? date, Guid? cashierUserId, PaymentStatus? status, CancellationToken cancellationToken = default);
+
+    // Void, reversal and correction under maker-checker (docs/analysis/collection.md §4.4–§4.5).
+    Task<Result<PaymentCancellationDto>> RequestCancellationAsync(Guid paymentId, RequestPaymentCancellationRequest request, CancellationToken cancellationToken = default);
+    Task<Result<PaymentCancellationDto>> RequestCorrectionAsync(Guid paymentId, RequestPaymentCorrectionRequest request, CancellationToken cancellationToken = default);
+    Task<Result<PaymentCancellationDto>> ApproveCancellationAsync(Guid cancellationId, DecidePaymentCancellationRequest request, CancellationToken cancellationToken = default);
+    Task<Result<PaymentCancellationDto>> RejectCancellationAsync(Guid cancellationId, DecidePaymentCancellationRequest request, CancellationToken cancellationToken = default);
+    Task<Result<IReadOnlyList<PaymentCancellationDto>>> ListCancellationsAsync(PaymentCancellationStatus? status, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -32,7 +39,7 @@ public interface IPaymentService
 /// touched, so concurrent payments of the same installment are serialized
 /// and the second sees the first's allocations.
 /// </summary>
-public sealed class PaymentService(
+public sealed partial class PaymentService(
     IApplicationDbContext db,
     IValidator<QuotePaymentRequest> quoteValidator,
     IValidator<PostPaymentRequest> postValidator,
@@ -121,97 +128,16 @@ public sealed class PaymentService(
                         "This submission key was already used for a different payment. Start a new payment.");
             }
 
-            var paymentDate = clock.Today;
-            var allocated = await AllocateAsync(request.Items, paymentDate, cancellationToken);
-            if (allocated.IsFailure)
+            var posted = await PostCoreAsync(request, clock.Today, null, cancellationToken);
+            if (posted.IsFailure)
             {
-                return Result.Failure<PaymentDto>(allocated.Code!, allocated.Message!);
+                return Result.Failure<PaymentDto>(posted.Code!, posted.Message!);
             }
-            var lines = allocated.Value;
-            var amountDue = lines.Sum(l => l.Allocation.Amount);
-            if (amountDue != request.ExpectedTotal)
-            {
-                return Result.Failure<PaymentDto>("PAYMENT_QUOTE_CHANGED",
-                    $"The amount due is now {amountDue:N2}, not the {request.ExpectedTotal:N2} confirmed. Review the new quote and confirm again.");
-            }
-
-            var tenders = await TendersAsync(request.Tenders, amountDue, cancellationToken);
-            if (tenders.IsFailure)
-            {
-                return Result.Failure<PaymentDto>(tenders.Code!, tenders.Message!);
-            }
-            var tendered = request.Tenders.Sum(t => t.Amount);
-
-            var context = await NumberContexts.ForPropertyAsync(db, lines[0].Bill.PropertyId, paymentDate.Year, cancellationToken);
-            var transactionNumber = await numbering.GenerateIfConfiguredAsync(NumberedDocumentKind.PaymentTransaction, context, paymentDate, cancellationToken);
-            if (transactionNumber.IsFailure)
-            {
-                return Result.Failure<PaymentDto>(transactionNumber.Code!, transactionNumber.Message!);
-            }
-            if (transactionNumber.Value is null)
-            {
-                return Result.Failure<PaymentDto>("PAYMENT_TRANSACTION_NUMBERING_NOT_CONFIGURED",
-                    "No approved PaymentTransaction numbering scheme is in force; every collection needs a system-generated transaction number (eOR §7.1).");
-            }
-            var receiptNumber = await numbering.AssignAsync(NumberedDocumentKind.OfficialReceipt, context, request.OfficialReceiptNumber, paymentDate, cancellationToken);
-            if (receiptNumber.IsFailure)
-            {
-                return Result.Failure<PaymentDto>(receiptNumber.Code!, receiptNumber.Message!);
-            }
-            if (await db.Payments.AnyAsync(x => x.OfficialReceiptNumber == receiptNumber.Value, cancellationToken))
-            {
-                return Result.Failure<PaymentDto>("PAYMENT_OR_NUMBER_DUPLICATE", $"Official receipt {receiptNumber.Value} has already been issued.");
-            }
-
-            var payment = new Payment
-            {
-                TransactionNumber = transactionNumber.Value,
-                OfficialReceiptNumber = receiptNumber.Value,
-                IdempotencyKey = request.IdempotencyKey,
-                PayorTaxpayerId = request.PayorTaxpayerId,
-                PayorName = request.PayorName.Trim(),
-                PayorAddress = string.IsNullOrWhiteSpace(request.PayorAddress) ? null : request.PayorAddress.Trim(),
-                PaymentDate = paymentDate,
-                ReceivedAt = clock.UtcNow,
-                Office = lgu.Value.Office,
-                LocationCode = lgu.Value.LocationCode,
-                CashierUserId = currentUser.AppUserId,
-                AmountDue = amountDue,
-                AmountTendered = tendered,
-                Change = tendered - amountDue,
-                Remarks = string.IsNullOrWhiteSpace(request.Remarks) ? null : request.Remarks.Trim(),
-                Tenders = tenders.Value,
-                Allocations = lines.Select((l, i) => new PaymentAllocation
-                {
-                    LineNumber = i + 1,
-                    TaxBillId = l.Bill.Id,
-                    PropertyId = l.Bill.PropertyId,
-                    RpuId = l.Allocation.RpuId,
-                    TaxYear = l.Allocation.TaxYear,
-                    InstallmentSequence = l.Allocation.InstallmentSequence,
-                    DueDate = l.Allocation.DueDate,
-                    TaxTypeId = l.Allocation.TaxTypeId,
-                    Component = l.Allocation.Component,
-                    RuleId = l.Allocation.RuleId,
-                    RatePercent = l.Allocation.RatePercent,
-                    BaseAmount = l.Allocation.BaseAmount,
-                    Amount = l.Allocation.Amount,
-                    Months = l.Allocation.Months,
-                    YearCategory = l.Allocation.YearCategory,
-                    Explanation = l.Allocation.Explanation,
-                    RevenueAccountMappingId = l.Account.Id,
-                    AccountCode = l.Account.AccountCode,
-                    AccountName = l.Account.AccountName,
-                    Fund = l.Account.Fund,
-                }).ToList(),
-            };
-            db.Payments.Add(payment);
-            await db.SaveChangesAsync(cancellationToken);
             if (transaction is not null)
             {
                 await transaction.CommitAsync(cancellationToken);
             }
-            return Result.Success(await MapAsync(payment.Id, cancellationToken));
+            return Result.Success(await MapAsync(posted.Value.Id, cancellationToken));
         }
         catch (DbUpdateException)
         {
@@ -225,6 +151,101 @@ public sealed class PaymentService(
                 await transaction.DisposeAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// Allocates, checks and saves one payment dated <paramref name="paymentDate"/>.
+    /// The caller holds the transaction and the collection lock.
+    /// </summary>
+    private async Task<Result<Payment>> PostCoreAsync(PostPaymentRequest request, DateOnly paymentDate, Guid? replacesPaymentId, CancellationToken ct)
+    {
+        var allocated = await AllocateAsync(request.Items, paymentDate, ct);
+        if (allocated.IsFailure)
+        {
+            return Result.Failure<Payment>(allocated.Code!, allocated.Message!);
+        }
+        var lines = allocated.Value;
+        var amountDue = lines.Sum(l => l.Allocation.Amount);
+        if (amountDue != request.ExpectedTotal)
+        {
+            return Result.Failure<Payment>("PAYMENT_QUOTE_CHANGED",
+                $"The amount due is now {amountDue:N2}, not the {request.ExpectedTotal:N2} confirmed. Review the new quote and confirm again.");
+        }
+
+        var tenders = await TendersAsync(request.Tenders, amountDue, ct);
+        if (tenders.IsFailure)
+        {
+            return Result.Failure<Payment>(tenders.Code!, tenders.Message!);
+        }
+        var tendered = request.Tenders.Sum(t => t.Amount);
+
+        var context = await NumberContexts.ForPropertyAsync(db, lines[0].Bill.PropertyId, paymentDate.Year, ct);
+        var transactionNumber = await numbering.GenerateIfConfiguredAsync(NumberedDocumentKind.PaymentTransaction, context, paymentDate, ct);
+        if (transactionNumber.IsFailure)
+        {
+            return Result.Failure<Payment>(transactionNumber.Code!, transactionNumber.Message!);
+        }
+        if (transactionNumber.Value is null)
+        {
+            return Result.Failure<Payment>("PAYMENT_TRANSACTION_NUMBERING_NOT_CONFIGURED",
+                "No approved PaymentTransaction numbering scheme is in force; every collection needs a system-generated transaction number (eOR §7.1).");
+        }
+        var receiptNumber = await numbering.AssignAsync(NumberedDocumentKind.OfficialReceipt, context, request.OfficialReceiptNumber, paymentDate, ct);
+        if (receiptNumber.IsFailure)
+        {
+            return Result.Failure<Payment>(receiptNumber.Code!, receiptNumber.Message!);
+        }
+        if (await db.Payments.AnyAsync(x => x.OfficialReceiptNumber == receiptNumber.Value, ct))
+        {
+            return Result.Failure<Payment>("PAYMENT_OR_NUMBER_DUPLICATE", $"Official receipt {receiptNumber.Value} has already been issued.");
+        }
+
+        var payment = new Payment
+        {
+            TransactionNumber = transactionNumber.Value,
+            OfficialReceiptNumber = receiptNumber.Value,
+            IdempotencyKey = request.IdempotencyKey,
+            PayorTaxpayerId = request.PayorTaxpayerId,
+            PayorName = request.PayorName.Trim(),
+            PayorAddress = string.IsNullOrWhiteSpace(request.PayorAddress) ? null : request.PayorAddress.Trim(),
+            PaymentDate = paymentDate,
+            ReceivedAt = clock.UtcNow,
+            Office = lgu.Value.Office,
+            LocationCode = lgu.Value.LocationCode,
+            CashierUserId = currentUser.AppUserId,
+            AmountDue = amountDue,
+            AmountTendered = tendered,
+            Change = tendered - amountDue,
+            ReplacesPaymentId = replacesPaymentId,
+            Remarks = string.IsNullOrWhiteSpace(request.Remarks) ? null : request.Remarks.Trim(),
+            Tenders = tenders.Value,
+            Allocations = lines.Select((l, i) => new PaymentAllocation
+            {
+                LineNumber = i + 1,
+                TaxBillId = l.Bill.Id,
+                PropertyId = l.Bill.PropertyId,
+                RpuId = l.Allocation.RpuId,
+                TaxYear = l.Allocation.TaxYear,
+                InstallmentSequence = l.Allocation.InstallmentSequence,
+                DueDate = l.Allocation.DueDate,
+                TaxTypeId = l.Allocation.TaxTypeId,
+                Component = l.Allocation.Component,
+                RuleId = l.Allocation.RuleId,
+                RatePercent = l.Allocation.RatePercent,
+                BaseAmount = l.Allocation.BaseAmount,
+                Amount = l.Allocation.Amount,
+                Months = l.Allocation.Months,
+                YearCategory = l.Allocation.YearCategory,
+                Explanation = l.Allocation.Explanation,
+                RevenueAccountMappingId = l.Account.Id,
+                AccountCode = l.Account.AccountCode,
+                AccountName = l.Account.AccountName,
+                Fund = l.Account.Fund,
+            }).ToList(),
+        };
+        db.Payments.Add(payment);
+        await db.SaveChangesAsync(ct);
+        return Result.Success(payment);
     }
 
     public async Task<Result<PaymentDto>> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
@@ -264,7 +285,7 @@ public sealed class PaymentService(
     /// settled on it, and the rules in force on its rules date. Pairs without a
     /// posted bill are left out (the calculator reports them).
     /// </summary>
-    private async Task<List<LoadedBill>> LoadAsync(IEnumerable<(Guid RpuId, int TaxYear)> pairs, CancellationToken ct)
+    private async Task<List<LoadedBill>> LoadAsync(IEnumerable<(Guid RpuId, int TaxYear)> pairs, CancellationToken ct, Guid? excludePaymentId = null)
     {
         var wanted = pairs.Distinct().ToList();
         var rpuIds = wanted.Select(p => p.RpuId).Distinct().ToList();
@@ -281,6 +302,7 @@ public sealed class PaymentService(
         var settled = await db.PaymentAllocations.AsNoTracking()
             .Where(a => rpuIds.Contains(a.RpuId) && years.Contains(a.TaxYear)
                 && (a.Component == BillingComponent.Tax || (a.Component == BillingComponent.Penalty && a.RatePercent == null))
+                && a.PaymentId != excludePaymentId
                 && db.Payments.Any(p => p.Id == a.PaymentId && p.Status == PaymentStatus.Posted))
             .Select(a => new { a.RpuId, a.TaxYear, a.InstallmentSequence, a.TaxTypeId, a.Component, a.Amount })
             .ToListAsync(ct);
@@ -308,9 +330,10 @@ public sealed class PaymentService(
     }
 
     /// <summary>Allocates <paramref name="items"/> on <paramref name="paymentDate"/> and codes every line to its revenue account (decision 5: refuse when unmapped).</summary>
-    private async Task<Result<List<AllocatedLine>>> AllocateAsync(IReadOnlyList<PaymentItemRequest> items, DateOnly paymentDate, CancellationToken ct)
+    private async Task<Result<List<AllocatedLine>>> AllocateAsync(IReadOnlyList<PaymentItemRequest> items, DateOnly paymentDate, CancellationToken ct,
+        Guid? excludePaymentId = null)
     {
-        var loaded = await LoadAsync(items.Select(i => (i.RpuId, i.TaxYear)), ct);
+        var loaded = await LoadAsync(items.Select(i => (i.RpuId, i.TaxYear)), ct, excludePaymentId);
         var input = new CollectionInput(paymentDate, loaded.Select(l => l.Collection).ToList(),
             items.Select(i => new CollectionItem(i.RpuId, i.TaxYear, i.InstallmentSequence, i.PrincipalAmount)).ToList());
         if (CollectionCalculator.Validate(input) is { } problem)
@@ -403,14 +426,18 @@ public sealed class PaymentService(
             .Include(x => x.Allocations).ThenInclude(a => a.TaxType)
             .Include(x => x.Allocations).ThenInclude(a => a.TaxBill!).ThenInclude(b => b.Rpu)
             .Include(x => x.Allocations).ThenInclude(a => a.TaxBill!).ThenInclude(b => b.TaxDeclaration)
+            .Include(x => x.Cancellations)
             .SingleAsync(x => x.Id == id, ct);
+        var replacedBy = await db.Payments.Where(x => x.ReplacesPaymentId == id).Select(x => (Guid?)x.Id).FirstOrDefaultAsync(ct);
         return new PaymentDto(p.Id, p.TransactionNumber, p.OfficialReceiptNumber, p.PayorTaxpayerId, p.PayorName, p.PayorAddress,
-            p.PaymentDate, p.ReceivedAt, p.Office, p.LocationCode, p.CashierUserId, p.AmountDue, p.AmountTendered, p.Change, p.Status, p.Remarks,
+            p.PaymentDate, p.ReceivedAt, p.Office, p.LocationCode, p.CashierUserId, p.AmountDue, p.AmountTendered, p.Change, p.Status,
+            p.CancelledAt, p.ReplacesPaymentId, replacedBy, p.Remarks,
             p.Tenders.Select(t => new PaymentTenderDto(t.PaymentModeId, t.PaymentMode!.Code, t.PaymentMode.Name, t.Amount, t.Reference, t.Bank, t.CheckDate)).ToList(),
             p.Allocations.OrderBy(a => a.LineNumber).Select(a => new PaymentAllocationDto(a.LineNumber, a.TaxBillId, a.TaxBill!.BillNumber,
                 a.TaxBill.TaxDeclaration!.TaxDeclarationNumber, a.PropertyId, a.RpuId, a.TaxBill.Rpu!.RpuNumber, a.TaxYear, a.InstallmentSequence,
                 a.DueDate, a.TaxTypeId, a.TaxType!.Code, a.TaxType.Name, a.Component, a.RuleId, a.RatePercent, a.BaseAmount, a.Amount, a.Months,
-                a.YearCategory, a.Explanation, a.AccountCode, a.AccountName, a.Fund)).ToList());
+                a.YearCategory, a.Explanation, a.AccountCode, a.AccountName, a.Fund)).ToList(),
+            p.Cancellations.OrderBy(c => c.CreatedAt).Select(c => { c.Payment = p; return ToCancellationDto(c); }).ToList());
     }
 
     private static PaymentAllocationDto ToDto(AllocatedLine l, int lineNumber)

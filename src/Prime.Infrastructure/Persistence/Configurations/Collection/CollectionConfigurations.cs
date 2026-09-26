@@ -15,6 +15,7 @@ public sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         {
             t.HasCheckConstraint("CK_Payments_Amounts",
                 "\"AmountDue\" > 0 AND \"Change\" >= 0 AND \"AmountTendered\" = \"AmountDue\" + \"Change\"");
+            t.HasCheckConstraint("CK_Payments_Cancelled", "(\"Status\" = 'Posted') = (\"CancelledAt\" IS NULL)");
         });
         builder.HasKey(x => x.Id);
 
@@ -38,6 +39,9 @@ public sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.HasOne(x => x.PayorTaxpayer).WithMany().HasForeignKey(x => x.PayorTaxpayerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(x => x.Tenders).WithOne().HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(x => x.Allocations).WithOne().HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(x => x.Cancellations).WithOne(x => x.Payment).HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Payment>().WithMany().HasForeignKey(x => x.ReplacesPaymentId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.ReplacesPaymentId).IsUnique().HasFilter("\"ReplacesPaymentId\" IS NOT NULL");
 
         builder.HasIndex(x => new { x.PaymentDate, x.CashierUserId });
         builder.HasIndex(x => x.PayorTaxpayerId);
@@ -90,6 +94,31 @@ public sealed class PaymentAllocationConfiguration : IEntityTypeConfiguration<Pa
         // What is paid per installment and tax type (docs/analysis/collection.md §2).
         builder.HasIndex(x => new { x.RpuId, x.TaxYear, x.InstallmentSequence, x.TaxTypeId });
         builder.HasIndex(x => x.PropertyId);
+    }
+}
+
+public sealed class PaymentCancellationConfiguration : IEntityTypeConfiguration<PaymentCancellation>
+{
+    public void Configure(EntityTypeBuilder<PaymentCancellation> builder)
+    {
+        builder.ToTable("PaymentCancellations", t =>
+        {
+            t.HasCheckConstraint("CK_PaymentCancellations_Decision",
+                "(\"Status\" = 'Pending') = (\"DecidedAt\" IS NULL) AND (\"Status\" = 'Approved') = (\"Kind\" IS NOT NULL AND \"TransactionNumber\" IS NOT NULL)");
+            t.HasCheckConstraint("CK_PaymentCancellations_Correction", "\"IsCorrection\" = (\"ReplacementRequestJson\" IS NOT NULL)");
+        });
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
+        builder.Property(x => x.ReplacementRequestJson).HasColumnType("jsonb");
+        builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.DecisionRemarks).HasMaxLength(1000);
+        builder.Property(x => x.TransactionNumber).HasMaxLength(100);
+        builder.HasIndex(x => x.TransactionNumber).IsUnique().HasFilter("\"TransactionNumber\" IS NOT NULL");
+        builder.HasOne<Payment>().WithMany().HasForeignKey(x => x.ReplacementPaymentId).OnDelete(DeleteBehavior.Restrict);
+        // One open request per payment.
+        builder.HasIndex(x => x.PaymentId).IsUnique().HasFilter("\"Status\" = 'Pending'").HasDatabaseName("UX_PaymentCancellations_Pending");
+        builder.HasIndex(x => x.Status);
     }
 }
 

@@ -74,9 +74,13 @@ public sealed record PaymentDto(
     decimal AmountTendered,
     decimal Change,
     PaymentStatus Status,
+    DateTimeOffset? CancelledAt,
+    Guid? ReplacesPaymentId,
+    Guid? ReplacedByPaymentId,
     string? Remarks,
     IReadOnlyList<PaymentTenderDto> Tenders,
-    IReadOnlyList<PaymentAllocationDto> Allocations);
+    IReadOnlyList<PaymentAllocationDto> Allocations,
+    IReadOnlyList<PaymentCancellationDto> Cancellations);
 
 public sealed record PaymentTenderDto(Guid PaymentModeId, string ModeCode, string ModeName, decimal Amount, string? Reference, string? Bank, DateOnly? CheckDate);
 
@@ -151,3 +155,43 @@ public sealed record RevenueAccountMappingDto(
     Guid? ApprovedBy,
     DateTimeOffset? ApprovedAt,
     string? Remarks);
+
+// --- Void, reversal, correction (§4.4–§4.5) ---
+
+public sealed record RequestPaymentCancellationRequest(string Reason);
+
+/// <summary>The corrected payment, as it should have been; posted on approval, dated like the payment it corrects.</summary>
+public sealed record PaymentReplacementRequest(
+    Guid? PayorTaxpayerId,
+    string PayorName,
+    string? PayorAddress,
+    IReadOnlyList<PaymentItemRequest> Items,
+    IReadOnlyList<PaymentTenderRequest> Tenders,
+    decimal ExpectedTotal,
+    string? OfficialReceiptNumber = null,
+    string? Remarks = null);
+
+public sealed record RequestPaymentCorrectionRequest(string Reason, PaymentReplacementRequest Replacement);
+
+public sealed record DecidePaymentCancellationRequest(string? Remarks);
+
+public sealed record PaymentCancellationDto(
+    Guid Id,
+    Guid PaymentId,
+    string PaymentOfficialReceiptNumber,
+    string PaymentTransactionNumber,
+    DateOnly PaymentDate,
+    decimal PaymentAmount,
+    string PayorName,
+    string Reason,
+    bool IsCorrection,
+    PaymentReplacementRequest? Replacement,
+    PaymentCancellationStatus Status,
+    PaymentCancellationKind? Kind,
+    Guid? RequestedBy,
+    DateTimeOffset RequestedAt,
+    Guid? DecidedBy,
+    DateTimeOffset? DecidedAt,
+    string? DecisionRemarks,
+    string? TransactionNumber,
+    Guid? ReplacementPaymentId);

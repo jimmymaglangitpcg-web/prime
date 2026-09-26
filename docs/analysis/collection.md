@@ -350,4 +350,56 @@ integration tests including concurrent posting).
   second connection. Full suite: 132 domain, 37 application and 194
   integration tests pass; the frontend production build passes.
 
-Next: 9c (void, reversal and correction with maker-checker).
+9b was committed and pushed as `ce6c613`.
+
+**9c done (2026-09-26, uncommitted):**
+- `PaymentCancellation` records a request with its reason and the decision on
+  it; the requester is its `CreatedBy`. There is at most one pending request
+  per payment, and requests are never deleted. `Payment` gains `CancelledAt`
+  and `ReplacesPaymentId` (at most one replacement per payment). Enums:
+  `PaymentCancellationStatus` (Pending/Approved/Rejected) and
+  `PaymentCancellationKind` (Void/Reversal). Migration `PaymentCancellations`
+  is additive and applied to the local dev database only.
+- Flow: request a cancellation (reason) or a correction (reason plus the
+  replacement payment); **another user** approves, or rejects with a reason
+  (`CANNOT_APPROVE_OWN_PAYMENT_CANCELLATION`). On approval:
+  - The kind is decided by timing: **Void** if approved on the payment's own
+    local date, **Reversal** otherwise. Step 9e adds "and not yet remitted" to
+    the void rule.
+  - The cancellation gets its own `PaymentTransaction` number (eOR §7.1).
+  - The payment becomes Voided or Reversed; its allocations stay on record
+    but no longer count, so the balance returns.
+- A **correction** is checked when requested: the replacement is quoted as if
+  the original were already undone, and the expected total and tenders are
+  checked. On approval it voids or reverses the original and posts the
+  replacement in the same transaction, under the collection lock.
+  - The replacement is **dated like the original payment**, so the charges
+    are those of that date (DOMAIN VERIFICATION REQUIRED). It gets a new OR
+    number.
+  - If the replacement cannot be posted at approval (e.g. an account mapping
+    was withdrawn), nothing changes, even inside a caller's transaction (a
+    savepoint), and the request stays pending.
+- API:
+  - `POST /api/payments/{id}/cancellation-requests {reason}`
+  - `POST /api/payments/{id}/correction-requests {reason, replacement}`
+  - `GET /api/payments/cancellation-requests?status=`
+  - `POST /api/payments/cancellation-requests/{id}/approve|reject {remarks}`
+
+  `PaymentDto` gains `CancelledAt`, `ReplacesPaymentId`,
+  `ReplacedByPaymentId` and `Cancellations`.
+- Error codes: `PAYMENT_NOT_POSTED`, `PAYMENT_CANCELLATION_DUPLICATE` (409),
+  `PAYMENT_CANCELLATION_NOT_FOUND` (404), `PAYMENT_CANCELLATION_NOT_PENDING`,
+  `CANNOT_APPROVE_OWN_PAYMENT_CANCELLATION`, `PAYMENT_CANCELLATION_CONFLICT`
+  (409).
+- Tests: 5 more in `CollectionFlowTests` (17 in all):
+  - a void with maker-checker, its own transaction number and the balance
+    restored;
+  - a reversal when approved on a later day;
+  - a rejection, which needs a reason, followed by a new request;
+  - a correction that reissues, dated like the original;
+  - a correction that fails at approval and changes nothing.
+
+  Full suite: 132 domain, 37 application and 199 integration tests pass.
+
+Next: 9d (receipt form, payment workspace, Payments tab, balance on the
+Statement of Account).
