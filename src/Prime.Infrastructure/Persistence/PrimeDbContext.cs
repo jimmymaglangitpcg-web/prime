@@ -93,6 +93,8 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<ApprovalChain> ApprovalChains => Set<ApprovalChain>();
     public DbSet<ApprovalChainStep> ApprovalChainSteps => Set<ApprovalChainStep>();
     public DbSet<ApprovalRecord> ApprovalRecords => Set<ApprovalRecord>();
+    public DbSet<Prime.Domain.Entities.Content.ContentImport> ContentImports => Set<Prime.Domain.Entities.Content.ContentImport>();
+    public DbSet<Prime.Domain.Entities.Content.ContentImportItem> ContentImportItems => Set<Prime.Domain.Entities.Content.ContentImportItem>();
     public DbSet<TransactionType> TransactionTypes => Set<TransactionType>();
     public DbSet<TransactionTypeRequirement> TransactionTypeRequirements => Set<TransactionTypeRequirement>();
     public DbSet<PropertyTransaction> PropertyTransactions => Set<PropertyTransaction>();

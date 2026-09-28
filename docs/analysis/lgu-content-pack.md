@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-09-28 |
-| Status | **Approved 2026-09-28: all recommendations Q1–Q9 accepted.** C1 done (§8); C2–C5 to follow |
+| Status | **Approved 2026-09-28: all recommendations Q1–Q9 accepted.** C1–C2 done (§8); C3–C5 to follow |
 | Rules | CLAUDE.md §7 (configurability), §60 (import workflow), §81 (seed data), §104 and §118 (no LAM or ordinance content in git) |
 | Commit status | This document contains no LAM content and may be committed |
 
@@ -115,9 +115,13 @@ A new `ContentImport` record holds:
 - counts per file and outcome;
 - the validation report (JSON).
 
-Imported configuration rows get `SourceReference` (the item's `source`) and
-`ContentImportId`. Many already have a `SourceReference` or `LegalBasis`
-field, so this is additive.
+Each record an import creates or changes gets a `ContentImportItem`: the
+entity and its id, the natural key, created or changed, the field changes,
+the citation, and the file and line. (Changed in C2 from the first idea of
+adding `SourceReference`/`ContentImportId` columns to every imported table.
+That would have altered 22 tables, including the frozen treasury lookups
+that share the lookup base class, and kept only the latest import. The item
+table leaves existing tables untouched and keeps every import's history.)
 
 ### 3.5 Entry points
 
@@ -241,4 +245,41 @@ rejects it with a clear message until LP adds offices.
   columns and beams). To be settled in L5: either scope the uniqueness to the
   part (a relaxing migration), or give each part's materials distinct codes
   in the pack.
+
+### C2 — import and provenance (2026-09-28)
+
+**Built**
+- `POST /api/content-packs/{pack}/import` with `{ "fingerprint" }`.
+  - The import re-runs the preview and applies exactly its plan, so it can
+    never disagree with what the user saw.
+  - The fingerprint (SHA-256 of the manifest and every file) must still
+    match; if a file changed since the preview → 409 `CONTENT_PACK_CONFLICT`.
+  - A pack with errors → `CONTENT_PACK_INVALID`; no signed-in user →
+    `IMPORTER_UNKNOWN`.
+- One transaction; the audit log records the reason
+  "Content pack {pack} {version}".
+  - Changing index numbers are cleared first, then set, so numbers can move
+    between records without tripping the unique indexes.
+  - Structural parts are applied before materials.
+- **Idempotent:** a pack that matches PRIME returns `applied: false` and
+  records nothing.
+- `ContentImports` (pack, version, manifest SHA, fingerprint, importer,
+  counts, per-file hashes and counts, warnings) and `ContentImportItems`
+  (one per record, see §3.4). Migration `ContentImports`: two new tables,
+  nothing else changed; **local database only** (§105).
+- History: `GET /api/content-imports?pack=`, `GET /api/content-imports/{id}`,
+  `GET /api/content-imports/{id}/items` (paged).
+
+**Verified**
+- 3 new integration tests:
+  - the DEMO pack imports 13 records with sources, lines, entity ids and
+    audit reason, and a second import changes nothing;
+  - a stale fingerprint, an invalid pack and an unknown user are refused,
+    and nothing is written;
+  - existing records update, two barangays swap index numbers, and blank
+    cells keep their values.
+- Full suite: 434 tests pass.
+- Live API: preview → stale import 409 → import (recorded under the dev
+  user) → re-import "already matches" → history and items. One DEMO zone,
+  `DEMO-LIVE-C2`, remains in the dev database from this check.
 

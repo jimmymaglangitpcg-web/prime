@@ -16,6 +16,19 @@ public interface IContentPackService
 
     /// <summary>Validates <paramref name="pack"/> and compares it with the database. Writes nothing.</summary>
     Task<Result<ContentPackPreviewDto>> PreviewAsync(string pack, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Applies <paramref name="pack"/> if it is valid and its files still hash to the
+    /// previewed <see cref="ImportContentPackRequest.Fingerprint"/>. One transaction;
+    /// provenance recorded per record. A pack that would change nothing is not recorded.
+    /// </summary>
+    Task<Result<ContentImportResultDto>> ImportAsync(string pack, ImportContentPackRequest request, CancellationToken cancellationToken = default);
+
+    Task<Result<PagedResult<ContentImportDto>>> ListImportsAsync(string? pack, PagedRequest request, CancellationToken cancellationToken = default);
+
+    Task<Result<ContentImportDto>> GetImportAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<Result<PagedResult<ContentImportItemDto>>> ListImportItemsAsync(Guid id, PagedRequest request, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -27,7 +40,7 @@ public interface IContentPackService
 /// them later. Blank optional cells mean "keep the current value"; nothing is
 /// ever cleared or removed by a pack (decision Q4).
 /// </summary>
-public sealed partial class ContentPackService(IApplicationDbContext db, IContentPackSource source) : IContentPackService
+public sealed partial class ContentPackService(IApplicationDbContext db, IContentPackSource source, ICurrentUserService currentUser) : IContentPackService
 {
     public const string ManifestFile = "manifest.json";
     public const int ChangeListLimit = 200;
@@ -41,28 +54,43 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
     [GeneratedRegex("^[0-9]{4}$")] private static partial Regex FourDigits();
     [GeneratedRegex(@"\p{C}")] private static partial Regex ControlCharacter();
 
-    private sealed record LookupSpec(string Name, Func<IApplicationDbContext, IQueryable<LookupEntity>> Query);
+    private interface ILookupSpec
+    {
+        string Name { get; }
+        IQueryable<LookupEntity> Query(IApplicationDbContext d);
+        /// <summary>A new, tracked row of this lookup.</summary>
+        LookupEntity Add(IApplicationDbContext d);
+    }
+
+    private sealed class LookupSpec<T>(string name, Func<IApplicationDbContext, DbSet<T>> set) : ILookupSpec where T : LookupEntity, new()
+    {
+        public string Name => name;
+        public IQueryable<LookupEntity> Query(IApplicationDbContext d) => set(d);
+        public LookupEntity Add(IApplicationDbContext d) => set(d).Add(new T()).Entity;
+    }
+
+    private static ILookupSpec L<T>(string name, Func<IApplicationDbContext, DbSet<T>> set) where T : LookupEntity, new() => new LookupSpec<T>(name, set);
 
     /// <summary>The lookups a pack may carry, by manifest name (the <c>/api/reference</c> route names).</summary>
-    private static readonly IReadOnlyDictionary<string, LookupSpec> Lookups = new[]
+    private static readonly IReadOnlyDictionary<string, ILookupSpec> Lookups = new[]
     {
-        new LookupSpec("zones", d => d.Zones),
-        new LookupSpec("classifications", d => d.Classifications),
-        new LookupSpec("actual-uses", d => d.ActualUses),
-        new LookupSpec("sub-classifications", d => d.SubClassifications),
-        new LookupSpec("ownership-types", d => d.OwnershipTypes),
-        new LookupSpec("property-types", d => d.PropertyTypes),
-        new LookupSpec("road-types", d => d.RoadTypes),
-        new LookupSpec("conditions", d => d.Conditions),
-        new LookupSpec("building-types", d => d.BuildingTypes),
-        new LookupSpec("structural-types", d => d.StructuralTypes),
-        new LookupSpec("building-component-types", d => d.BuildingComponentTypes),
-        new LookupSpec("machinery-types", d => d.MachineryTypes),
-        new LookupSpec("improvement-kinds", d => d.ImprovementKinds),
-        new LookupSpec("title-types", d => d.TitleTypes),
-        new LookupSpec("structural-parts", d => d.StructuralParts),
-        new LookupSpec("structural-materials", d => d.StructuralMaterials),
-        new LookupSpec("annotation-types", d => d.AnnotationTypes),
+        L("zones", d => d.Zones),
+        L("classifications", d => d.Classifications),
+        L("actual-uses", d => d.ActualUses),
+        L("sub-classifications", d => d.SubClassifications),
+        L("ownership-types", d => d.OwnershipTypes),
+        L("property-types", d => d.PropertyTypes),
+        L("road-types", d => d.RoadTypes),
+        L("conditions", d => d.Conditions),
+        L("building-types", d => d.BuildingTypes),
+        L("structural-types", d => d.StructuralTypes),
+        L("building-component-types", d => d.BuildingComponentTypes),
+        L("machinery-types", d => d.MachineryTypes),
+        L("improvement-kinds", d => d.ImprovementKinds),
+        L("title-types", d => d.TitleTypes),
+        L("structural-parts", d => d.StructuralParts),
+        L("structural-materials", d => d.StructuralMaterials),
+        L("annotation-types", d => d.AnnotationTypes),
     }.ToDictionary(x => x.Name);
 
     public static IReadOnlyCollection<string> LookupNames => Lookups.Keys.ToList();
@@ -72,23 +100,32 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
 
     public async Task<Result<ContentPackPreviewDto>> PreviewAsync(string pack, CancellationToken cancellationToken = default)
     {
+        var built = await BuildAsync(pack, cancellationToken);
+        return built.IsFailure ? Result.Failure<ContentPackPreviewDto>(built.Code!, built.Message!) : Result.Success(built.Value.Preview);
+    }
+
+    /// <summary>The preview and, for the import, the full plan behind it.</summary>
+    private sealed record Built(ContentPackPreviewDto Preview, List<FileWork> Files);
+
+    private async Task<Result<Built>> BuildAsync(string pack, CancellationToken cancellationToken)
+    {
         if (pack is null || !PackName().IsMatch(pack))
         {
-            return Result.Failure<ContentPackPreviewDto>("VALIDATION_FAILED",
+            return Result.Failure<Built>("VALIDATION_FAILED",
                 "A pack name is 1–64 characters: lower-case letters, digits, '-' or '_', starting with a letter or digit.");
         }
 
         var manifestRead = await source.ReadAsync(pack, ManifestFile, cancellationToken);
         if (manifestRead.IsFailure)
         {
-            return Result.Failure<ContentPackPreviewDto>(manifestRead.Code!, manifestRead.Message!);
+            return Result.Failure<Built>(manifestRead.Code!, manifestRead.Message!);
         }
 
         var issues = new List<ContentIssueDto>();
         if (manifestRead.Value.Content is not { } manifestBytes)
         {
             issues.Add(Error("MANIFEST_MISSING", $"The pack has no readable {ManifestFile}: {manifestRead.Value.Error}"));
-            return Result.Success(Finish(pack, null, null, null, issues, []));
+            return Result.Success(new Built(Finish(pack, null, null, null, issues, []), []));
         }
 
         var manifestSha = Sha256(manifestBytes);
@@ -100,12 +137,12 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         catch (JsonException ex)
         {
             issues.Add(Error("MANIFEST_INVALID", $"{ManifestFile} is not valid JSON: {ex.Message}", ex.LineNumber is { } l ? (int)l + 1 : null));
-            return Result.Success(Finish(pack, null, null, manifestSha, issues, []));
+            return Result.Success(new Built(Finish(pack, null, null, manifestSha, issues, []), []));
         }
         if (manifest is null)
         {
             issues.Add(Error("MANIFEST_INVALID", $"{ManifestFile} is empty."));
-            return Result.Success(Finish(pack, null, null, manifestSha, issues, []));
+            return Result.Success(new Built(Finish(pack, null, null, manifestSha, issues, []), []));
         }
 
         var entries = CheckManifest(pack, manifest, issues);
@@ -117,7 +154,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
             var read = await source.ReadAsync(pack, entry.Path, cancellationToken);
             if (read.IsFailure)
             {
-                return Result.Failure<ContentPackPreviewDto>(read.Code!, read.Message!);
+                return Result.Failure<Built>(read.Code!, read.Message!);
             }
             if (read.Value.Content is not { } bytes)
             {
@@ -147,10 +184,12 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         }
         CheckRequiredPropertyTypes(files, await db.PropertyTypes.AsNoTracking().Select(x => x.Code).ToListAsync(cancellationToken));
 
-        return Result.Success(Finish(pack, manifest.Version, manifest.Description, manifestSha, issues, files));
+        return Result.Success(new Built(Finish(pack, manifest.Version, manifest.Description, manifestSha, issues, files), files));
     }
 
     // --- Manifest ---
+
+    private sealed record PlannedRow(string Key, bool IsNew, IReadOnlyList<ContentFieldChangeDto> Changes, CsvRow Row);
 
     private sealed record ManifestEntry(string Kind, string Path, string? Lookup, string? Source, bool Supported);
 
@@ -161,6 +200,8 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         public CsvTable? Table { get; set; }
         public List<ContentIssueDto> Issues { get; } = [];
         public List<ContentChangeDto> Changes { get; } = [];
+        /// <summary>Every row to create or change, uncapped: what an import applies.</summary>
+        public List<PlannedRow> Plan { get; } = [];
         public int New { get; set; }
         public int Changed { get; set; }
         public int Unchanged { get; set; }
@@ -309,7 +350,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
                     var changes = new List<ContentFieldChangeDto>();
                     AddChange(changes, "name", existing?.Name, name);
                     AddChange(changes, "index_number", existing?.PinIndexNumber, index, keepWhenNull: true);
-                    Tally(provFile, psgc, name, existing is null, changes);
+                    Tally(provFile, row, psgc, name, existing is null, changes);
                     if (index is not null)
                     {
                         provinceIndex[psgc] = index;
@@ -353,7 +394,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
                 AddChange(changes, "name", existing?.Name, name);
                 AddChange(changes, "is_city", existing is null ? null : Bool(existing.IsCity), isCity is null ? (existing is null ? Bool(false) : null) : Bool(isCity.Value), keepWhenNull: true);
                 AddChange(changes, "index_number", existing?.PinIndexNumber, index, keepWhenNull: true);
-                Tally(munFile, psgc, name, existing is null, changes);
+                Tally(munFile, row, psgc, name, existing is null, changes);
                 municipalityIndex[psgc] = (parent, index ?? (existing?.PinIndexNumber));
                 if (existing is { PinIndexNumber: { } current } && index is not null && index != current
                     && await db.PinAssignments.AnyAsync(a => a.Kind == PinKind.Permanent && a.Barangay!.MunicipalityId == existing.Id, ct))
@@ -426,7 +467,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
                 var changes = new List<ContentFieldChangeDto>();
                 AddChange(changes, "name", existing?.Name, name);
                 AddChange(changes, "index_number", existing?.PinIndexNumber, index, keepWhenNull: true);
-                Tally(brgyFile, psgc, name, existing is null, changes);
+                Tally(brgyFile, row, psgc, name, existing is null, changes);
                 barangayIndex[psgc] = (parent, existing?.CityDistrictId, index ?? existing?.PinIndexNumber);
                 if (existing is { PinIndexNumber: { } current } && index is not null && index != current
                     && await db.PinAssignments.AnyAsync(a => a.Kind == PinKind.Permanent && a.BarangayId == existing.Id, ct))
@@ -526,7 +567,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
             AddChange(changes, "description", current?.Description, description, keepWhenNull: true);
             AddChange(changes, "sort_order", current?.SortOrder.ToString(CultureInfo.InvariantCulture), sortOrder?.ToString(CultureInfo.InvariantCulture), keepWhenNull: true);
             AddChange(changes, "is_active", current is null ? null : Bool(current.IsActive), isActive is null ? (current is null ? Bool(true) : null) : Bool(isActive.Value), keepWhenNull: true);
-            Tally(work, code, name, current is null, changes);
+            Tally(work, row, code, name, current is null, changes);
         }
         work.Missing.AddRange(existing.Where(x => !work.Valid.ContainsKey(x.Code) && !Listed(work, x.Code)).Select(x => $"{x.Code} {x.Name}"));
     }
@@ -701,7 +742,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         }
     }
 
-    private static void Tally(FileWork work, string key, string name, bool isNew, List<ContentFieldChangeDto> changes)
+    private static void Tally(FileWork work, CsvRow row, string key, string name, bool isNew, List<ContentFieldChangeDto> changes)
     {
         if (isNew)
         {
@@ -716,6 +757,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
             work.Unchanged++;
             return;
         }
+        work.Plan.Add(new PlannedRow(key, isNew, changes, row));
         if (work.Changes.Count < ChangeListLimit)
         {
             work.Changes.Add(new ContentChangeDto(key, name, isNew ? ContentChangeAction.New : ContentChangeAction.Changed, changes));
@@ -733,7 +775,9 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
             f.Changes, f.Issues.OrderBy(i => i.Line ?? 0).ToList())).ToList();
         var all = issues.Concat(fileDtos.SelectMany(f => f.Issues)).ToList();
         var errors = all.Count(i => i.Severity == ContentIssueSeverity.Error);
-        return new ContentPackPreviewDto(pack, Clean(version), Clean(description), manifestSha, errors == 0 && files.Count > 0, errors,
+        var fingerprint = manifestSha is null ? null
+            : Sha256(System.Text.Encoding.UTF8.GetBytes(string.Join("\n", files.Select(f => $"{f.Entry.Path}:{f.Sha256}").Prepend(manifestSha))));
+        return new ContentPackPreviewDto(pack, Clean(version), Clean(description), manifestSha, fingerprint, errors == 0 && files.Count > 0, errors,
             all.Count - errors, issues, fileDtos);
     }
 

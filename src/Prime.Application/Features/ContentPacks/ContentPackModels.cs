@@ -101,14 +101,53 @@ public sealed record ContentFilePreviewDto(
     IReadOnlyList<ContentChangeDto> Changes,
     IReadOnlyList<ContentIssueDto> Issues);
 
-/// <summary>A dry run of a whole pack. Nothing is written. <see cref="CanImport"/> is false while any error remains.</summary>
+/// <summary>
+/// A dry run of a whole pack. Nothing is written. <see cref="CanImport"/> is false while any error remains.
+/// <see cref="Fingerprint"/> hashes the manifest and every file; an import must present it, so what is applied is what was previewed.
+/// </summary>
 public sealed record ContentPackPreviewDto(
     string Pack,
     string? Version,
     string? Description,
     string? ManifestSha256,
+    string? Fingerprint,
     bool CanImport,
     int ErrorCount,
     int WarningCount,
     IReadOnlyList<ContentIssueDto> Issues,
     IReadOnlyList<ContentFilePreviewDto> Files);
+
+// --- Import (step C2) ---
+
+public sealed record ImportContentPackRequest(string? Fingerprint);
+
+public sealed record ContentImportFileDto(string Kind, string? Lookup, string Path, string? Sha256, string? Source, int Created, int Changed, int Unchanged);
+
+public sealed record ContentImportDto(
+    Guid Id,
+    string Pack,
+    string PackVersion,
+    string? Description,
+    string ManifestSha256,
+    string Fingerprint,
+    DateTimeOffset ImportedAt,
+    Guid ImportedBy,
+    string? ImportedByName,
+    int CreatedCount,
+    int ChangedCount,
+    IReadOnlyList<ContentImportFileDto> Files,
+    IReadOnlyList<ContentIssueDto> Warnings);
+
+public sealed record ContentImportItemDto(
+    int Sequence,
+    string EntityType,
+    Guid EntityId,
+    string Key,
+    Prime.Domain.Enums.ContentImportAction Action,
+    IReadOnlyList<ContentFieldChangeDto> Changes,
+    string Source,
+    string FilePath,
+    int Line);
+
+/// <summary><see cref="Applied"/> is false when the pack matched PRIME already; nothing was written or recorded.</summary>
+public sealed record ContentImportResultDto(bool Applied, string Message, ContentImportDto? Import);

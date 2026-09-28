@@ -932,7 +932,7 @@ is **LAM alignment** (CLAUDE.md §97):
 
 ```text
 10a  Real Property Identification System (MRPAAO)   done (d70a501)
-L0   Governance & groundwork                          in progress (content pack C1 done)
+L0   Governance & groundwork                          in progress (content pack C1–C2 done)
 LP   Province-wide operation (CLAUDE.md §117)         next
 L1   Valuation foundation
 L2   Identification & numbering (LAM deltas)

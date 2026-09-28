@@ -73,6 +73,8 @@ public interface IApplicationDbContext
     DbSet<ApprovalChain> ApprovalChains { get; }
     DbSet<ApprovalChainStep> ApprovalChainSteps { get; }
     DbSet<ApprovalRecord> ApprovalRecords { get; }
+    DbSet<Prime.Domain.Entities.Content.ContentImport> ContentImports { get; }
+    DbSet<Prime.Domain.Entities.Content.ContentImportItem> ContentImportItems { get; }
     DbSet<TransactionType> TransactionTypes { get; }
     DbSet<TransactionTypeRequirement> TransactionTypeRequirements { get; }
     DbSet<PropertyTransaction> PropertyTransactions { get; }
