@@ -1,0 +1,5 @@
+psgc_code,municipality_psgc,name,index_number,source
+9900100001,9900100000,"DEMO Poblacion, Town A",0001,
+9900100002,9900100000,DEMO Barangay A-2,0002,
+9900200001,9900200000,"DEMO ""Upper"" Barangay B-1",0001,DEMO data (row-level source)
+9900200002,9900200000,DEMO Barangay B-2,,

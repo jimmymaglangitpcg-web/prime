@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "pack": "content-demo",
+  "version": "DEMO-1",
+  "description": "DEMO content pack: exercises every file kind PRIME reads. Invented places, codes and names; not LGU, LAM or ordinance data (CLAUDE.md §81, §118).",
+  "files": [
+    { "kind": "provinces", "path": "geography/provinces.csv", "source": "DEMO data" },
+    { "kind": "municipalities", "path": "geography/municipalities.csv", "source": "DEMO data" },
+    { "kind": "barangays", "path": "geography/barangays.csv", "source": "DEMO data" },
+    { "kind": "lookup", "lookup": "classifications", "path": "lookups/classifications.csv", "source": "DEMO data" },
+    { "kind": "lookup", "lookup": "structural-parts", "path": "lookups/structural-parts.csv", "source": "DEMO data" },
+    { "kind": "lookup", "lookup": "structural-materials", "path": "lookups/structural-materials.csv", "source": "DEMO data" }
+  ]
+}

@@ -90,6 +90,13 @@ public static class DependencyInjection
         services.AddSingleton<IFormRenderer, FluidFormRenderer>();
         services.AddHostedService<ProvisionalFormSeeder>();
 
+        // LGU content packs (docs/analysis/lgu-content-pack.md): read from the configured, gitignored content root.
+        services.AddOptions<Prime.Infrastructure.ContentPacks.ContentPackOptions>()
+            .Bind(configuration.GetSection(Prime.Infrastructure.ContentPacks.ContentPackOptions.SectionName))
+            .Validate(o => o.MaxFileBytes > 0, "ContentPacks:MaxFileBytes must be positive.")
+            .ValidateOnStart();
+        services.AddScoped<IContentPackSource, Prime.Infrastructure.ContentPacks.FileSystemContentPackSource>();
+
         services.AddHealthChecks()
             .AddNpgSql(connectionString, name: "postgresql", tags: ["ready"])
             .AddCheck<PostGisHealthCheck>("postgis", tags: ["ready"]);

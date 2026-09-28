@@ -1,0 +1,3 @@
+code,name,description,sort_order,is_active
+DEMO-CP-R,DEMO Residential (content pack),DEMO classification,10,true
+DEMO-CP-A,DEMO Agricultural (content pack),,20,true
