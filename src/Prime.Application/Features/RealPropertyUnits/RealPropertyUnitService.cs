@@ -145,9 +145,10 @@ public sealed class RealPropertyUnitService(IApplicationDbContext db, IValidator
         var separate = (await db.PropertyTaxpayers.Where(x => ids.Contains(x.RpuId) && x.IsCurrent
                 && (x.Role == PropertyPartyRole.Owner || x.Role == PropertyPartyRole.UnknownOwner))
             .Select(x => x.RpuId!.Value).Distinct().ToListAsync(ct)).ToHashSet();
+        var temporary = await UnitPin.TemporaryPostfixesAsync(db, propertyIds, ct);
         return rpus.Select(r => new RpuDto(
             r.Id, r.PropertyId, r.RpuNumber, r.RpuType, r.Status, r.EffectivityDate, r.EndDate, r.PreviousRpuId, r.CreatedAt,
-            r.PinSuffix, UnitPin.Compose(pins[r.PropertyId], r.PinSuffix, separate.Contains(r.Id)), separate.Contains(r.Id),
+            r.PinSuffix, UnitPin.Compose(pins[r.PropertyId], r.PinSuffix, separate.Contains(r.Id), temporary.GetValueOrDefault(r.Id)), separate.Contains(r.Id),
             r.LandRpuId, r.HostRpuId)).ToList();
     }
 }

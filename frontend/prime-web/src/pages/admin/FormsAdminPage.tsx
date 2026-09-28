@@ -106,7 +106,7 @@ function NumberingTab() {
           </Form.Item>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="pattern" label="Pattern" rules={[{ required: true }]}
-            extra="Tokens: {YEAR} {PROV} {MUN} {BRGY} (PSGC codes), {LGUIDX} {MUNIDX} {BRGYIDX} {SECT} (index numbers) and exactly one {SEQ} or {SEQ:n}. Examples: TD-{MUN}-{YEAR}-{SEQ:5}; MRPAAO PIN {LGUIDX}-{MUNIDX}-{BRGYIDX}-{SECT}-{SEQ:2}">
+            extra="Tokens: {YEAR} {PROV} {MUN} {BRGY} (PSGC codes), {LGUIDX} {MUNIDX} {BRGYIDX} {SECT} (index numbers), {REV} (the general revision in force: not printed, restarts the sequence) and exactly one {SEQ} or {SEQ:n}. Examples: TD-{MUN}-{YEAR}-{SEQ:5}; MRPAAO PIN {LGUIDX}-{MUNIDX}-{BRGYIDX}-{SECT}-{SEQ:2}; ARPN for an LGU without tax maps {MUNIDX}-{BRGYIDX}-{REV}{SEQ:5}">
             <Input />
           </Form.Item>
           <Form.Item name="validationRegex" label="Format check for typed numbers (regular expression, optional)"><Input /></Form.Item>

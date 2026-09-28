@@ -236,7 +236,7 @@ public sealed class AssessmentService(
             // scheme is in force. By default the FAAS number is the TD's (docs/analysis/mrpaao-forms-model.md §6.1).
             if (faas.Value.NumberSource == FaasNumberSource.Own)
             {
-                var context = await NumberContexts.ForPropertyAsync(db, assessment.PropertyId, assessment.AssessmentYear, cancellationToken);
+                var context = await NumberContexts.ForPropertyAsync(db, assessment.PropertyId, assessment.AssessmentYear, cancellationToken, clock.Today);
                 var faasNumber = await numbering.GenerateIfConfiguredAsync(NumberedDocumentKind.Faas, context, clock.Today, cancellationToken);
                 if (faasNumber.IsFailure)
                 {

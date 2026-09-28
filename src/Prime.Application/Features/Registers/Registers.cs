@@ -237,7 +237,8 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
     /// <summary>The unit's full PIN (MRPAAO p.42): the parcel number is parenthesised when the unit has owners of its own.</summary>
     private async Task<string> UnitPinAsync(PropertyEntity p, RealPropertyUnit rpu, DateOnly asOf, CancellationToken ct) =>
         UnitPin.Compose(p.PropertyIdentificationNumber, rpu.PinSuffix, rpu.PinSuffix is not null && await db.PropertyTaxpayers.AnyAsync(
-            x => x.RpuId == rpu.Id && x.StartDate <= asOf && (x.EndDate == null || x.EndDate > asOf), ct));
+            x => x.RpuId == rpu.Id && x.StartDate <= asOf && (x.EndDate == null || x.EndDate > asOf), ct),
+            await UnitPin.TemporaryPostfixAsync(db, p.Id, rpu.Id, ct));
 
     private string? Arp(Faas f) => faas.Value.NumberSource == FaasNumberSource.TaxDeclaration ? f.Td.TaxDeclarationNumber : f.Assessment?.FaasNumber;
 
@@ -321,8 +322,8 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
     /// <summary>
     /// The pre-TMCR (MRPAAO Ch. II §2 A.d, Figure 3): the land FAAS in force in the
     /// barangay, in temporary-PIN order, with the final PIN once tax-mapped, the
-    /// declared area and the area measured from the tax-mapped parcel. The two tie-up
-    /// check columns are left for the tax mapping team (recorded in step 10a-5).
+    /// declared area and the area measured from the tax-mapped parcel, and the office
+    /// tie-up and field confirmation marks recorded by the run's date (step 10a-5).
     /// </summary>
     private async Task<List<object>> PreTaxMapRowsAsync(RegisterRun run, CancellationToken ct)
     {
@@ -338,7 +339,8 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
         foreach (var f in lands)
         {
             var p = await PropertyAsync(f.Td.PropertyId, ct);
-            var temporary = pins[p.Id].Where(x => x.Kind == PinKind.Temporary).MaxBy(x => x.AssignedAt)?.Pin;
+            var temporaryPin = pins[p.Id].Where(x => x.Kind == PinKind.Temporary).MaxBy(x => x.AssignedAt);
+            var temporary = temporaryPin?.Pin;
             var final = pins[p.Id].Where(x => x.Kind == PinKind.Permanent && (x.RetiredAt is not { } r || clock.LocalDate(r) > run.AsOf)).MaxBy(x => x.AssignedAt)?.Pin;
             var parcel = parcels[p.Id].OrderByDescending(x => x.SectionId is not null).ThenBy(x => x.CreatedAt).FirstOrDefault();
             var (owners, address) = await OwnersAsync(p.Id, f.Td.RpuId, run.AsOf, ct);
@@ -346,7 +348,10 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
             var units = all.Where(x => x.Td.PropertyId == p.Id).Select(x => KindCode(x.Td.Rpu!.RpuType)).Where(k => k is "B" or "M").Distinct().Order();
             rows.Add((temporary, owners, new
             {
-                temporaryPin = temporary, finalPin = final, owner = owners, ownerAddress = address, tdNumber = f.Td.TaxDeclarationNumber,
+                temporaryPin = temporary, finalPin = final,
+                officeTieUp = temporaryPin?.OfficeTieUpAt is { } o && clock.LocalDate(o) <= run.AsOf,
+                fieldConfirmed = temporaryPin?.FieldConfirmedAt is { } f2 && clock.LocalDate(f2) <= run.AsOf,
+                tieUpRemarks = temporaryPin?.TieUpRemarks, owner = owners, ownerAddress = address, tdNumber = f.Td.TaxDeclarationNumber,
                 surveyBefore = p.SurveyNumber, surveyAfter = parcel?.SurveyNumber is { } s && s != p.SurveyNumber ? s : null,
                 lotNumber = p.LotNumber, titleNumber = p.TitleNumber,
                 areaDeclared = area, areaUnit = unit,

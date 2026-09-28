@@ -127,7 +127,7 @@ internal static class FaasTaxDeclarations
         var level = await db.AssessmentLines.Where(x => x.AssessmentId == assessment.Id)
             .OrderByDescending(x => x.MarketValue).ThenBy(x => x.Sequence)
             .Select(x => new { x.ClassificationId, x.ActualUseId }).FirstAsync(ct);
-        var context = await NumberContexts.ForPropertyAsync(db, assessment.PropertyId, assessment.EffectiveDate.Year, ct);
+        var context = await NumberContexts.ForPropertyAsync(db, assessment.PropertyId, assessment.EffectiveDate.Year, ct, today);
         var number = await numbering.GenerateIfConfiguredAsync(NumberedDocumentKind.TaxDeclaration, context, today, ct);
         if (number.IsFailure)
         {

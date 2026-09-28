@@ -290,7 +290,7 @@ public sealed class NoticeService(
         }
         var ownsTransaction = db.Database.CurrentTransaction is null;
         await using var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
-        var context = await NumberContexts.ForPropertyAsync(db, notice.PropertyId, clock.Today.Year, cancellationToken);
+        var context = await NumberContexts.ForPropertyAsync(db, notice.PropertyId, clock.Today.Year, cancellationToken, clock.Today);
         var number = await numbering.GenerateIfConfiguredAsync(NumberedDocumentKind.NoticeOfAssessment, context, clock.Today, cancellationToken);
         if (number.IsFailure)
         {

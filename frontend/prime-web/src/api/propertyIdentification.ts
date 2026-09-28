@@ -126,6 +126,10 @@ export interface PinAssignmentDto {
   parcelNumber: number | null;
   assignedAt: string;
   assignedByTransactionId: string | null;
+  /** Tax mapping tie-up of a temporary PIN (step 10a-5): office mark, then field confirmation. */
+  officeTieUpAt: string | null;
+  fieldConfirmedAt: string | null;
+  tieUpRemarks: string | null;
   retiredAt: string | null;
   retirementReason: string | null;
   propertyTransactionId: string | null;
@@ -146,6 +150,18 @@ export interface PropertyPinDto {
 
 export const usePropertyPin = (propertyId: string) =>
   useQuery({ queryKey: ['properties', propertyId, 'pin'], queryFn: () => apiGet<PropertyPinDto>(`/api/properties/${propertyId}/pin`) });
+
+export type TieUpStage = 'Office' | 'Field';
+
+/** Records or withdraws a tie-up mark on the property's temporary PIN (MRPAAO Ch. II §2 A). */
+export function useRecordTieUp(propertyId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: { stage: TieUpStage; withdraw: boolean; remarks: string | null }) =>
+      apiPost<PropertyPinDto>(`/api/properties/${propertyId}/pin/tie-up`, request),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['properties', propertyId, 'pin'] }),
+  });
+}
 
 export function usePlaceInSection(propertyId: string) {
   const queryClient = useQueryClient();

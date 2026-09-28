@@ -113,7 +113,7 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         var today = clock.Today;
         var ownsTransaction = db.Database.CurrentTransaction is null;
         await using var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
-        var context = await NumberContexts.ForPropertyAsync(db, rpu.PropertyId, request.EffectivityDate.Year, cancellationToken);
+        var context = await NumberContexts.ForPropertyAsync(db, rpu.PropertyId, request.EffectivityDate.Year, cancellationToken, clock.Today);
         var number = await numbering.AssignAsync(NumberedDocumentKind.TaxDeclaration, context, request.TaxDeclarationNumber, today, cancellationToken);
         if (number.IsFailure)
         {

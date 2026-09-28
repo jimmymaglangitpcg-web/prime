@@ -84,7 +84,7 @@ public sealed class NumberingService(
     ICurrentUserService currentUser,
     INumberSequenceAllocator allocator) : INumberingService
 {
-    private static readonly NumberContext ExampleContext = new(DateTime.UtcNow.Year, "PPPP", "MMMM", "BBBBBB", "020", "15", "0005", "002");
+    private static readonly NumberContext ExampleContext = new(DateTime.UtcNow.Year, "PPPP", "MMMM", "BBBBBB", "020", "15", "0005", "002", DateTime.UtcNow.Year);
 
     public async Task<Result<NumberingSchemeDto>> CreateAsync(CreateNumberingSchemeRequest request, CancellationToken cancellationToken = default)
     {
@@ -189,20 +189,36 @@ public sealed class NumberingService(
         NumberPattern.Format(x.Pattern, ExampleContext, 1));
 }
 
-/// <summary>Builds a <see cref="NumberContext"/> from a location's reference codes.</summary>
+/// <summary>
+/// Builds a <see cref="NumberContext"/> from a location: its PSGC codes, the assessor's
+/// index numbers where set (step 10a-4/10a-5), and — when <c>revisionAsOf</c> is given —
+/// the general revision in force for <c>{REV}</c> (the ARPN, MRPAAO Ch. II §2 E.14).
+/// </summary>
 public static class NumberContexts
 {
     public static async Task<NumberContext> ForLocationAsync(IApplicationDbContext db, Guid provinceId, Guid municipalityId, Guid barangayId,
-        int year, CancellationToken ct) =>
-        new(year,
+        int year, CancellationToken ct, DateOnly? revisionAsOf = null)
+    {
+        var index = await PropertyIdentification.PinContexts.ForBarangayAsync(db, barangayId, year, null, ct);
+        return new(year,
             await db.Provinces.Where(x => x.Id == provinceId).Select(x => x.PsgcCode).FirstOrDefaultAsync(ct),
             await db.Municipalities.Where(x => x.Id == municipalityId).Select(x => x.PsgcCode).FirstOrDefaultAsync(ct),
-            await db.Barangays.Where(x => x.Id == barangayId).Select(x => x.PsgcCode).FirstOrDefaultAsync(ct));
+            index.BarangayCode, index.LguIndex, index.MunicipalityIndex, index.BarangayIndex,
+            RevisionYear: revisionAsOf is { } date ? await RevisionYearAsync(db, date, ct) : null);
+    }
 
-    public static async Task<NumberContext> ForPropertyAsync(IApplicationDbContext db, Guid propertyId, int year, CancellationToken ct)
+    public static async Task<NumberContext> ForPropertyAsync(IApplicationDbContext db, Guid propertyId, int year, CancellationToken ct, DateOnly? revisionAsOf = null)
     {
         var p = await db.Properties.Where(x => x.Id == propertyId)
             .Select(x => new { x.ProvinceId, x.MunicipalityId, x.BarangayId }).SingleAsync(ct);
-        return await ForLocationAsync(db, p.ProvinceId, p.MunicipalityId, p.BarangayId, year, ct);
+        return await ForLocationAsync(db, p.ProvinceId, p.MunicipalityId, p.BarangayId, year, ct, revisionAsOf);
     }
+
+    /// <summary>
+    /// The general revision in force: the revision year of the latest approved Schedule of
+    /// Market Values effective by <paramref name="asOf"/>; null before any (then a pattern
+    /// using <c>{REV}</c> reports it missing).
+    /// </summary>
+    public static Task<int?> RevisionYearAsync(IApplicationDbContext db, DateOnly asOf, CancellationToken ct) =>
+        db.Smvs.Where(x => x.Status == WorkflowStatus.Approved && x.EffectivityDate <= asOf).MaxAsync(x => (int?)x.RevisionYear, ct);
 }

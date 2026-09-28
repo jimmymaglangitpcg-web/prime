@@ -89,4 +89,18 @@ public class NumberPatternTests
         NumberPattern.Fits(MrpaaoPin, 100).ShouldBeFalse();
         NumberPattern.Fits("{SEQ}", 123_456).ShouldBeTrue();
     }
+
+    [Fact]
+    public void Arpn_RevisionScopesTheSequence_ButIsNotPrinted()
+    {
+        // MRPAAO Ch. II §2 E.14: MM-BBBB-NNNNN, restarting at 00001 with each general revision.
+        const string arpn = "{MUNIDX}-{BRGYIDX}-{REV}{SEQ:5}";
+        var gr2026 = new NumberContext(2026, MunicipalityIndex: "01", BarangayIndex: "0001", RevisionYear: 2026);
+        var gr2029 = gr2026 with { RevisionYear = 2029 };
+
+        NumberPattern.Validate(arpn).ShouldBeNull();
+        NumberPattern.Format(arpn, gr2026, 1).ShouldBe("01-0001-00001");
+        NumberPattern.ScopeKey(arpn, gr2029).ShouldNotBe(NumberPattern.ScopeKey(arpn, gr2026));
+        NumberPattern.MissingValues(arpn, gr2026 with { RevisionYear = null }).ShouldBe(["{REV}"]);
+    }
 }

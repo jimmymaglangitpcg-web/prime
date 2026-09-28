@@ -34,4 +34,15 @@ public sealed class PinAssignment : AuditableEntity
     public string? RetirementReason { get; set; }
     /// <summary>The property transaction (subdivision, consolidation …) that retired it, if any (step 10a-3).</summary>
     public Guid? PropertyTransactionId { get; set; }
+
+    /// <summary>
+    /// A temporary PIN's tie-up (MRPAAO Ch. II §2 A, p.55; step 10a-5): the office links
+    /// the FAAS to its parcel on the base map (the left check mark on the pre-TMCR),
+    /// then the tax mapping team confirms it in the field (the right check mark).
+    /// </summary>
+    public DateTimeOffset? OfficeTieUpAt { get; set; }
+    public Guid? OfficeTieUpBy { get; set; }
+    public DateTimeOffset? FieldConfirmedAt { get; set; }
+    public Guid? FieldConfirmedBy { get; set; }
+    public string? TieUpRemarks { get; set; }
 }

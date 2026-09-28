@@ -69,4 +69,9 @@ public class PropertyPinController(IPinService pins) : ApiControllerBase
     [HttpPost("place-in-section")]
     public async Task<ActionResult<PropertyPinDto>> PlaceInSection(Guid propertyId, PlaceInSectionRequest request, CancellationToken ct) =>
         HandleResult(await pins.PlaceInSectionAsync(propertyId, request, ct));
+
+    /// <summary>Records (or withdraws) the office tie-up or the field confirmation of the temporary PIN (MRPAAO Ch. II §2 A).</summary>
+    [HttpPost("tie-up")]
+    public async Task<ActionResult<PropertyPinDto>> TieUp(Guid propertyId, RecordTieUpRequest request, CancellationToken ct) =>
+        HandleResult(await pins.RecordTieUpAsync(propertyId, request, ct));
 }

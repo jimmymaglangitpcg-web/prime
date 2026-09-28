@@ -13,11 +13,15 @@ public sealed class PinAssignmentConfiguration : IEntityTypeConfiguration<PinAss
             t.HasCheckConstraint("CK_PinAssignments_Retired", "(\"RetiredAt\" IS NULL) = (\"RetirementReason\" IS NULL)");
             t.HasCheckConstraint("CK_PinAssignments_Permanent",
                 "\"Kind\" <> 'Permanent' OR (\"ParcelId\" IS NOT NULL AND \"SectionId\" IS NOT NULL AND \"ParcelNumber\" IS NOT NULL)");
+            // Tie-up marks belong to a temporary PIN; the field confirms what the office tied up (step 10a-5).
+            t.HasCheckConstraint("CK_PinAssignments_TieUp",
+                "(\"OfficeTieUpAt\" IS NULL OR \"Kind\" = 'Temporary') AND (\"FieldConfirmedAt\" IS NULL OR \"OfficeTieUpAt\" IS NOT NULL)");
         });
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Pin).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
         builder.Property(x => x.RetirementReason).HasMaxLength(1000);
+        builder.Property(x => x.TieUpRemarks).HasMaxLength(1000);
         builder.HasOne(x => x.Property).WithMany().HasForeignKey(x => x.PropertyId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Parcel).WithMany().HasForeignKey(x => x.ParcelId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Barangay).WithMany().HasForeignKey(x => x.BarangayId).OnDelete(DeleteBehavior.Restrict);

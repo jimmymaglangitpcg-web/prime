@@ -48,7 +48,7 @@ public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRec
                 tdNumber = td.TaxDeclarationNumber,
                 transactionCode = td.TransactionCode,
                 kind = rpu.RpuType.ToString(),
-                pin = UnitPin.Compose(pin, rpu.PinSuffix, ownedSeparately),
+                pin = UnitPin.Compose(pin, rpu.PinSuffix, ownedSeparately, await UnitPin.TemporaryPostfixAsync(db, td.PropertyId, rpu.Id, cancellationToken)),
                 tdStatus = td.Status.ToString(),
                 taxability = td.Taxability.ToString(),
                 effectivity = new { date = eff, quarter = (eff.Month - 1) / 3 + 1, year = eff.Year },
@@ -162,7 +162,7 @@ public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRec
         var owners = (await PartiesAsync(host.PropertyId, host.Id, today, ct)).Where(p => p.role is "Owner" or "UnknownOwner").Select(p => p.name).ToList();
         var ownedSeparately = await db.PropertyTaxpayers.AnyAsync(x => x.RpuId == host.Id && x.IsCurrent
             && (x.Role == PropertyPartyRole.Owner || x.Role == PropertyPartyRole.UnknownOwner), ct);
-        return new { owner = string.Join("; ", owners), pin = UnitPin.Compose(pin, host.PinSuffix, ownedSeparately) };
+        return new { owner = string.Join("; ", owners), pin = UnitPin.Compose(pin, host.PinSuffix, ownedSeparately, await UnitPin.TemporaryPostfixAsync(db, host.PropertyId, host.Id, ct)) };
     }
 
     private async Task<object> AdditionalItemsAsync(Guid rpuId, CancellationToken ct) =>

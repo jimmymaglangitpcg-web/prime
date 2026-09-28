@@ -423,7 +423,7 @@ All eight recommendations are accepted as written above.
   - The mother's RPUs are not ended automatically. Cancel its TDs through
     the transaction's "TDs this transaction cancels".
 
-**10a-4 done (2026-09-26, uncommitted):**
+**10a-4 done (2026-09-26; committed `956af74`):**
 - **Post-TMCR per section** (Ch. II §2 C.5, Figure 10):
   - `RegisterRun.SectionId` (Tax Map Control Roll only; check
     `CK_RegisterRuns_Section`). Naming a section takes its barangay;
@@ -487,4 +487,58 @@ All eight recommendations are accepted as written above.
     numbers 01/03/04) render; the barangay index map notes
     DEMO_Barangay_2's missing number. No console errors.
 
-Next: 10a-5 (tax mapping campaign: temporary PINs and tie-up; ARPN).
+**10a-5 done (2026-09-26, uncommitted):** the tax mapping campaign and the ARPN
+(MRPAAO Ch. II §2 A, p.50–55; misc. item 14, p.76).
+- **Tie-up marks** on the property's temporary PIN (`PinAssignment.OfficeTieUpAt/By`,
+  `FieldConfirmedAt/By`, `TieUpRemarks`; check `CK_PinAssignments_TieUp`; migration
+  `TaxMappingTieUp`, additive):
+  - `POST /api/properties/{id}/pin/tie-up` records the office tie-up (the left check
+    mark) or the field confirmation (the right one), or withdraws one with a reason,
+    which goes to the audit trail;
+  - refusals: `TIE_UP_NEEDS_TEMPORARY_PIN`, `TIE_UP_OFFICE_FIRST`,
+    `TIE_UP_ALREADY_RECORDED`, `TIE_UP_NOT_RECORDED`, `TIE_UP_FIELD_CONFIRMED`
+    (withdraw the field mark first);
+  - the marks stay on the temporary PIN in the history after the permanent PIN.
+  - Form `PRE_TMCR` v2 prints the marks recorded by the run's date, and the
+    tie-up remarks.
+- **Temporary unit PINs** (Ch. II §2 A.c): while the land carries a temporary PIN,
+  its buildings and other structures show `…B1`, `B2` … and its machinery `…M1`
+  … (`UnitPin.TemporaryPostfixesAsync`, in postscript order, else registration
+  order), on the RPU list, the TD, FAAS and Notice forms and the registers. After
+  the permanent PIN the usual postscripts apply. Registers use the current PIN
+  state, also for past dates.
+- **ARPN** (misc. item 14) for LGUs without tax maps: it numbers the FAAS and its
+  TD, so it is a numbering pattern, not a PIN kind.
+  - New token `{REV}`: the general revision in force (the revision year of the
+    latest approved SMV effective by the date). It is not printed but is part of
+    the sequence's scope, so the series restarts at 00001 with each general
+    revision. Without an approved SMV the number is refused
+    (`NUMBER_CONTEXT_MISSING`).
+  - TD, FAAS, transaction and notice numbers now also get the index-number
+    tokens `{LGUIDX}` `{MUNIDX}` `{BRGYIDX}`. The manual's ARPN is
+    `{MUNIDX}-{BRGYIDX}-{REV}{SEQ:5}` → `01-0001-00001`.
+- **Undeclared parcels found in the field** need nothing new: registering the
+  property gives the next temporary PIN, and the NEW_DISCOVERY transaction type
+  (A5) records the discovery.
+- UI: the PIN tab shows the tie-up marks (record, withdraw with a reason) and a
+  tie-up column in the history; the Forms admin lists `{REV}` and the ARPN
+  example.
+- Tests: `NumberPatternTests` (+1: the ARPN) and `TaxMappingCampaignTests` (4:
+  tie-up order and refusals with the audit reason, marks kept after the
+  permanent PIN; B1/B2/M1; the pre-TMCR marks; the ARPN series restarting with a
+  new revision). Full suite: 140 domain, 37 application and 232 integration tests
+  pass; oxlint is clean and the production build passes.
+- **Verified in a browser** against the dev database: DEMO property
+  `T-01-0001-0004` (lot DEMO-10A5-LOT) with a land, two buildings and a machine.
+  The RPUs tab shows `T-01-0001-0004B1`, `B2` and `M1`. On the PIN tab, Field
+  was disabled until the office tie-up was recorded, both marks were recorded,
+  and the office mark could not be withdrawn once confirmed. No console errors.
+
+**Phase 10a is complete.** Still open across 10a:
+- the municipality index map of a province (no municipality boundary layer);
+- the standard sheet size and symbols (DOMAIN VERIFICATION REQUIRED);
+- mineral rights (3001) and condominium postscripts (decision 8: 10b/10c);
+- registers as background jobs for large barangays (CLAUDE.md §73);
+- the LAM's PIN, ARPN and form layouts replace the MRPAAO's when supplied.
+
+Next: Phase 10b, appraisal (MRPAAO Ch. IV) — design document first.

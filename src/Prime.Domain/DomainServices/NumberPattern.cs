@@ -20,18 +20,22 @@ public sealed record NumberContext(
     string? LguIndex = null,
     string? MunicipalityIndex = null,
     string? BarangayIndex = null,
-    string? SectionIndex = null);
+    string? SectionIndex = null,
+    int? RevisionYear = null);
 
 /// <summary>
 /// Parses and applies <c>NumberingScheme</c> patterns
 /// (docs/FORMS-REVISION-PLAN.md §4.4). A pattern is literal text plus tokens:
 /// <c>{YEAR}</c>, <c>{PROV}</c>, <c>{MUN}</c>, <c>{BRGY}</c> (PSGC codes),
 /// <c>{LGUIDX}</c>, <c>{MUNIDX}</c>, <c>{BRGYIDX}</c>, <c>{SECT}</c> (the
-/// assessor's index numbers) and exactly one <c>{SEQ}</c> or <c>{SEQ:n}</c>
-/// (zero-padded to n digits, 1–12).
+/// assessor's index numbers), <c>{REV}</c> (the general revision in force: it is
+/// not printed, but restarts the sequence at each general revision) and exactly
+/// one <c>{SEQ}</c> or <c>{SEQ:n}</c> (zero-padded to n digits, 1–12).
 /// Examples: <c>TD-{MUN}-{YEAR}-{SEQ:5}</c> → <c>TD-0402-2026-00017</c>;
 /// the MRPAAO PIN <c>{LGUIDX}-{MUNIDX}-{BRGYIDX}-{SECT}-{SEQ:2}</c> →
-/// <c>020-15-0005-002-05</c>, where the sequence is the parcel number.
+/// <c>020-15-0005-002-05</c>, where the sequence is the parcel number; the
+/// MRPAAO ARPN (Ch. II §2 E.14) <c>{MUNIDX}-{BRGYIDX}-{REV}{SEQ:5}</c> →
+/// <c>01-0001-00001</c>, restarting at <c>00001</c> with each general revision.
 /// Sequences run separately per <see cref="ScopeKey"/> — the pattern with the
 /// sequence left out — so <c>{YEAR}</c> restarts numbering each year and
 /// <c>{SECT}</c> numbers each section's parcels on their own.
@@ -43,7 +47,10 @@ public static partial class NumberPattern
     [GeneratedRegex(@"\{([A-Z]+)(?::(\d+))?\}")]
     private static partial Regex TokenRegex();
 
-    private static readonly string[] ContextTokens = ["YEAR", "PROV", "MUN", "BRGY", "LGUIDX", "MUNIDX", "BRGYIDX", "SECT"];
+    private static readonly string[] ContextTokens = ["YEAR", "PROV", "MUN", "BRGY", "LGUIDX", "MUNIDX", "BRGYIDX", "SECT", "REV"];
+
+    /// <summary>Tokens that scope the sequence but are not printed in the number.</summary>
+    private static readonly string[] ScopeOnlyTokens = ["REV"];
 
     /// <summary>Why <paramref name="pattern"/> is unusable, or null when it is valid.</summary>
     public static string? Validate(string pattern)
@@ -66,7 +73,7 @@ public static partial class NumberPattern
             }
             else if (!ContextTokens.Contains(name) || m.Groups[2].Success)
             {
-                return $"unknown token {m.Value}; allowed: {{YEAR}} {{PROV}} {{MUN}} {{BRGY}} {{LGUIDX}} {{MUNIDX}} {{BRGYIDX}} {{SECT}} {{SEQ}} {{SEQ:n}}";
+                return $"unknown token {m.Value}; allowed: {{YEAR}} {{PROV}} {{MUN}} {{BRGY}} {{LGUIDX}} {{MUNIDX}} {{BRGYIDX}} {{SECT}} {{REV}} {{SEQ}} {{SEQ:n}}";
             }
         }
         if (sequences != 1)
@@ -134,9 +141,10 @@ public static partial class NumberPattern
                     ? s.ToString(CultureInfo.InvariantCulture).PadLeft(m.Groups[2].Success ? int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture) : 1, '0')
                     : SequencePlaceholder);
             }
-            else
+            else if (sequence is null || !ScopeOnlyTokens.Contains(name))
             {
-                result.Append(Value(name, context));
+                // The scope key carries every token; a printed number leaves out the scope-only ones.
+                result.Append(ScopeOnlyTokens.Contains(name) ? $"[{name}:{Value(name, context)}]" : Value(name, context));
             }
             last = m.Index + m.Length;
         }
@@ -154,6 +162,7 @@ public static partial class NumberPattern
         "MUNIDX" => context.MunicipalityIndex,
         "BRGYIDX" => context.BarangayIndex,
         "SECT" => context.SectionIndex,
+        "REV" => context.RevisionYear?.ToString("D4", CultureInfo.InvariantCulture),
         _ => null,
     };
 }

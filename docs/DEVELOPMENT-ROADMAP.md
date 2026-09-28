@@ -1060,10 +1060,14 @@ resulting properties; migration `PinAssignedByTransaction`) are committed
 (`f4f3b08`, not pushed). **10a-4** (the post-TMCR per section, the
 pre-TMCR, the section boundary layer, parcel numbers on the map, and the
 tax map, section index and barangay index sheets; migration
-`TaxMapSectionsLayerAndRolls`) is done and uncommitted. The 10a
-migrations are on the local dev DB only (Supabase lacks every migration
-since `Payments`). Next: 10a-5, the tax mapping campaign
-(temporary PINs and tie-up) and the ARPN. See §6 of that doc.
+`TaxMapSectionsLayerAndRolls`) is committed (`956af74`, not pushed).
+**10a-5** (tie-up marks on temporary PINs, B1/M1 temporary unit PINs, the
+`{REV}` token for the ARPN; migration `TaxMappingTieUp`) is done and
+uncommitted. **Phase 10a is complete.** The 10a migrations are on the
+local dev DB only: Supabase lacks every migration since `Payments` (an
+attempt to apply them on 2026-09-26 was blocked by the tool permission
+policy and left for the user). Next: Phase 10b, appraisal (MRPAAO Ch. IV),
+starting with its design document. See §6 of that doc.
 
 **Current (2026-09-26):** everything through `b2e369b` (value and assess)
 is committed and pushed; Supabase has all 28 migrations. **Phase 9 —
