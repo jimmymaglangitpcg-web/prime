@@ -63,3 +63,8 @@ TestResults/
 ## Proprietary reference material (LAM, LGU ordinances, templates derived from them).
 ## Never commit — docs/FORMS-REVISION-PLAN.md section 7.
 docs/References/private/
+
+## LAM 2025 and LAM-/ordinance-derived material (CLAUDE.md §0, §104, §118)
+docs/References/LAM 2025/
+docs/lam/
+lgu-content/

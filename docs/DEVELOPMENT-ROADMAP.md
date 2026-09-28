@@ -763,7 +763,7 @@ the start of this phase — it blocks correct geometry storage.
 Exit criteria: clicking a parcel on the map opens the correct Property
 Profile; spatial queries use the GiST index (verified via `EXPLAIN`).
 
-### Status — in progress (started 2026-09-24)
+### Status — complete with DEMO values (2026-09-25); frozen since 2026-09-26
 
 Executed in checkpointed steps (user asked to stop at each):
 
@@ -833,7 +833,7 @@ lacks RLS (public EPSG reference data). Not yet exercised: running the
 API itself (including Hangfire, which uses the transaction-mode pooler in
 Staging config) against Supabase.
 
-## Phase 8 — Billing
+## Phase 8 — Billing (frozen; treasury scope, CLAUDE.md §0)
 
 **Goal**: a tax bill can be generated from a posted assessment using
 configurable rules.
@@ -896,7 +896,7 @@ pre-PRIME tax history for cap baselines (Phase 13), real ordinance values,
 and Supabase migration (still at 10/10, i.e. without `BillingRules`,
 `MachineryReplacementCost`, `TaxBills`).
 
-## Phase 9 — Collection
+## Phase 9 — Collection (frozen; treasury scope, CLAUDE.md §0)
 
 **Goal**: payments can be posted, allocated, reversed, and reconciled.
 
@@ -924,15 +924,29 @@ All three exit criteria are met. Open gaps: collection by taxpayer, and
 the DOMAIN VERIFICATION items in §11. Migrations `Payments`,
 `PaymentCancellations` and `Remittances` are on the local dev DB only.
 
-## Phase 10 — Delinquency
+## Phase 10 — LAM alignment (revised 2026-09-28)
 
-**Goal**: outstanding balances and aging are accurate and reportable.
+Delinquency, the earlier Phase 10, was removed with the treasury scope
+(CLAUDE.md §0). Phase 10 was then "MRPAAO completeness". Since 2026-09-28 it
+is **LAM alignment** (CLAUDE.md §97):
 
-Tasks: delinquency computation (property-level, taxpayer-level, tax-year),
-aging buckets, outstanding-balance reports, statements.
+```text
+10a  Real Property Identification System (MRPAAO)   done (d70a501)
+L0   Governance & groundwork                          in progress (content pack C1 done)
+LP   Province-wide operation (CLAUDE.md §117)         next
+L1   Valuation foundation
+L2   Identification & numbering (LAM deltas)
+L3   Assessment, listing, exemptions
+L4   Condominium                                      deferred
+L5   Records & forms
+L6   SMV preparation & general revision
+L7   Assessment appeals
+L8   Treasury interface
+```
 
-Exit criteria: delinquency figures reconcile against Bill − Payment state
-for a demo dataset; aging buckets match configured aging rules.
+The gap analysis and the plan are LAM-derived and kept untracked in
+`docs/lam/` (CLAUDE.md §118). Each step gets its own design document before
+any code (§108).
 
 ## Phase 11 — Reporting
 
@@ -1038,6 +1052,20 @@ through the session pooler (port 5432). Verified afterwards:
 API first starts against Supabase, which still has not been exercised.
 
 ## Immediate next action
+
+**LAM alignment (2026-09-28):** the LAM 2025 was supplied (untracked, in
+`docs/References/LAM 2025/`). It supersedes the MRPAAO. A read-only gap
+analysis and an alignment plan were written (`docs/lam/`, untracked) and
+approved. The user chose a **province-wide deployment for Zamboanga
+Sibugay** (CLAUDE.md §117) and accepted every other recommendation.
+10a-5 was committed as `d70a501`. `master` is 5 commits ahead of `origin`
+(not pushed). Supabase still lacks every migration since `Payments`.
+CLAUDE.md §0, §5, §9, §87, §97 and §114–§116 were revised, and §117
+(deployment) and §118 (LAM content handling) were added. **Next:** finish L0
+(the LGU content pack loader design; blocking domain questions for the
+Provincial Assessor's Office), then the LP design document (offices,
+jurisdiction, provincial approval, delegation). The paragraphs below are
+the earlier history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so
 PRIME is the assessor's office system following the MRPAAO (CLAUDE.md §0).

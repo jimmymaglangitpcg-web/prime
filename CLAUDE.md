@@ -6,13 +6,27 @@
 
 ---
 
-# 0. SCOPE (revised 2026-09-26)
+# 0. SCOPE (revised 2026-09-28)
 
-PRIME is the system of the **local assessor's office**. Its scope follows the
-**Manual on Real Property Appraisal and Assessment Operations** (MRPAAO;
-DOF-BLGF Local Assessment Regulations No. 1-04, 2004/2006), kept in the
-repository as `docs/References/ManualRPAandAO.pdf`. The manual's chapters
-define what PRIME covers:
+PRIME is the system of the **local assessor's office**, deployed
+**province-wide for the Province of Zamboanga Sibugay**: one instance serves
+the Provincial Assessor's Office and the municipal assessors' offices of the
+province (§117).
+
+**Primary source: the Local Assessment Manual 2025** (LAM; DOF Department
+Circular, 2025), in four books: I Administration (organization, records
+management, digitalization), II Real Property Identification and Tax Mapping,
+III Fundamentals of Appraisal and Assessment (appraisal, assessment,
+condominium, exemptions, appeals), IV Development of the Schedule of Market
+Values (SMV, certification, general revision), with annexes of forms. The LAM
+states that it supersedes LAR 1-04 (the MRPAAO). Its copy is kept locally in
+`docs/References/LAM 2025/` and is **never committed** (§118).
+
+**Secondary source: the MRPAAO** (LAR No. 1-04, 2004/2006;
+`docs/References/ManualRPAandAO.pdf`). It is used only where the LAM is
+silent. Code and documents written before 2026-09-28 cite it. The LAM
+alignment plan (§97) replaces those citations as each area is revised. The
+MRPAAO chapters map to PRIME as follows (historical reference):
 
 ```text
 Ch. I    Local Government Assessment Organization      → users, roles, offices (§9, §47)
@@ -26,14 +40,13 @@ Ch. VIII Miscellaneous (appraisal committee, zonal valuation, land use) → §28
 Ch. IX–X Penal and final provisions                     → reference only
 ```
 
-**How the manual is used (user decision, 2026-09-25):** the MRPAAO is the
-source for **structure, forms, fields and procedures**. Its rules and values
-are **not** hard-coded: they stay configurable, because the manual is
-superseded by the **Local Assessment Manual (LAM, DOF Department Circular
-004-2025)** and by RA 12001 and its IRR. When the LAM or an ordinance is
-supplied, it overrides the MRPAAO wherever they differ. Never commit
-LAM-derived or ordinance-derived content to the repository, which has a
-GitHub remote.
+**How the manuals are used (user decisions, 2026-09-25 and 2026-09-28):**
+the LAM, read with RA 7160, RA 12001 and its IRR, is the source for
+**structure, forms, fields and procedures**. The MRPAAO fills gaps. Rules and
+values from either manual are **not** hard-coded: they are configuration,
+because laws, the LAM and ordinances change. Never commit LAM-derived or
+ordinance-derived content to the repository, which has a GitHub remote. The
+rules for what may be committed are in §118.
 
 **Out of scope: treasury operations.** Tax rates, billing, payment,
 collection, remittance, delinquency, discounts, penalties and interest belong
@@ -186,8 +199,10 @@ The architecture must accommodate applicable:
 
 * Republic Act No. 7160 — Local Government Code of 1991 (Book II, Title II)
 * Republic Act No. 12001 — Real Property Valuation and Assessment Reform Act, and its IRR
-* The Local Assessment Manual (DOF DC 004-2025) — supersedes the MRPAAO
-* The MRPAAO (LAR 1-04) — structural basis of PRIME (§0)
+* The Local Assessment Manual 2025 — primary basis of PRIME; supersedes the
+  MRPAAO (§0). Circular number and effectivity date: DOMAIN VERIFICATION
+  REQUIRED (the supplied copy leaves the number blank)
+* The MRPAAO (LAR 1-04) — secondary source where the LAM is silent (§0)
 * BLGF issuances and DOF/BLGF policies
 * Philippine Valuation Standards where applicable
 * Provincial, city and municipal ordinances
@@ -317,8 +332,9 @@ VIEW_ONLY
 ```
 
 The office's actual positions and delegations (provincial, city and municipal
-assessors; MRPAAO Ch. I §4–§5) map onto these roles through configuration.
-Their exact mapping is DOMAIN VERIFICATION REQUIRED.
+assessors; LAM Book I Ch. I) map onto these roles through configuration.
+Their exact mapping is DOMAIN VERIFICATION REQUIRED. A role is held within
+an office and its jurisdiction (§117).
 
 Use permission-based authorization in addition to roles.
 
@@ -2308,7 +2324,7 @@ Phase 7   GIS                                        done
           Forms foundation and MRPAAO forms model    done
 Phase 8   Billing                                    built under the earlier scope; frozen (§0)
 Phase 9   Collection                                 built under the earlier scope; frozen (§0)
-Phase 10  MRPAAO completeness                        next (§97)
+Phase 10  LAM alignment                              next (§97)
 Phase 11  Reporting                                  (§98)
 Phase 12  Workflow & security                        (§99)
 Phase 13  Import / migration                         (§100)
@@ -2376,43 +2392,63 @@ popup, tax map printing.
 
 ---
 
-# 97. PHASE 10 — MRPAAO COMPLETENESS
+# 97. PHASE 10 — LAM ALIGNMENT (revised 2026-09-28)
 
-Bring PRIME in line with each chapter of the manual, in checkpointed steps.
-Each step starts with a design document under `docs/analysis/` that cites the
-manual's pages and lists review questions. No code is written before the
-user approves it (§108).
+Bring PRIME in line with the LAM 2025, in checkpointed steps. Step 10a (Real
+Property Identification System, built against the MRPAAO) is done; its LAM
+differences are handled in L2. The detailed gap analysis and plan are kept
+untracked in `docs/lam/` (§118). Each step starts with a design document
+listing review questions. No code is written before the user approves it
+(§108).
 
 ```text
-10a  Real Property Identification System (Ch. II)
-     PIN structure through configurable numbering; tax mapping operations;
-     base, index and property identification maps; pre- and post-tax-map
-     control rolls.
+L0  Governance & groundwork
+    Source policy (this revision), the LGU content pack loaded from the
+    untracked lgu-content/ folder, deployment decision (§117), blocking
+    domain questions.
 
-10b  Appraisal (Ch. IV)
-     Rules for urban lands, agricultural and other lands, buildings and
-     other structures (including depreciation), machinery and equipment,
-     and special purpose properties, all as configurable rules.
+LP  Province-wide operation (§117)
+    Offices and jurisdiction; users assigned to offices; per-office
+    approval chains with provincial approval; delegation to municipal
+    assessors; municipality-to-province reporting; per-office branding.
 
-10c  Assessment, listing and exemptions (Ch. V)
-     Guiding principles and assessment rules; listing of real property;
-     exemptions with their legal basis and the exempt assessment roll.
+L1  Valuation foundation (LAM Book III Ch. II; Book IV Ch. I)
+    Valuation as-of date; effectivity derived by rule (year + quarter); SMV
+    model (certification lifecycle, sub-class and location keys, separate
+    valuation and assessment keys); land adjustment rules; buildings (base
+    unit construction cost by structural type, extra items, depreciation
+    schedule); machinery (derived replacement cost, depreciation limits);
+    independent-appraisal and income methods; back taxes under the SMVs of
+    their periods.
 
-10d  Records management (Ch. VI)
-     Complete the forms and records (FAAS, TD, TMCR, AR, ORC, ROA, NOA,
-     sworn statement), the codes used in assessment, and the numbering
-     system.
+L2  Identification & numbering (LAM Book I Ch. II; Book II)
+    3-digit parcel PIN scheme from the next general revision; structured
+    unit PINs (building, condominium floor/unit, machinery, mineral rights);
+    TD and NOA numbering; bulk PIN retirement for territorial changes.
 
-10e  General revision and the Schedule of Fair Market Values (Ch. III, VIII §1–§2)
-     General revision of assessments and property classification; support
-     for preparing the SMV (mass appraisal data, approaches to value) and
-     its review and approval, including the appraisal committee.
+L3  Assessment, listing, exemptions (LAM Book III Ch. III, V)
+    Taxability per assessment line; exemptions with legal basis and proof
+    deadline; transaction codes; discovery summons; notice of cancellation.
 
-10f  Assessment appeals (Ch. VII; §113)
+L4  Condominium (LAM Book III Ch. IV) — deferred until needed.
+
+L5  Records & forms (LAM Book I Ch. II; Annexes)
+    LAM versions of FAAS, TD, NOA, TMCR, AR, ORF, ROA, loaded as content.
+
+L6  SMV preparation & general revision (LAM Book IV)
+    Sales data, SMV forms, valuation testing, land value map, revenue and
+    tax impact inputs, general revision instructions.
+
+L7  Assessment appeals (LAM Book III Ch. VI; §113)
+
+L8  Treasury interface
+    Outbound assessment roll and TD events; inbound payment-under-protest
+    references and tax rates for reports. Billing/collection stay frozen.
 ```
 
-Values the manual gives as examples or as then-current rates are
-configuration, not code. The LAM supersedes the manual wherever they differ.
+Order: L0 → LP → L1 → (L2, L3, L5) → L6 → L7; L8 when a consumer needs it.
+Values the manuals give as examples or as then-current rates are
+configuration, not code. Posted history is never recomputed under new rules.
 
 ---
 
@@ -2769,18 +2805,18 @@ until checked against RA 7160, RA 12001 and the LAM.
 
 # 114. FORMS, CODES AND NUMBERING
 
-MRPAAO Ch. VI and its Attachments 1–11 define the assessment forms and
-records:
+LAM Book I Ch. II and its annexes define the assessment forms and records
+(the MRPAAO's Ch. VI and Attachments 1–11 are the earlier versions):
 - FAAS for land/other improvements, buildings and machinery;
 - the Tax Declaration;
 - the Tax Map Control Roll;
 - the Assessment Rolls for taxable and exempt properties;
-- the Ownership Record Card and the Record of Assessment;
+- the Ownership Record Form (formerly Card) and the Record of Assessment;
 - the Notice of Assessment and the Sworn Statement.
 
 PRIME renders them through versioned form definitions and issues frozen
-snapshots. The MRPAAO layouts are reference layouts, and the LAM's forms
-replace them when supplied. Codes used in assessment (e.g. transaction codes)
+snapshots. The built-in MRPAAO layouts are reference layouts. The LAM
+versions are loaded as content from `lgu-content/` (§118), not committed. Codes used in assessment (e.g. transaction codes)
 and document numbering are configuration. The design is in
 `docs/analysis/mrpaao-forms-model.md` and `docs/FORMS-REVISION-PLAN.md`.
 
@@ -2788,19 +2824,69 @@ and document numbering are configuration. The design is in
 
 # 115. PROPERTY IDENTIFICATION AND TAX MAPPING
 
-MRPAAO Ch. II describes the Property Identification Number and tax mapping
+LAM Book II (earlier: MRPAAO Ch. II) describes the Property Identification Number and tax mapping
 operations: base maps, section, barangay, municipality and district index
 maps, property identification maps, and pre- and post-tax-map control rolls.
 PRIME stores the PIN as a configurable pattern (never a hard-coded format),
 links every property to its parcel and tax map, and produces the maps and
 control rolls from its own data. Unit PINs for buildings and machinery on a
-land follow the configured suffix rules.
+land follow the configured suffix rules; the LAM's structured unit PINs
+(condominium floor and unit, mineral rights) come in step L2.
 
 ---
 
 # 116. MISCELLANEOUS ASSESSMENT MATTERS
 
-MRPAAO Ch. VIII (appraisal committee, zonal valuation, land use planning)
-informs the SMV preparation workflow (§28) and reference data. Implement only
+LAM Book IV (SMV development cycle, mass appraisal, valuation testing,
+certification, general revision) and MRPAAO Ch. VIII (appraisal committee,
+zonal valuation, land use planning) inform the SMV preparation workflow (§28)
+and reference data. Implement only
 what a design document has confirmed against current law; treat the rest as
 reference material.
+
+---
+
+# 117. DEPLOYMENT SCOPE — PROVINCE-WIDE (2026-09-28)
+
+PRIME is deployed for the **Province of Zamboanga Sibugay**. One instance
+serves the Provincial Assessor's Office and the municipal assessors' offices
+(LAM Book I Ch. I). Consequences:
+
+- Every user belongs to an **office**, and every office has a
+  **jurisdiction** (the municipalities it covers). Records are scoped to
+  jurisdiction; the provincial office sees the whole province.
+- Municipal assessors prepare FAAS and Tax Declarations. The **Provincial
+  Assessor approves** them unless the function has been **delegated**. A
+  delegation is a dated record (valid for a period, renewable, revocable,
+  not sub-delegable). While it is in force, the municipal assessor gives
+  final approval. Approval chains are configured per office.
+- Municipal offices report to the province (issued and cancelled FAAS and
+  TDs, assessment rolls). The province has a consolidated view.
+- Branding, letterheads and signatories are per office.
+- The province's index number, municipal and barangay index numbers,
+  the certified SMV, assessment-level ordinances and signatories are LGU
+  data. They come from the Provincial Assessor's Office, are entered as
+  configuration, and are never committed. Until they are supplied, only
+  DEMO data is used (§81).
+
+This is step LP of Phase 10 (§97) and comes before the valuation work (L1),
+because every record L1 and later steps produce is prepared in one office
+and approved in another.
+
+---
+
+# 118. LAM AND LGU CONTENT HANDLING (2026-09-28)
+
+- The LAM PDFs (`docs/References/LAM 2025/`), LAM-derived analyses
+  (`docs/lam/`) and the LGU content pack (`lgu-content/`) are gitignored and
+  are never committed.
+- Committed code and documents may **cite** the LAM (book, chapter, section,
+  page) and **paraphrase** a requirement in a sentence. They must not
+  reproduce its tables, form layouts, code lists, value tables or long
+  passages.
+- LAM form layouts, transaction and use codes, structural material codes,
+  sub-class criteria, and every LGU value (SMV, assessment levels, index
+  numbers, signatories) enter PRIME as **configuration**: loaded from
+  `lgu-content/` or entered through the admin screens, under maker-checker.
+  The repository ships only DEMO or provisional content.
+
