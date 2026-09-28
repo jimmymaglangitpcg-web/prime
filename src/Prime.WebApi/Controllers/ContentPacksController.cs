@@ -16,6 +16,19 @@ public class ContentPacksController(IContentPackService service) : ApiController
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ContentPackInfo>>> List(CancellationToken ct) => HandleResult(await service.ListAsync(ct));
 
+    /// <summary>
+    /// Uploads a pack as a zip (manifest at its root or in one top-level folder); it replaces the pack of
+    /// the same name in the content root, keeping the previous copy. Preview it next.
+    /// </summary>
+    [HttpPost("upload")]
+    [RequestSizeLimit(110 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 110 * 1024 * 1024)]
+    public async Task<ActionResult<ContentPackInfo>> Upload(IFormFile file, CancellationToken ct)
+    {
+        await using var stream = file.OpenReadStream();
+        return HandleResult(await service.UploadAsync(stream, ct));
+    }
+
     [HttpPost("{pack}/preview")]
     public async Task<ActionResult<ContentPackPreviewDto>> Preview(string pack, CancellationToken ct) => HandleResult(await service.PreviewAsync(pack, ct));
 

@@ -15,4 +15,11 @@ public interface IContentPackSource
 
     /// <summary>A file of <paramref name="pack"/>, by its path relative to the pack folder (forward slashes).</summary>
     Task<Result<ContentFileRead>> ReadAsync(string pack, string relativePath, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Unpacks an uploaded zip into the content root as the pack its manifest names,
+    /// replacing that pack's folder (the previous copy is moved aside, never deleted).
+    /// Refuses unsafe entries, oversized content and names that fail the pack rules.
+    /// </summary>
+    Task<Result<ContentPackInfo>> SaveUploadAsync(Stream zip, CancellationToken cancellationToken = default);
 }

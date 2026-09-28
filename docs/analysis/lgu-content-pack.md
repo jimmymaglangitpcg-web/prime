@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-09-28 |
-| Status | **Approved 2026-09-28: all recommendations Q1–Q9 accepted.** C1–C2 done (§8); C3–C5 to follow |
+| Status | **Approved 2026-09-28: all recommendations Q1–Q9 accepted.** C1–C4 done (§8); C5 to follow |
 | Rules | CLAUDE.md §7 (configurability), §60 (import workflow), §81 (seed data), §104 and §118 (no LAM or ordinance content in git) |
 | Commit status | This document contains no LAM content and may be committed |
 
@@ -93,7 +93,7 @@ READ (server folder or uploaded zip)
 |---|---|---|---|
 | Geography | PSGC code | Insert new; update the name; set index numbers through the existing rules (locked once used) | Applied on confirm; audited |
 | Lookups | `Code` per lookup | Insert new; update name, description, order and active flag; the code never changes | Applied on confirm; audited |
-| Transaction types, numbering schemes, approval chains, forms | Code (+ version) | Always a **new version in PendingReview**; the existing version stays in force until the new one is approved | **Maker-checker:** a second user approves (§46) |
+| Transaction types, numbering schemes, approval chains, forms | Transaction type code; numbering document kind; approval subject; form code | A **new Draft version** when the content differs from both the version in force and any pending draft; the existing version stays in force until the new one is approved | **Maker-checker:** a second user approves (§46) |
 | SMV, schedules, factors, levels | SMV revision + row key | New SMV revision with its rows, as drafts | Maker-checker, as today |
 | GIS layers | Layer + feature key | Through the existing `ImportAsync` (dry run → import) | Applied on confirm |
 
@@ -282,4 +282,111 @@ rejects it with a clear message until LP adds offices.
 - Live API: preview → stale import 409 → import (recorded under the dev
   user) → re-import "already matches" → history and items. One DEMO zone,
   `DEMO-LIVE-C2`, remains in the dev database from this check.
+
+### C3 — versioned configuration (2026-09-28)
+
+**Built**
+- Four JSON catalogue kinds: `transaction-types`, `numbering-schemes`,
+  `approval-chains`, `forms`. A form item names its `.liquid` template inside
+  the pack; the template's hash joins the fingerprint, so an edited template
+  also forces a new preview.
+  - Items use camelCase fields; an unknown field is an error, which catches
+    typos.
+  - Each item needs a source citation (its own or the file's) and an
+    `effectiveDate` written yyyy-MM-dd.
+- `ContentPackVersionedContent`:
+  - validates each item with the **same validator as its admin screen**;
+  - refuses treasury kinds (numbering for bills, receipts, payment
+    transactions and remittances; forms for bills, statements and payments;
+    CLAUDE.md §0), the built-in form authorities (PrimeProvisional, MRPAAO),
+    an `office` on approval chains (until LP), and effective dates that could
+    never be approved (not after the latest approved version);
+  - compares each item with the version in force and any pending draft:
+    identical content is unchanged, otherwise the preview lists a new
+    version with its field differences (templates as short hashes).
+- Import creates each new version as **Draft** through the owning service
+  (`CreateTypeAsync`, numbering `CreateAsync`, chains `CreateAsync`,
+  `CreateDefinitionAsync`), inside the import's transaction and under the
+  importer's name. The existing approval rules then apply unchanged: the
+  importer cannot approve their own version, and a second user must. If a
+  service refuses an item, the whole import rolls back.
+- DEMO pack: one DEMO item per catalogue, effective 2099-01-01, and a DEMO
+  template.
+
+**Deviation from the design text:** §3.3 said "PendingReview". Versioned
+configuration in PRIME has no PendingReview state (`ConfigurationApproval`:
+Draft → Approved by a second user), so imports create Draft versions. The
+safeguard is the same.
+
+**Verified**
+- 3 new integration tests:
+  - the DEMO catalogues become 4 Drafts owned by the importer; the importer's
+    approval is refused and a second user's accepted; the next import is a
+    no-op;
+  - treasury kinds, built-in authorities, offices, bad values, bad dates,
+    unknown fields, template path/missing/broken, and an unapprovable date
+    are all refused;
+  - an edited template after the preview → 409 `CONTENT_PACK_CONFLICT`.
+- Full suite: 437 tests pass.
+- Live API preview of the DEMO pack: 10 files, 0 errors, 0 warnings.
+
+### C4 — upload and admin page (2026-09-28)
+
+**Built**
+- `POST /api/content-packs/upload` (multipart `file`, request limit 110 MB).
+  The zip is buffered with a hard size cap, then:
+  - `manifest.json` must sit at the root or inside a single top-level folder;
+  - the manifest's `pack` must be a valid pack name;
+  - every entry path is checked like a manifest path (no `..`, no absolute
+    or backslash paths);
+  - limits apply: at most 5,000 files, and per-file and total unpacked sizes
+    counted from the bytes actually written, which stops zip bombs;
+  - it unpacks into a staging folder, which is removed if anything fails.
+  - It **replaces** the pack of the same name. The previous copy moves to
+    `.previous/{pack}-{UTC time}` and is never deleted. Folders starting with
+    `.` are not listed as packs.
+- **Content Packs** admin page (`/admin/content-packs`, in the menu):
+  - pack list, zip upload (which previews automatically) and a Preview
+    button;
+  - the preview card: version, status, "would apply", warnings and a
+    fingerprint. A table per file shows rows / new / changed / unchanged /
+    not in pack / issues. Expanding a row shows its issues (severity, line,
+    field, code, message), records to add or change with field-by-field
+    changes, and records not in the pack;
+  - **Import** through a confirmation, enabled only when the preview is
+    clean and would change something; "Import refused" shows the API's
+    message (e.g. files changed since the preview);
+  - **Import history**: paged imports (when, pack and version, by, counts,
+    warnings, fingerprint), each expandable to its records with changes,
+    source and file:line.
+
+**Fixed along the way:** a manifest or JSON catalogue saved with a UTF-8
+byte-order mark, as Windows editors often do, was refused as invalid JSON.
+Both are now read without the mark. The upload tests write files with a mark,
+so they guard against this.
+
+**Deviation from §3.5:** an uploaded zip is unpacked into the content root
+but not also stored as a private Document. PRIME's document storage (§59) is
+not built yet, and the import record already keeps every file's hash. To
+revisit when document storage exists.
+
+**Verified**
+- 2 new integration tests: a zipped folder unpacks and replaces the pack,
+  keeping the old copy; not-a-zip, no manifest, path traversal, a bad pack
+  name and an oversized unpack are refused and leave nothing behind.
+- Full suite: 439 tests pass. `npm run build` (tsc -b + vite) and
+  `npm run lint` are clean.
+- Browser (Playwright, dev server + API):
+  - a broken pack shows "1 error: cannot import", its REQUIRED issue, and a
+    disabled Import button;
+  - uploading a zip lists the pack and previews it as "Ready to import"
+    (2 new);
+  - importing reports "Imported ui-check UI-1: 2 created, 0 changed";
+  - history lists the records with their changes, source and file:line;
+  - previewing again says "already matches";
+  - at 390 px there is no horizontal page overflow; the console is clean at
+    both widths.
+- The browser check left two DEMO rows in the dev database: zone
+  `DEMO-UI-C4` and a Draft transaction type `DEMO-UI-TR` (effective
+  2099-01-01).
 

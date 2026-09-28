@@ -1,0 +1,12 @@
+[
+  {
+    "code": "DEMO_CP_NOTICE",
+    "title": "DEMO notice (content pack)",
+    "subjectType": "NoticeOfAssessment",
+    "authority": "Other",
+    "template": "forms/DEMO_CP_NOTICE.liquid",
+    "legalBasis": "DEMO — not an official form",
+    "sourceReference": "DEMO layout",
+    "effectiveDate": "2099-01-01"
+  }
+]

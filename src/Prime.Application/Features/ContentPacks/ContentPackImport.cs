@@ -47,8 +47,8 @@ public sealed partial class ContentPackService
             return Result.Failure<ContentImportResultDto>("CONTENT_PACK_INVALID", $"The pack has {preview.ErrorCount} error(s). Fix them, preview again, then import.");
         }
 
-        var files = built.Value.Files.Where(f => f.Entry.Supported && f.Table is not null).ToList();
-        if (files.All(f => f.Plan.Count == 0))
+        var files = built.Value.Files.Where(f => f.Entry.Supported && (f.Table is not null || f.Versions.Count > 0)).ToList();
+        if (files.All(f => f.Plan.Count == 0 && f.Versions.Count == 0))
         {
             return Result.Success(new ContentImportResultDto(false, "PRIME already matches this pack; nothing was imported or recorded.", null));
         }
@@ -65,6 +65,33 @@ public sealed partial class ContentPackService
                      .OrderBy(f => f.Entry.Lookup == "structural-materials" ? 1 : 0))
         {
             await ApplyLookupAsync(work, partsAdded, items, cancellationToken);
+        }
+
+        // Versioned configuration: each planned version is created as a Draft by its own service (step C3).
+        foreach (var work in files.Where(f => f.Versions.Count > 0))
+        {
+            foreach (var version in work.Versions)
+            {
+                var created = await versioned.CreateAsync(version, cancellationToken);
+                if (created.IsFailure)
+                {
+                    // Nothing is kept: the transaction is rolled back when disposed uncommitted.
+                    return Result.Failure<ContentImportResultDto>("CONTENT_PACK_IMPORT_FAILED",
+                        $"{work.Entry.Path} item {version.Item} ({version.Key}): {created.Message} Nothing was imported.");
+                }
+                items.Add(new ContentImportItem
+                {
+                    Sequence = items.Count + 1,
+                    EntityType = created.Value.EntityType,
+                    EntityId = created.Value.Id,
+                    Key = version.Key,
+                    Action = ContentImportAction.Created,
+                    ChangesJson = JsonSerializer.Serialize(version.Changes, Json),
+                    Source = version.Source,
+                    FilePath = work.Entry.Path,
+                    Line = version.Item,
+                });
+            }
         }
 
         var record = new ContentImport

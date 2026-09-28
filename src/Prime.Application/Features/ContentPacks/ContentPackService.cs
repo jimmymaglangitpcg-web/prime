@@ -17,6 +17,9 @@ public interface IContentPackService
     /// <summary>Validates <paramref name="pack"/> and compares it with the database. Writes nothing.</summary>
     Task<Result<ContentPackPreviewDto>> PreviewAsync(string pack, CancellationToken cancellationToken = default);
 
+    /// <summary>Stores an uploaded pack zip in the content root (step C4); preview it next.</summary>
+    Task<Result<ContentPackInfo>> UploadAsync(Stream zip, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Applies <paramref name="pack"/> if it is valid and its files still hash to the
     /// previewed <see cref="ImportContentPackRequest.Fingerprint"/>. One transaction;
@@ -40,7 +43,8 @@ public interface IContentPackService
 /// them later. Blank optional cells mean "keep the current value"; nothing is
 /// ever cleared or removed by a pack (decision Q4).
 /// </summary>
-public sealed partial class ContentPackService(IApplicationDbContext db, IContentPackSource source, ICurrentUserService currentUser) : IContentPackService
+public sealed partial class ContentPackService(IApplicationDbContext db, IContentPackSource source, ICurrentUserService currentUser,
+    ContentPackVersionedContent versioned) : IContentPackService
 {
     public const string ManifestFile = "manifest.json";
     public const int ChangeListLimit = 200;
@@ -98,6 +102,12 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
     public Task<Result<IReadOnlyList<ContentPackInfo>>> ListAsync(CancellationToken cancellationToken = default) =>
         source.ListAsync(cancellationToken);
 
+    public Task<Result<ContentPackInfo>> UploadAsync(Stream zip, CancellationToken cancellationToken = default) =>
+        source.SaveUploadAsync(zip, cancellationToken);
+
+    /// <summary>Whether <paramref name="pack"/> is a valid pack (folder) name.</summary>
+    public static bool IsPackName(string? pack) => pack is not null && PackName().IsMatch(pack);
+
     public async Task<Result<ContentPackPreviewDto>> PreviewAsync(string pack, CancellationToken cancellationToken = default)
     {
         var built = await BuildAsync(pack, cancellationToken);
@@ -132,7 +142,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         ContentPackManifest? manifest;
         try
         {
-            manifest = JsonSerializer.Deserialize<ContentPackManifest>(manifestBytes);
+            manifest = JsonSerializer.Deserialize<ContentPackManifest>(WithoutBom(manifestBytes));
         }
         catch (JsonException ex)
         {
@@ -168,6 +178,11 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
                     $"Files of kind '{entry.Kind}' are checked for presence only; PRIME reads them from step {ContentFileKinds.Later[entry.Kind]}."));
                 continue;
             }
+            if (ContentFileKinds.Versioned.Contains(entry.Kind))
+            {
+                work.Bytes = bytes;
+                continue;
+            }
             var table = ContentPackCsv.Parse(bytes);
             if (table.Error is not null)
             {
@@ -183,6 +198,10 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
             await PreviewLookupAsync(work, files, cancellationToken);
         }
         CheckRequiredPropertyTypes(files, await db.PropertyTypes.AsNoTracking().Select(x => x.Code).ToListAsync(cancellationToken));
+        foreach (var work in files.Where(f => f.Bytes is not null))
+        {
+            await PreviewVersionedAsync(pack, work, cancellationToken);
+        }
 
         return Result.Success(new Built(Finish(pack, manifest.Version, manifest.Description, manifestSha, issues, files), files));
     }
@@ -202,6 +221,14 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         public List<ContentChangeDto> Changes { get; } = [];
         /// <summary>Every row to create or change, uncapped: what an import applies.</summary>
         public List<PlannedRow> Plan { get; } = [];
+        /// <summary>A JSON catalogue's raw content (versioned kinds).</summary>
+        public byte[]? Bytes { get; set; }
+        /// <summary>Items in a JSON catalogue.</summary>
+        public int ItemCount { get; set; }
+        /// <summary>New configuration versions to create (versioned kinds).</summary>
+        public List<PlannedVersion> Versions { get; } = [];
+        /// <summary>Files a catalogue refers to (form templates), as "path:sha256", part of the fingerprint.</summary>
+        public List<string> Referenced { get; } = [];
         public int New { get; set; }
         public int Changed { get; set; }
         public int Unchanged { get; set; }
@@ -572,6 +599,19 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         work.Missing.AddRange(existing.Where(x => !work.Valid.ContainsKey(x.Code) && !Listed(work, x.Code)).Select(x => $"{x.Code} {x.Name}"));
     }
 
+    /// <summary>Step C3: transaction types, numbering schemes, approval chains and forms (<see cref="ContentPackVersionedContent"/>).</summary>
+    private async Task PreviewVersionedAsync(string pack, FileWork work, CancellationToken ct)
+    {
+        var r = await versioned.PreviewAsync(work.Entry.Kind, work.Entry.Path, work.Bytes!, work.Entry.Source, p => source.ReadAsync(pack, p, ct), ct);
+        work.Issues.AddRange(r.Issues);
+        work.Versions.AddRange(r.Versions);
+        work.Referenced.AddRange(r.Referenced);
+        work.ItemCount = r.Items;
+        work.New = r.Versions.Count;
+        work.Unchanged = r.Unchanged;
+        work.Changes.AddRange(r.Versions.Take(ChangeListLimit).Select(v => new ContentChangeDto(v.Key, v.Name, ContentChangeAction.New, v.Changes)));
+    }
+
     /// <summary>PRIME's valuation keys off these property-type codes (<see cref="PropertyTypeCodes"/>); warn if a pack would leave one undefined.</summary>
     private static void CheckRequiredPropertyTypes(List<FileWork> files, IReadOnlyCollection<string> existing)
     {
@@ -771,12 +811,12 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
     {
         var fileDtos = files.Select(f => new ContentFilePreviewDto(
             f.Entry.Kind, f.Entry.Lookup, f.Entry.Path, f.Entry.Source, f.Sha256, f.Entry.Supported,
-            f.Table?.Rows.Count ?? 0, f.New, f.Changed, f.Unchanged, f.Missing.Count, f.Missing.Take(MissingKeyLimit).ToList(),
+            f.Table?.Rows.Count ?? f.ItemCount, f.New, f.Changed, f.Unchanged, f.Missing.Count, f.Missing.Take(MissingKeyLimit).ToList(),
             f.Changes, f.Issues.OrderBy(i => i.Line ?? 0).ToList())).ToList();
         var all = issues.Concat(fileDtos.SelectMany(f => f.Issues)).ToList();
         var errors = all.Count(i => i.Severity == ContentIssueSeverity.Error);
         var fingerprint = manifestSha is null ? null
-            : Sha256(System.Text.Encoding.UTF8.GetBytes(string.Join("\n", files.Select(f => $"{f.Entry.Path}:{f.Sha256}").Prepend(manifestSha))));
+            : Sha256(System.Text.Encoding.UTF8.GetBytes(string.Join("\n", files.SelectMany(f => f.Referenced.Prepend($"{f.Entry.Path}:{f.Sha256}")).Prepend(manifestSha))));
         return new ContentPackPreviewDto(pack, Clean(version), Clean(description), manifestSha, fingerprint, errors == 0 && files.Count > 0, errors,
             all.Count - errors, issues, fileDtos);
     }
@@ -792,4 +832,8 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string Sha256(byte[] bytes) => Convert.ToHexStringLower(SHA256.HashData(bytes));
+
+    /// <summary>JSON text without a UTF-8 byte-order mark, which Windows editors often write and the JSON reader refuses.</summary>
+    public static ReadOnlySpan<byte> WithoutBom(byte[] bytes) =>
+        bytes.AsSpan().StartsWith((ReadOnlySpan<byte>)[0xEF, 0xBB, 0xBF]) ? bytes.AsSpan(3) : bytes;
 }

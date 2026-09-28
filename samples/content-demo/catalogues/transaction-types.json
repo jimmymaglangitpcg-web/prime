@@ -1,0 +1,15 @@
+[
+  {
+    "code": "DEMO-CP-TR",
+    "name": "DEMO transfer (content pack)",
+    "kind": "Transfer",
+    "rank": 70,
+    "description": "DEMO transaction type; not an LAM code.",
+    "legalBasis": "DEMO — not a legal basis",
+    "effectiveDate": "2099-01-01",
+    "requirements": [
+      { "code": "DEMO-DEED", "label": "DEMO deed of conveyance", "mandatory": true },
+      { "code": "DEMO-ID", "label": "DEMO government-issued ID", "mandatory": false }
+    ]
+  }
+]

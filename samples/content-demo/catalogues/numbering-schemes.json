@@ -1,0 +1,10 @@
+[
+  {
+    "appliesTo": "SwornStatement",
+    "name": "DEMO sworn statement numbering (content pack)",
+    "pattern": "DEMO-SS-{YEAR}-{SEQ:5}",
+    "allowManualEntry": false,
+    "legalBasis": "DEMO — not an LGU format",
+    "effectiveDate": "2099-01-01"
+  }
+]

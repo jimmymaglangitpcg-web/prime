@@ -29,18 +29,23 @@ public static class ContentFileKinds
     public const string Municipalities = "municipalities";
     public const string Barangays = "barangays";
     public const string Lookup = "lookup";
+    public const string TransactionTypes = "transaction-types";
+    public const string NumberingSchemes = "numbering-schemes";
+    public const string ApprovalChains = "approval-chains";
+    public const string Forms = "forms";
 
-    /// <summary>Validated and previewed from step C1.</summary>
-    public static readonly IReadOnlySet<string> Supported = new HashSet<string> { Provinces, Municipalities, Barangays, Lookup };
+    /// <summary>CSV tables (step C1–C2).</summary>
+    public static readonly IReadOnlySet<string> Csv = new HashSet<string> { Provinces, Municipalities, Barangays, Lookup };
+
+    /// <summary>JSON catalogues of versioned configuration, imported as Draft versions (step C3).</summary>
+    public static readonly IReadOnlySet<string> Versioned = new HashSet<string> { TransactionTypes, NumberingSchemes, ApprovalChains, Forms };
+
+    /// <summary>Kinds PRIME reads and imports.</summary>
+    public static readonly IReadOnlySet<string> Supported = Csv.Union(Versioned).ToHashSet();
 
     /// <summary>Recognised, hashed and listed, but not yet read: the step that adds each.</summary>
     public static readonly IReadOnlyDictionary<string, string> Later = new Dictionary<string, string>
     {
-        ["transaction-types"] = "C3",
-        ["numbering-schemes"] = "C3",
-        ["approval-chains"] = "C3",
-        ["forms"] = "C3",
-        ["form-template"] = "C3",
         ["gis-layer"] = "C5",
         ["smv"] = "L1-3",
         ["smv-schedules"] = "L1-3",

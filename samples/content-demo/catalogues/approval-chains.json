@@ -1,0 +1,12 @@
+[
+  {
+    "subjectType": "Assessment",
+    "name": "DEMO assessment approval (content pack)",
+    "legalBasis": "DEMO — not an office procedure",
+    "effectiveDate": "2099-01-01",
+    "steps": [
+      { "stepCode": "DEMO_REVIEW", "label": "DEMO reviewed", "signatoryPosition": "DEMO Reviewer" },
+      { "stepCode": "DEMO_APPROVE", "label": "DEMO approved", "signatoryPosition": "DEMO Assessor" }
+    ]
+  }
+]

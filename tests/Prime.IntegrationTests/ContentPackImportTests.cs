@@ -86,12 +86,12 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
 
         result.Applied.ShouldBeTrue();
         var record = result.Import.ShouldNotBeNull();
-        record.CreatedCount.ShouldBe(13); // 1 province, 2 towns, 4 barangays, 2 classifications, 2 parts, 2 materials
+        record.CreatedCount.ShouldBe(17); // 1 province, 2 towns, 4 barangays, 2 classifications, 2 parts, 2 materials, 4 draft versions
         record.ChangedCount.ShouldBe(0);
         record.ImportedBy.ShouldBe(c.Importer.Id);
         record.ImportedByName.ShouldBe("DEMO Importer");
         record.Fingerprint.ShouldBe(preview.Fingerprint);
-        record.Files.Count.ShouldBe(6);
+        record.Files.Count.ShouldBe(10);
 
         var province = await c.Db.Provinces.SingleAsync(x => x.PsgcCode == "9900000000");
         province.PinIndexNumber.ShouldBe("998");
@@ -105,8 +105,8 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
         (classification.SortOrder, classification.IsActive, classification.Description).ShouldBe((10, true, "DEMO classification"));
 
         var items = (await c.Service.ListImportItemsAsync(record.Id, new PagedRequest { PageSize = 100 })).Value;
-        items.TotalCount.ShouldBe(13);
-        items.Items.ShouldAllBe(i => i.Action == ContentImportAction.Created && i.Source.Length > 0 && i.Line >= 2);
+        items.TotalCount.ShouldBe(17);
+        items.Items.ShouldAllBe(i => i.Action == ContentImportAction.Created && i.Source.Length > 0 && i.Line >= 1);
         items.Items.Single(i => i.Key == "9900200001").Source.ShouldBe("DEMO data (row-level source)");
         items.Items.Single(i => i.Key == "9900200001").EntityId.ShouldBe((await c.Db.Barangays.SingleAsync(x => x.PsgcCode == "9900200001")).Id);
         (await c.Db.Set<AuditLog>().AnyAsync(a => a.RecordId == province.Id && a.Reason == "Content pack content-demo DEMO-1")).ShouldBeTrue();

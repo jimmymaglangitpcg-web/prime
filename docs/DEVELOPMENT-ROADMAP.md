@@ -932,7 +932,7 @@ is **LAM alignment** (CLAUDE.md §97):
 
 ```text
 10a  Real Property Identification System (MRPAAO)   done (d70a501)
-L0   Governance & groundwork                          in progress (content pack C1–C2 done)
+L0   Governance & groundwork                          in progress (content pack C1–C4 done)
 LP   Province-wide operation (CLAUDE.md §117)         next
 L1   Valuation foundation
 L2   Identification & numbering (LAM deltas)
@@ -1059,7 +1059,7 @@ analysis and an alignment plan were written (`docs/lam/`, untracked) and
 approved. The user chose a **province-wide deployment for Zamboanga
 Sibugay** (CLAUDE.md §117) and accepted every other recommendation.
 10a-5 was committed as `d70a501`. `master` is 5 commits ahead of `origin`
-(not pushed). Supabase still lacks every migration since `Payments`.
+Pushed on 2026-09-28 (through `74ecc23`), and Supabase was brought up to date the same day: 37 migrations, row-level security on all 105 tables with no policies.
 CLAUDE.md §0, §5, §9, §87, §97 and §114–§116 were revised, and §117
 (deployment) and §118 (LAM content handling) were added. **Next:** finish L0
 (the LGU content pack loader design; blocking domain questions for the
