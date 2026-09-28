@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Features.Gis.ReferenceLayers;
 using Prime.Domain.Entities.Reference;
 using Prime.Domain.Enums;
 
@@ -44,7 +45,7 @@ public interface IContentPackService
 /// ever cleared or removed by a pack (decision Q4).
 /// </summary>
 public sealed partial class ContentPackService(IApplicationDbContext db, IContentPackSource source, ICurrentUserService currentUser,
-    ContentPackVersionedContent versioned) : IContentPackService
+    ContentPackVersionedContent versioned, IReferenceLayerService layers) : IContentPackService
 {
     public const string ManifestFile = "manifest.json";
     public const int ChangeListLimit = 200;
@@ -98,6 +99,10 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
     }.ToDictionary(x => x.Name);
 
     public static IReadOnlyCollection<string> LookupNames => Lookups.Keys.ToList();
+
+    /// <summary>Map layers a pack may carry, by manifest name (the <c>/api/gis/layers</c> route names).</summary>
+    private static readonly IReadOnlyDictionary<string, ReferenceLayer> LayerNames =
+        Enum.GetValues<ReferenceLayer>().ToDictionary(l => l.ToString().ToLowerInvariant());
 
     public Task<Result<IReadOnlyList<ContentPackInfo>>> ListAsync(CancellationToken cancellationToken = default) =>
         source.ListAsync(cancellationToken);
@@ -183,6 +188,19 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
                 work.Bytes = bytes;
                 continue;
             }
+            if (entry.Kind == ContentFileKinds.GisLayer)
+            {
+                try
+                {
+                    using var geo = JsonDocument.Parse(WithoutBom(bytes).ToArray());
+                    work.Geo = geo.RootElement.Clone();
+                }
+                catch (JsonException ex)
+                {
+                    work.Issues.Add(Error("GEOJSON_INVALID", $"The file is not valid JSON: {ex.Message}"));
+                }
+                continue;
+            }
             var table = ContentPackCsv.Parse(bytes);
             if (table.Error is not null)
             {
@@ -202,6 +220,11 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         {
             await PreviewVersionedAsync(pack, work, cancellationToken);
         }
+        // Map layers last: they may refer to barangays, zones and road types the pack adds.
+        foreach (var work in files.Where(f => f.Geo is not null))
+        {
+            await PreviewLayerAsync(work, files, cancellationToken);
+        }
 
         return Result.Success(new Built(Finish(pack, manifest.Version, manifest.Description, manifestSha, issues, files), files));
     }
@@ -210,7 +233,8 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
 
     private sealed record PlannedRow(string Key, bool IsNew, IReadOnlyList<ContentFieldChangeDto> Changes, CsvRow Row);
 
-    private sealed record ManifestEntry(string Kind, string Path, string? Lookup, string? Source, bool Supported);
+    private sealed record ManifestEntry(string Kind, string Path, string? Lookup, string? Source, bool Supported,
+        ReferenceLayer? Layer = null, DateOnly? EffectiveDate = null);
 
     private sealed class FileWork(ManifestEntry entry)
     {
@@ -227,6 +251,8 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         public int ItemCount { get; set; }
         /// <summary>New configuration versions to create (versioned kinds).</summary>
         public List<PlannedVersion> Versions { get; } = [];
+        /// <summary>A map layer's GeoJSON (step C5).</summary>
+        public JsonElement? Geo { get; set; }
         /// <summary>Files a catalogue refers to (form templates), as "path:sha256", part of the fingerprint.</summary>
         public List<string> Referenced { get; } = [];
         public int New { get; set; }
@@ -296,16 +322,41 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
                     continue;
                 }
             }
-            if (ContentFileKinds.Supported.Contains(kind) && !singletons.Add(lookup is null ? kind : $"lookup:{lookup}"))
+            ReferenceLayer? layer = null;
+            DateOnly? effectiveDate = null;
+            if (kind == ContentFileKinds.GisLayer)
             {
-                issues.Add(Error("MANIFEST_DUPLICATE_KIND", $"{at}: a pack carries one {(lookup ?? kind)} file.", field: at));
+                var layerName = f.Layer?.Trim().ToLowerInvariant();
+                if (layerName is null || !LayerNames.TryGetValue(layerName, out var parsedLayer))
+                {
+                    issues.Add(Error("MANIFEST_LAYER", $"{at}: layer '{f.Layer}' is not one of {string.Join(", ", LayerNames.Keys)}.", field: at));
+                    continue;
+                }
+                if (!DateOnly.TryParseExact(f.EffectiveDate?.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                {
+                    issues.Add(Error("MANIFEST_EFFECTIVE_DATE", $"{at}: a map layer needs effectiveDate written yyyy-MM-dd; got '{f.EffectiveDate}'.", field: at));
+                    continue;
+                }
+                // Features carry no source of their own, so the file's is required (the layer import allows 300 characters).
+                if (string.IsNullOrWhiteSpace(f.Source) || f.Source.Trim().Length > 300)
+                {
+                    issues.Add(Error("SOURCE_MISSING", $"{at} ({path}): a map layer must cite its source in the manifest, at most 300 characters.", field: at));
+                    continue;
+                }
+                (layer, effectiveDate) = (parsedLayer, date);
+            }
+            var single = lookup is not null ? $"lookup:{lookup}" : layer is not null ? $"gis:{layer}" : kind;
+            if (ContentFileKinds.Supported.Contains(kind) && !singletons.Add(single))
+            {
+                var what = lookup ?? (layer is not null ? $"{f.Layer!.Trim().ToLowerInvariant()} layer" : kind);
+                issues.Add(Error("MANIFEST_DUPLICATE_KIND", $"{at}: a pack carries one {what} file.", field: at));
                 continue;
             }
             if (string.IsNullOrWhiteSpace(f.Source))
             {
                 issues.Add(Warning("SOURCE_MISSING", $"{at} ({path}) cites no source; each row must then give its own.", field: at));
             }
-            entries.Add(new ManifestEntry(kind, path, lookup, Clean(f.Source), ContentFileKinds.Supported.Contains(kind)));
+            entries.Add(new ManifestEntry(kind, path, lookup, Clean(f.Source), ContentFileKinds.Supported.Contains(kind), layer, effectiveDate));
         }
         return entries;
     }
@@ -612,6 +663,47 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         work.Changes.AddRange(r.Versions.Take(ChangeListLimit).Select(v => new ContentChangeDto(v.Key, v.Name, ContentChangeAction.New, v.Changes)));
     }
 
+    /// <summary>
+    /// Step C5: a GeoJSON map layer, dry-run through the reference-layer import
+    /// (docs/GIS.md §3) with unchanged features skipped. Barangays, zones and
+    /// road types the same pack adds count as existing. Issue lines are feature
+    /// numbers (1-based).
+    /// </summary>
+    private async Task PreviewLayerAsync(FileWork work, List<FileWork> files, CancellationToken ct)
+    {
+        var entry = work.Entry;
+        HashSet<string> NewKeys(Func<FileWork, bool> match) =>
+            files.Where(match).SelectMany(f => f.Plan.Where(p => p.IsNew).Select(p => p.Key)).ToHashSet(StringComparer.Ordinal);
+        var pending = entry.Layer switch
+        {
+            ReferenceLayer.Barangays => NewKeys(f => f.Entry.Kind == ContentFileKinds.Barangays),
+            ReferenceLayer.Zones => NewKeys(f => f.Entry.Lookup == "zones"),
+            _ => null,
+        };
+        var pendingRoadTypes = entry.Layer == ReferenceLayer.Roads ? NewKeys(f => f.Entry.Lookup == "road-types") : null;
+
+        var result = await layers.ImportAsync(entry.Layer!.Value,
+            new ImportReferenceLayerRequest(entry.EffectiveDate!.Value, entry.Source!, null, work.Geo!.Value),
+            dryRun: true, new ReferenceLayerImportOptions(SkipUnchanged: true, pending, pendingRoadTypes), ct);
+        if (result.IsFailure)
+        {
+            work.Issues.Add(Error(result.Code!, result.Message!));
+            return;
+        }
+
+        var r = result.Value;
+        foreach (var issue in r.Errors)
+        {
+            work.Issues.Add(Error(issue.Code, issue.FeatureIndex is { } i ? $"Feature {i + 1}: {issue.Message}" : issue.Message, issue.FeatureIndex + 1));
+        }
+        work.ItemCount = r.FeatureCount;
+        (work.New, work.Changed, work.Unchanged) = (r.NewFeatures, r.SupersededVersions, r.UnchangedFeatures);
+        var date = entry.EffectiveDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        work.Changes.AddRange((r.Features ?? []).Take(ChangeListLimit).Select(f => new ContentChangeDto(f.Key, f.Key,
+            f.Supersedes ? ContentChangeAction.Changed : ContentChangeAction.New,
+            [new ContentFieldChangeDto("geometry", f.Supersedes ? "version in force" : null, $"new version effective {date}")])));
+    }
+
     /// <summary>PRIME's valuation keys off these property-type codes (<see cref="PropertyTypeCodes"/>); warn if a pack would leave one undefined.</summary>
     private static void CheckRequiredPropertyTypes(List<FileWork> files, IReadOnlyCollection<string> existing)
     {
@@ -812,7 +904,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         var fileDtos = files.Select(f => new ContentFilePreviewDto(
             f.Entry.Kind, f.Entry.Lookup, f.Entry.Path, f.Entry.Source, f.Sha256, f.Entry.Supported,
             f.Table?.Rows.Count ?? f.ItemCount, f.New, f.Changed, f.Unchanged, f.Missing.Count, f.Missing.Take(MissingKeyLimit).ToList(),
-            f.Changes, f.Issues.OrderBy(i => i.Line ?? 0).ToList())).ToList();
+            f.Changes, f.Issues.OrderBy(i => i.Line ?? 0).ToList(), f.Entry.Layer?.ToString().ToLowerInvariant())).ToList();
         var all = issues.Concat(fileDtos.SelectMany(f => f.Issues)).ToList();
         var errors = all.Count(i => i.Severity == ContentIssueSeverity.Error);
         var fingerprint = manifestSha is null ? null

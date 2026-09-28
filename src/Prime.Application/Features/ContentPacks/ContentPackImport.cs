@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common;
+using Prime.Application.Features.Gis.ReferenceLayers;
 using Prime.Domain.Entities.Content;
 using Prime.Domain.Entities.Reference;
 using Prime.Domain.Enums;
@@ -47,8 +48,8 @@ public sealed partial class ContentPackService
             return Result.Failure<ContentImportResultDto>("CONTENT_PACK_INVALID", $"The pack has {preview.ErrorCount} error(s). Fix them, preview again, then import.");
         }
 
-        var files = built.Value.Files.Where(f => f.Entry.Supported && (f.Table is not null || f.Versions.Count > 0)).ToList();
-        if (files.All(f => f.Plan.Count == 0 && f.Versions.Count == 0))
+        var files = built.Value.Files.Where(f => f.Entry.Supported && (f.Table is not null || f.Versions.Count > 0 || f.Geo is not null)).ToList();
+        if (files.All(f => f.Plan.Count == 0 && f.Versions.Count == 0 && (f.Geo is null || f.New + f.Changed == 0)))
         {
             return Result.Success(new ContentImportResultDto(false, "PRIME already matches this pack; nothing was imported or recorded.", null));
         }
@@ -94,6 +95,40 @@ public sealed partial class ContentPackService
             }
         }
 
+        // Map layers last, once the barangays, zones and road types they refer to exist (step C5).
+        // The layer import joins this transaction; each new boundary or road version gets an item.
+        foreach (var work in files.Where(f => f.Geo is not null && f.New + f.Changed > 0))
+        {
+            var entry = work.Entry;
+            var layer = await layers.ImportAsync(entry.Layer!.Value,
+                new ImportReferenceLayerRequest(entry.EffectiveDate!.Value, entry.Source!, null, work.Geo!.Value),
+                dryRun: false, new ReferenceLayerImportOptions(SkipUnchanged: true), cancellationToken);
+            if (layer.IsFailure || !layer.Value.Committed)
+            {
+                var why = layer.IsFailure ? layer.Message : layer.Value.Errors.FirstOrDefault()?.Message;
+                return Result.Failure<ContentImportResultDto>("CONTENT_PACK_IMPORT_FAILED", $"{entry.Path}: {why} Nothing was imported.");
+            }
+            var date = entry.EffectiveDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            foreach (var feature in layer.Value.Features ?? [])
+            {
+                items.Add(new ContentImportItem
+                {
+                    Sequence = items.Count + 1,
+                    EntityType = feature.EntityType,
+                    EntityId = feature.VersionId!.Value,
+                    Key = feature.Key,
+                    Action = ContentImportAction.Created,
+                    ChangesJson = JsonSerializer.Serialize(new[]
+                    {
+                        new ContentFieldChangeDto("geometry", feature.Supersedes ? "version in force" : null, $"new version effective {date}"),
+                    }, Json),
+                    Source = entry.Source!,
+                    FilePath = entry.Path,
+                    Line = feature.FeatureIndex + 1,
+                });
+            }
+        }
+
         var record = new ContentImport
         {
             Pack = pack,
@@ -106,7 +141,7 @@ public sealed partial class ContentPackService
             CreatedCount = items.Count(i => i.Action == ContentImportAction.Created),
             ChangedCount = items.Count(i => i.Action == ContentImportAction.Changed),
             FilesJson = JsonSerializer.Serialize(preview.Files.Select(f =>
-                new ContentImportFileDto(f.Kind, f.Lookup, f.Path, f.Sha256, f.Source, f.New, f.Changed, f.Unchanged)), Json),
+                new ContentImportFileDto(f.Kind, f.Lookup, f.Path, f.Sha256, f.Source, f.New, f.Changed, f.Unchanged, f.Layer)), Json),
             WarningsJson = JsonSerializer.Serialize(preview.Issues.Concat(preview.Files.SelectMany(f => f.Issues)), Json),
             Items = items,
         };

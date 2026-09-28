@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "psgcCode": "9900100001", "name": "DEMO Poblacion, Town A" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[127.5, 12.0], [127.51, 12.0], [127.51, 12.01], [127.5, 12.01], [127.5, 12.0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "psgcCode": "9900100002", "name": "DEMO Barangay A-2" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[127.51, 12.0], [127.52, 12.0], [127.52, 12.01], [127.51, 12.01], [127.51, 12.0]]]
+      }
+    }
+  ]
+}

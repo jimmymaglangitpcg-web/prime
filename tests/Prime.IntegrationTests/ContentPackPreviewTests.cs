@@ -94,6 +94,8 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
             (files[kind].New, files[kind].Rows).ShouldBe((1, 1)); // one Draft version each, from one catalogue item
         }
         files["forms"].Changes.Single().Fields.ShouldContain(f => f.Field == "template" && f.From == null);
+        // The layer's barangays are new in the same pack: they count as existing in the dry run.
+        (files["gis-layer"].Layer, files["gis-layer"].Rows, files["gis-layer"].New).ShouldBe(("barangays", 2, 2));
         files.Values.ShouldAllBe(f => f.Sha256 != null && f.Supported);
 
         (await db.Provinces.CountAsync(), await db.Barangays.CountAsync(), await db.Classifications.CountAsync()).ShouldBe(before);
@@ -110,7 +112,7 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
               { "kind": "lookup", "lookup": "classifications", "path": "classes.csv", "source": "DEMO" },
               { "kind": "lookup", "lookup": "no-such-lookup", "path": "x.csv", "source": "DEMO" },
               { "kind": "lookup", "lookup": "structural-materials", "path": "materials.csv", "source": "DEMO" },
-              { "kind": "gis-layer", "path": "gis/layer.geojson", "source": "DEMO" },
+              { "kind": "smv", "path": "valuation/smv.json", "source": "DEMO" },
               { "kind": "provinces", "path": "../escape.csv", "source": "DEMO" },
               { "kind": "wizardry", "path": "w.csv", "source": "DEMO" },
               { "kind": "lookup", "lookup": "zones", "path": "missing.csv", "source": "DEMO" }
@@ -124,7 +126,7 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
             ["barangays.csv"] = "psgc_code,municipality_psgc,name,index_number\n9700100201,9700100002,DEMO B,001\n9700100202,9700100002,DEMO C,0001\n",
             ["classes.csv"] = "code,name,sort_order\nDEMO-X,DEMO X,first\nDEMO-Y,,1\nDEMO-Z,DEMO Z,2\nDEMO-Z,DEMO Z twice,3\n",
             ["materials.csv"] = "code,name,part_code\nDEMO-M1,DEMO M1,DEMO-NO-PART\n",
-            ["gis/layer.geojson"] = "{}",
+            ["valuation/smv.json"] = "{}",
         });
         var (service, _, scope) = await BeginAsync(root);
         await using var _ = scope;
@@ -145,9 +147,9 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
         codes.ShouldContain("PIN_INDEX_DUPLICATE");  // two municipalities numbered 05
         codes.ShouldContain("NUMBER_INVALID");       // sort_order "first"
         codes.ShouldContain("REQUIRED");             // DEMO-Y has no name
-        codes.ShouldContain("NOT_YET_SUPPORTED");    // map layers (C5)
+        codes.ShouldContain("NOT_YET_SUPPORTED");    // SMV files (L1-3)
         codes.ShouldContain("FILE_UNREADABLE");      // missing.csv
-        preview.Files.Single(f => f.Kind == "gis-layer").Supported.ShouldBeFalse();
+        preview.Files.Single(f => f.Kind == "smv").Supported.ShouldBeFalse();
         preview.Issues.ShouldContain(i => i.Code == "MANIFEST_PATH" && i.Field == "files[7]");
 
         (await service.PreviewAsync("../broken")).Code.ShouldBe("VALIDATION_FAILED");

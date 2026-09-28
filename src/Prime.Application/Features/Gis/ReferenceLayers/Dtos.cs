@@ -26,8 +26,35 @@ public sealed record ImportReferenceLayerRequest(
     string? SourceReference,
     JsonElement FeatureCollection);
 
+/// <summary>How a content pack calls the import (docs/analysis/lgu-content-pack.md, step C5).</summary>
+/// <param name="SkipUnchanged">
+/// A feature whose version in force already has the same shape (for roads also
+/// the same name and road type), and started on or before the effective date,
+/// is counted as unchanged and not versioned again, so re-importing a pack
+/// changes nothing.
+/// </param>
+/// <param name="PendingKeys">
+/// Barangay PSGC codes or zone codes that the same pack creates before its map
+/// layers. A dry run treats them as existing; a commit ignores the set, since
+/// they must exist by then.
+/// </param>
+/// <param name="PendingRoadTypeCodes">Road-type codes the same pack creates; as <paramref name="PendingKeys"/>.</param>
+public sealed record ReferenceLayerImportOptions(
+    bool SkipUnchanged = false,
+    IReadOnlySet<string>? PendingKeys = null,
+    IReadOnlySet<string>? PendingRoadTypeCodes = null)
+{
+    public static readonly ReferenceLayerImportOptions Default = new();
+}
+
 /// <param name="FeatureIndex">Zero-based index in the submitted features array; null for collection-level issues.</param>
 public sealed record ImportIssue(int? FeatureIndex, string Code, string Message);
+
+/// <summary>A feature that gets (or, in a dry run, would get) a new version.</summary>
+/// <param name="Supersedes">True when it ends the version in force; false for a key with no version yet.</param>
+/// <param name="EntityType">BarangayBoundary, ZoneBoundary, RoadSegment or SectionBoundary.</param>
+/// <param name="VersionId">The new version's id; null in a dry run.</param>
+public sealed record ImportedLayerFeature(int FeatureIndex, string Key, bool Supersedes, string EntityType, Guid? VersionId);
 
 /// <summary>
 /// Outcome of a validate-only (<see cref="DryRun"/>) or committing import.
@@ -43,7 +70,9 @@ public sealed record ImportReferenceLayerResult(
     int FeatureCount,
     int NewFeatures,
     int SupersededVersions,
-    IReadOnlyList<ImportIssue> Errors);
+    IReadOnlyList<ImportIssue> Errors,
+    int UnchangedFeatures = 0,
+    IReadOnlyList<ImportedLayerFeature>? Features = null);
 
 public sealed record ReferenceLayerFeatureCollection(
     string Type,

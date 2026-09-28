@@ -25,6 +25,8 @@ export interface ContentFilePreviewDto {
   missingKeys: string[];
   changes: ContentChangeDto[];
   issues: ContentIssueDto[];
+  /** Map layer files only: barangays, zones, roads or sections. */
+  layer: string | null;
 }
 export interface ContentPackPreviewDto {
   pack: string;
@@ -38,7 +40,11 @@ export interface ContentPackPreviewDto {
   issues: ContentIssueDto[];
   files: ContentFilePreviewDto[];
 }
-export interface ContentImportFileDto { kind: string; lookup: string | null; path: string; sha256: string | null; source: string | null; created: number; changed: number; unchanged: number }
+export interface ContentImportFileDto {
+  kind: string; lookup: string | null; path: string; sha256: string | null; source: string | null; created: number; changed: number; unchanged: number;
+  /** Absent on imports recorded before step C5. */
+  layer?: string | null;
+}
 export interface ContentImportDto {
   id: string;
   pack: string;

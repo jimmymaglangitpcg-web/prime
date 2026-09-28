@@ -10,6 +10,10 @@ public interface IReferenceLayerService
     /// </summary>
     Task<Result<ImportReferenceLayerResult>> ImportAsync(ReferenceLayer layer, ImportReferenceLayerRequest request, bool dryRun, CancellationToken cancellationToken = default);
 
+    /// <summary>As above, with the options a content pack uses (<see cref="ReferenceLayerImportOptions"/>).</summary>
+    Task<Result<ImportReferenceLayerResult>> ImportAsync(ReferenceLayer layer, ImportReferenceLayerRequest request, bool dryRun,
+        ReferenceLayerImportOptions options, CancellationToken cancellationToken = default);
+
     /// <summary>Layer features valid on <paramref name="asOf"/> (default: today) within a WGS84 bbox.</summary>
     Task<Result<ReferenceLayerFeatureCollection>> GetFeaturesAsync(ReferenceLayer layer, string? bbox, DateOnly? asOf, int? limit, CancellationToken cancellationToken = default);
 }

@@ -9,7 +9,8 @@ import {
 import { ApiRequestError } from '../../lib/apiClient';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
-const fileLabel = (f: { kind: string; lookup: string | null }) => (f.lookup ? `lookup: ${f.lookup}` : f.kind);
+const fileLabel = (f: { kind: string; lookup: string | null; layer?: string | null }) =>
+  f.lookup ? `lookup: ${f.lookup}` : f.layer ? `map layer: ${f.layer}` : f.kind;
 const short = (hash: string | null) => (hash ? `${hash.slice(0, 12)}…` : '—');
 
 /**
@@ -17,15 +18,16 @@ const short = (hash: string | null) => (hash ? `${hash.slice(0, 12)}…` : '—'
  * content kept out of the repository (CLAUDE.md §118) is uploaded or placed in
  * the content folder, previewed as a dry run, then imported. Geography and
  * lookups apply on import; configuration arrives as Draft versions that a
- * second user approves on its own screen.
+ * second user approves on its own screen. Map layers (step C5) become new
+ * boundary versions; unchanged shapes are skipped.
  */
 export function ContentPacksPage() {
   return (
     <div>
       <Typography.Title level={3}>Content Packs</Typography.Title>
       <Typography.Paragraph type="secondary" style={{ maxWidth: 900 }}>
-        Loads the province&apos;s geography and index numbers, lookups, transaction types, numbering schemes, approval chains and
-        forms from a content pack. A preview writes nothing. An import records who applied which files; nothing is ever deleted, and
+        Loads the province&apos;s geography and index numbers, lookups, transaction types, numbering schemes, approval chains,
+        forms and map layers from a content pack. A preview writes nothing. An import records who applied which files; nothing is ever deleted, and
         configuration comes in as drafts that another user must approve.
       </Typography.Paragraph>
       <Tabs items={[

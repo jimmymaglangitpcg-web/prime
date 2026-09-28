@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-09-28 |
-| Status | **Approved 2026-09-28: all recommendations Q1–Q9 accepted.** C1–C4 done (§8); C5 to follow |
+| Status | **Approved 2026-09-28: all recommendations Q1–Q9 accepted.** C1–C5 done (§8); L0-2 complete. Valuation files follow in L1-3 |
 | Rules | CLAUDE.md §7 (configurability), §60 (import workflow), §81 (seed data), §104 and §118 (no LAM or ordinance content in git) |
 | Commit status | This document contains no LAM content and may be committed |
 
@@ -389,4 +389,57 @@ revisit when document storage exists.
 - The browser check left two DEMO rows in the dev database: zone
   `DEMO-UI-C4` and a Draft transaction type `DEMO-UI-TR` (effective
   2099-01-01).
+
+### C5 — map layers (2026-09-28)
+
+**Built**
+- Manifest kind `gis-layer`, with `layer` (barangays, zones, roads or
+  sections), `effectiveDate` (yyyy-MM-dd) and a **required** file-level
+  `source`, at most 300 characters. Features carry no source of their own.
+  A pack carries one file per layer.
+- The pack reuses the reference-layer import (`ReferenceLayerService`, docs/GIS.md §3)
+  with new `ReferenceLayerImportOptions`:
+  - **SkipUnchanged:** a feature whose version in force has the same shape
+    (for roads also the same name and road type), and started on or before
+    the file's date, is unchanged and gets no new version. Re-importing a
+    pack is therefore a no-op. A different shape on a date that is not later
+    than the latest version is still refused (`VERSION_NOT_AFTER_EXISTING`):
+    history stays append-only.
+  - **Pending keys:** barangays, zones and road types the same pack adds
+    count as existing in the preview. On import, the layers are applied last,
+    after geography, lookups and configuration drafts, inside the pack's
+    transaction.
+  - The GIS import result now also lists unchanged counts and the features
+    it versions. The GIS API output gains these two fields; its behaviour is
+    unchanged.
+- Preview: rows = features, new / changed (supersedes the version in force) /
+  unchanged. Issue lines are **feature numbers** (1-based), not text lines.
+- Import: one `ContentImportItem` per new version (BarangayBoundary,
+  ZoneBoundary, RoadSegment or SectionBoundary; line = feature number). The
+  audit reason reads "Content pack {pack} {version}: GIS import …". The layer
+  import used to clear the caller's reason; it now restores it.
+- Not reported for layers: records "missing from the pack". A layer file is
+  a set of versions for the keys it lists, not a complete list.
+- DEMO pack: `gis/barangays.geojson` holds two squares in the open
+  Philippine Sea for the pack's two Town A barangays (11 files).
+- Admin page: layer files are labelled "map layer: {layer}".
+
+**Verified**
+- 3 new integration tests (`ContentPackGisTests`):
+  - the DEMO layer imports 2 boundaries with items, source and audit reason,
+    and previewing again shows 2 unchanged, so the import is a no-op;
+  - a changed shape on the same date is refused, and on a later date it
+    supersedes the version in force, which is end-dated;
+  - missing layer, bad date, missing source, invalid JSON, a duplicate layer
+    and an unknown barangay are all refused.
+- Updated tests: DEMO counts (19 records, 11 files); the broken pack uses an
+  SMV file for `NOT_YET_SUPPORTED`. The existing reference-layer tests pass
+  unchanged.
+- `npm run build` and `npm run lint` are clean.
+- Full suite: 442 tests pass (140 domain, 56 application, 246 integration).
+- Browser (Playwright, dev server + API on `samples/`): previewing the DEMO
+  pack lists "map layer: barangays" with 2 rows, 2 new, and "Ready to import"
+  (19 new in total). The page has no horizontal overflow at 390 px, and the
+  console is clean at both widths. The pack was not imported into the dev
+  database.
 

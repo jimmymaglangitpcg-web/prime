@@ -56,6 +56,13 @@
       "kind": "forms",
       "path": "forms/forms.json",
       "source": "DEMO data"
+    },
+    {
+      "kind": "gis-layer",
+      "layer": "barangays",
+      "effectiveDate": "2026-01-01",
+      "path": "gis/barangays.geojson",
+      "source": "DEMO shapes in open sea, not a real boundary"
     }
   ]
 }

@@ -16,11 +16,15 @@ public sealed record ContentPackManifest(
     [property: JsonPropertyName("description")] string? Description,
     [property: JsonPropertyName("files")] IReadOnlyList<ContentPackManifestFile>? Files);
 
+/// <param name="Layer">For <c>gis-layer</c> files: barangays, zones, roads or sections.</param>
+/// <param name="EffectiveDate">For <c>gis-layer</c> files: yyyy-MM-dd, the date the file's shapes take effect.</param>
 public sealed record ContentPackManifestFile(
     [property: JsonPropertyName("kind")] string? Kind,
     [property: JsonPropertyName("path")] string? Path,
     [property: JsonPropertyName("lookup")] string? Lookup,
-    [property: JsonPropertyName("source")] string? Source);
+    [property: JsonPropertyName("source")] string? Source,
+    [property: JsonPropertyName("layer")] string? Layer = null,
+    [property: JsonPropertyName("effectiveDate")] string? EffectiveDate = null);
 
 /// <summary>File kinds a manifest may name, and the step from which PRIME imports them (§5).</summary>
 public static class ContentFileKinds
@@ -33,6 +37,7 @@ public static class ContentFileKinds
     public const string NumberingSchemes = "numbering-schemes";
     public const string ApprovalChains = "approval-chains";
     public const string Forms = "forms";
+    public const string GisLayer = "gis-layer";
 
     /// <summary>CSV tables (step C1–C2).</summary>
     public static readonly IReadOnlySet<string> Csv = new HashSet<string> { Provinces, Municipalities, Barangays, Lookup };
@@ -40,13 +45,12 @@ public static class ContentFileKinds
     /// <summary>JSON catalogues of versioned configuration, imported as Draft versions (step C3).</summary>
     public static readonly IReadOnlySet<string> Versioned = new HashSet<string> { TransactionTypes, NumberingSchemes, ApprovalChains, Forms };
 
-    /// <summary>Kinds PRIME reads and imports.</summary>
-    public static readonly IReadOnlySet<string> Supported = Csv.Union(Versioned).ToHashSet();
+    /// <summary>Kinds PRIME reads and imports; GeoJSON map layers from step C5.</summary>
+    public static readonly IReadOnlySet<string> Supported = Csv.Union(Versioned).Append(GisLayer).ToHashSet();
 
     /// <summary>Recognised, hashed and listed, but not yet read: the step that adds each.</summary>
     public static readonly IReadOnlyDictionary<string, string> Later = new Dictionary<string, string>
     {
-        ["gis-layer"] = "C5",
         ["smv"] = "L1-3",
         ["smv-schedules"] = "L1-3",
         ["adjustment-factors"] = "L1-3",
@@ -104,7 +108,8 @@ public sealed record ContentFilePreviewDto(
     int MissingFromPack,
     IReadOnlyList<string> MissingKeys,
     IReadOnlyList<ContentChangeDto> Changes,
-    IReadOnlyList<ContentIssueDto> Issues);
+    IReadOnlyList<ContentIssueDto> Issues,
+    string? Layer = null);
 
 /// <summary>
 /// A dry run of a whole pack. Nothing is written. <see cref="CanImport"/> is false while any error remains.
@@ -126,7 +131,8 @@ public sealed record ContentPackPreviewDto(
 
 public sealed record ImportContentPackRequest(string? Fingerprint);
 
-public sealed record ContentImportFileDto(string Kind, string? Lookup, string Path, string? Sha256, string? Source, int Created, int Changed, int Unchanged);
+public sealed record ContentImportFileDto(string Kind, string? Lookup, string Path, string? Sha256, string? Source, int Created, int Changed, int Unchanged,
+    string? Layer = null);
 
 public sealed record ContentImportDto(
     Guid Id,

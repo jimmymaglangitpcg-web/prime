@@ -37,8 +37,12 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
 
     // ------------------------------------------------------------------ import
 
+    public Task<Result<ImportReferenceLayerResult>> ImportAsync(
+        ReferenceLayer layer, ImportReferenceLayerRequest request, bool dryRun, CancellationToken cancellationToken = default) =>
+        ImportAsync(layer, request, dryRun, ReferenceLayerImportOptions.Default, cancellationToken);
+
     public async Task<Result<ImportReferenceLayerResult>> ImportAsync(
-        ReferenceLayer layer, ImportReferenceLayerRequest request, bool dryRun, CancellationToken cancellationToken = default)
+        ReferenceLayer layer, ImportReferenceLayerRequest request, bool dryRun, ReferenceLayerImportOptions options, CancellationToken cancellationToken = default)
     {
         var errors = new List<ImportIssue>();
 
@@ -59,18 +63,26 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
 
         // Resolve whatever parsed cleanly even if other errors exist, so a
         // dry run reports every problem in one pass.
+        // Keys a content pack creates first count as existing in a dry run only;
+        // on commit they must really exist.
+        var planOptions = dryRun ? options : options with { PendingKeys = null, PendingRoadTypeCodes = null };
         var plan = parsed.Count > 0
-            ? await PlanAsync(layer, parsed, request.EffectiveDate, errors, cancellationToken)
+            ? await PlanAsync(layer, parsed, request.EffectiveDate, planOptions, errors, cancellationToken)
             : null;
 
         if (errors.Count > 0 || dryRun || plan is null)
         {
             return Result.Success(new ImportReferenceLayerResult(
-                layer, dryRun, false, null, featureCount, plan?.NewKeys ?? 0, plan?.ToSupersede.Count ?? 0, errors));
+                layer, dryRun, false, null, featureCount, plan?.NewKeys ?? 0, plan?.ToSupersede.Count ?? 0, errors,
+                plan?.Unchanged ?? 0,
+                plan?.Accepted.Select(a => new ImportedLayerFeature(a.Feature.Index, a.Feature.Key, a.Supersedes, EntityType(layer), null)).ToList() ?? []));
         }
 
         var batchId = Guid.NewGuid();
-        currentUser.Reason = $"GIS import {batchId}: {layer} from \"{request.Source.Trim()}\" effective {request.EffectiveDate:yyyy-MM-dd}";
+        // A caller's reason (e.g. a content pack import) is kept as a prefix and restored afterwards.
+        var outerReason = currentUser.Reason;
+        var reason = $"GIS import {batchId}: {layer} from \"{request.Source.Trim()}\" effective {request.EffectiveDate:yyyy-MM-dd}";
+        currentUser.Reason = outerReason is null ? reason : $"{outerReason}: {reason}";
 
         // Close current versions first, then insert successors: the
         // "one current version per key" unique index is not deferrable, so
@@ -85,7 +97,7 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
             }
             await db.SaveChangesAsync(cancellationToken);
 
-            plan.AddNewVersions(batchId, request.EffectiveDate, request.Source.Trim(), request.SourceReference?.Trim());
+            plan.AddNewVersions(plan, batchId, request.EffectiveDate, request.Source.Trim(), request.SourceReference?.Trim());
             await db.SaveChangesAsync(cancellationToken);
 
             if (transaction is not null)
@@ -106,12 +118,21 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
             {
                 await transaction.DisposeAsync();
             }
-            currentUser.Reason = null;
+            currentUser.Reason = outerReason;
         }
 
         return Result.Success(new ImportReferenceLayerResult(
-            layer, false, true, batchId, featureCount, plan.NewKeys, plan.ToSupersede.Count, errors));
+            layer, false, true, batchId, featureCount, plan.NewKeys, plan.ToSupersede.Count, errors, plan.Unchanged,
+            plan.Added.Select(a => new ImportedLayerFeature(a.Feature.Index, a.Feature.Key, a.Supersedes, a.Version.GetType().Name, a.Version.Id)).ToList()));
     }
+
+    private static string EntityType(ReferenceLayer layer) => layer switch
+    {
+        ReferenceLayer.Barangays => nameof(BarangayBoundary),
+        ReferenceLayer.Zones => nameof(ZoneBoundary),
+        ReferenceLayer.Sections => nameof(SectionBoundary),
+        _ => nameof(RoadSegment),
+    };
 
     private static List<ParsedFeature> ParseFeatures(ReferenceLayer layer, JsonElement json, List<ImportIssue> errors, out int featureCount)
     {
@@ -234,64 +255,83 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
     {
         public List<SpatialLayerFeature> ToSupersede { get; } = [];
         public int NewKeys { get; set; }
-        public required Action<Guid, DateOnly, string, string?> AddNewVersions { get; init; }
+        /// <summary>Features left alone because their version in force already matches (<see cref="ReferenceLayerImportOptions.SkipUnchanged"/>).</summary>
+        public int Unchanged { get; set; }
+        /// <summary>Features that get a new version, in file order; Supersedes = it ends the version in force.</summary>
+        public List<(ParsedFeature Feature, bool Supersedes)> Accepted { get; } = [];
+        /// <summary>The versions created on commit.</summary>
+        public List<(ParsedFeature Feature, bool Supersedes, SpatialLayerFeature Version)> Added { get; } = [];
+        public required Action<ImportPlan, Guid, DateOnly, string, string?> AddNewVersions { get; init; }
     }
 
     private async Task<ImportPlan> PlanAsync(
-        ReferenceLayer layer, List<ParsedFeature> features, DateOnly effectiveDate, List<ImportIssue> errors, CancellationToken cancellationToken)
+        ReferenceLayer layer, List<ParsedFeature> features, DateOnly effectiveDate, ReferenceLayerImportOptions options,
+        List<ImportIssue> errors, CancellationToken cancellationToken)
     {
         var keys = features.Select(f => f.Key).ToList();
         return layer switch
         {
             ReferenceLayer.Barangays => await PlanKeyedPolygonsAsync(
-                features, effectiveDate, errors,
+                features, effectiveDate, options.SkipUnchanged, options.PendingKeys, errors,
                 await db.Barangays.Where(b => keys.Contains(b.PsgcCode)).ToDictionaryAsync(b => b.PsgcCode, b => b.Id, cancellationToken),
                 "BARANGAY_NOT_FOUND", "No barangay has PSGC code",
                 ids => db.BarangayBoundaries.Where(v => ids.Contains(v.BarangayId)).ToListAsync(cancellationToken),
                 v => v.BarangayId,
+                v => v.Geometry,
                 (id, geometry) => new BarangayBoundary { BarangayId = id, Geometry = geometry },
                 v => db.BarangayBoundaries.Add(v)),
+            // Content packs do not create tax map sections, so no pending keys here.
             ReferenceLayer.Sections => await PlanKeyedPolygonsAsync(
-                features, effectiveDate, errors,
+                features, effectiveDate, options.SkipUnchanged, null, errors,
                 (await db.TaxMapSections.Where(x => keys.Contains(x.Barangay!.PsgcCode + "/" + x.IndexNumber))
                     .Select(x => new { Key = x.Barangay!.PsgcCode + "/" + x.IndexNumber, x.Id }).ToListAsync(cancellationToken))
                     .ToDictionary(x => x.Key, x => x.Id),
                 "TAX_MAP_SECTION_NOT_FOUND", "No tax map section has barangay PSGC code / section number",
                 ids => db.SectionBoundaries.Where(v => ids.Contains(v.SectionId)).ToListAsync(cancellationToken),
                 v => v.SectionId,
+                v => v.Geometry,
                 (id, geometry) => new SectionBoundary { SectionId = id, Geometry = geometry },
                 v => db.SectionBoundaries.Add(v)),
             ReferenceLayer.Zones => await PlanKeyedPolygonsAsync(
-                features, effectiveDate, errors,
+                features, effectiveDate, options.SkipUnchanged, options.PendingKeys, errors,
                 await db.Zones.Where(z => keys.Contains(z.Code)).ToDictionaryAsync(z => z.Code, z => z.Id, cancellationToken),
                 "ZONE_NOT_FOUND", "No zone has code",
                 ids => db.ZoneBoundaries.Where(v => ids.Contains(v.ZoneId)).ToListAsync(cancellationToken),
                 v => v.ZoneId,
+                v => v.Geometry,
                 (id, geometry) => new ZoneBoundary { ZoneId = id, Geometry = geometry },
                 v => db.ZoneBoundaries.Add(v)),
-            _ => await PlanRoadsAsync(features, effectiveDate, errors, cancellationToken),
+            _ => await PlanRoadsAsync(features, effectiveDate, options, errors, cancellationToken),
         };
     }
 
     private static async Task<ImportPlan> PlanKeyedPolygonsAsync<TVersion>(
         List<ParsedFeature> features,
         DateOnly effectiveDate,
+        bool skipUnchanged,
+        IReadOnlySet<string>? pendingKeys,
         List<ImportIssue> errors,
         Dictionary<string, Guid> idsByKey,
         string notFoundCode,
         string notFoundMessage,
         Func<List<Guid>, Task<List<TVersion>>> loadVersions,
         Func<TVersion, Guid> ownerId,
+        Func<TVersion, Geometry> geometryOf,
         Func<Guid, MultiPolygon, TVersion> create,
         Action<TVersion> add)
         where TVersion : SpatialLayerFeature
     {
-        var resolved = new List<(ParsedFeature Feature, Guid Id)>();
+        // A null id: the key does not exist yet but the same content pack creates it first (dry run only).
+        var resolved = new List<(ParsedFeature Feature, Guid? Id)>();
         foreach (var feature in features)
         {
             if (idsByKey.TryGetValue(feature.Key, out var id))
             {
                 resolved.Add((feature, id));
+            }
+            else if (pendingKeys?.Contains(feature.Key) == true)
+            {
+                resolved.Add((feature, null));
             }
             else
             {
@@ -299,27 +339,31 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
             }
         }
 
-        var versions = (await loadVersions(resolved.Select(r => r.Id).ToList())).ToLookup(ownerId);
+        var versions = (await loadVersions(resolved.Where(r => r.Id is not null).Select(r => r.Id!.Value).ToList())).ToLookup(ownerId);
         var plan = new ImportPlan
         {
-            AddNewVersions = (batchId, date, source, sourceReference) =>
+            AddNewVersions = (p, batchId, date, source, sourceReference) =>
             {
-                foreach (var (feature, id) in resolved)
+                foreach (var (feature, supersedes) in p.Accepted)
                 {
-                    var version = create(id, (MultiPolygon)feature.Geometry);
+                    var version = create(idsByKey[feature.Key], (MultiPolygon)feature.Geometry);
                     Stamp(version, batchId, date, source, sourceReference);
                     add(version);
+                    p.Added.Add((feature, supersedes, version));
                 }
             },
         };
         foreach (var (feature, id) in resolved)
         {
-            PlanVersion(feature, versions[id].Cast<SpatialLayerFeature>().ToList(), effectiveDate, errors, plan);
+            var existing = id is { } known ? versions[known].Cast<SpatialLayerFeature>().ToList() : [];
+            PlanVersion(feature, existing, effectiveDate, errors, plan,
+                skipUnchanged ? v => geometryOf((TVersion)v).EqualsExact(feature.Geometry) : null);
         }
         return plan;
     }
 
-    private async Task<ImportPlan> PlanRoadsAsync(List<ParsedFeature> features, DateOnly effectiveDate, List<ImportIssue> errors, CancellationToken cancellationToken)
+    private async Task<ImportPlan> PlanRoadsAsync(
+        List<ParsedFeature> features, DateOnly effectiveDate, ReferenceLayerImportOptions options, List<ImportIssue> errors, CancellationToken cancellationToken)
     {
         var roadTypeCodes = features.Where(f => f.RoadTypeCode is not null).Select(f => f.RoadTypeCode!).Distinct().ToList();
         var roadTypes = await db.RoadTypes.Where(t => roadTypeCodes.Contains(t.Code)).ToDictionaryAsync(t => t.Code, t => t.Id, cancellationToken);
@@ -329,7 +373,8 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
         var accepted = new List<ParsedFeature>();
         foreach (var feature in features)
         {
-            if (feature.RoadTypeCode is not null && !roadTypes.ContainsKey(feature.RoadTypeCode))
+            if (feature.RoadTypeCode is not null && !roadTypes.ContainsKey(feature.RoadTypeCode)
+                && options.PendingRoadTypeCodes?.Contains(feature.RoadTypeCode) != true)
             {
                 errors.Add(new ImportIssue(feature.Index, "ROAD_TYPE_NOT_FOUND", $"No road type has code \"{feature.RoadTypeCode}\"."));
                 continue;
@@ -339,9 +384,9 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
 
         var plan = new ImportPlan
         {
-            AddNewVersions = (batchId, date, source, sourceReference) =>
+            AddNewVersions = (p, batchId, date, source, sourceReference) =>
             {
-                foreach (var feature in accepted)
+                foreach (var (feature, supersedes) in p.Accepted)
                 {
                     var road = new RoadSegment
                     {
@@ -352,23 +397,43 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
                     };
                     Stamp(road, batchId, date, source, sourceReference);
                     db.RoadSegments.Add(road);
+                    p.Added.Add((feature, supersedes, road));
                 }
             },
         };
         foreach (var feature in accepted)
         {
-            PlanVersion(feature, versions[feature.Key].Cast<SpatialLayerFeature>().ToList(), effectiveDate, errors, plan);
+            PlanVersion(feature, versions[feature.Key].Cast<SpatialLayerFeature>().ToList(), effectiveDate, errors, plan,
+                options.SkipUnchanged ? v => SameRoad((RoadSegment)v, feature, roadTypes) : null);
         }
         return plan;
     }
+
+    private static bool SameRoad(RoadSegment road, ParsedFeature feature, Dictionary<string, Guid> roadTypes) =>
+        road.Geometry.EqualsExact(feature.Geometry)
+        && road.Name == feature.Name
+        && (feature.RoadTypeCode is null
+            ? road.RoadTypeId is null
+            : roadTypes.TryGetValue(feature.RoadTypeCode, out var typeId) && road.RoadTypeId == typeId);
 
     /// <summary>
     /// History is append-only: a new version must start after every existing
     /// version of the same key started. Corrections to past versions are not
     /// an import concern (they would need their own reviewed workflow).
+    /// With <paramref name="sameContent"/> (content packs), a feature matching
+    /// the version in force, which started on or before the effective date,
+    /// is unchanged and gets no new version.
     /// </summary>
-    private static void PlanVersion(ParsedFeature feature, List<SpatialLayerFeature> existing, DateOnly effectiveDate, List<ImportIssue> errors, ImportPlan plan)
+    private static void PlanVersion(ParsedFeature feature, List<SpatialLayerFeature> existing, DateOnly effectiveDate, List<ImportIssue> errors,
+        ImportPlan plan, Func<SpatialLayerFeature, bool>? sameContent)
     {
+        var current = existing.SingleOrDefault(v => v.EndDate is null);
+        if (current is not null && sameContent is not null && current.EffectiveDate <= effectiveDate && sameContent(current))
+        {
+            plan.Unchanged++;
+            return;
+        }
+
         var latest = existing.MaxBy(v => v.EffectiveDate);
         if (latest is not null && latest.EffectiveDate >= effectiveDate)
         {
@@ -377,7 +442,6 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
             return;
         }
 
-        var current = existing.SingleOrDefault(v => v.EndDate is null);
         if (current is not null)
         {
             plan.ToSupersede.Add(current);
@@ -386,6 +450,7 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
         {
             plan.NewKeys++;
         }
+        plan.Accepted.Add((feature, current is not null));
     }
 
     private static void Stamp(SpatialLayerFeature version, Guid batchId, DateOnly effectiveDate, string source, string? sourceReference)

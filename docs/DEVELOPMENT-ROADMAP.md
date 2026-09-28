@@ -932,7 +932,7 @@ is **LAM alignment** (CLAUDE.md §97):
 
 ```text
 10a  Real Property Identification System (MRPAAO)   done (d70a501)
-L0   Governance & groundwork                          in progress (content pack C1–C4 done)
+L0   Governance & groundwork                          in progress (L0-1 done; L0-2 content pack C1–C5 done)
 LP   Province-wide operation (CLAUDE.md §117)         next
 L1   Valuation foundation
 L2   Identification & numbering (LAM deltas)
@@ -1058,14 +1058,18 @@ API first starts against Supabase, which still has not been exercised.
 analysis and an alignment plan were written (`docs/lam/`, untracked) and
 approved. The user chose a **province-wide deployment for Zamboanga
 Sibugay** (CLAUDE.md §117) and accepted every other recommendation.
-10a-5 was committed as `d70a501`. `master` is 5 commits ahead of `origin`
-Pushed on 2026-09-28 (through `74ecc23`), and Supabase was brought up to date the same day: 37 migrations, row-level security on all 105 tables with no policies.
 CLAUDE.md §0, §5, §9, §87, §97 and §114–§116 were revised, and §117
-(deployment) and §118 (LAM content handling) were added. **Next:** finish L0
-(the LGU content pack loader design; blocking domain questions for the
-Provincial Assessor's Office), then the LP design document (offices,
-jurisdiction, provincial approval, delegation). The paragraphs below are
-the earlier history.
+(deployment) and §118 (LAM content handling) were added. `master` was pushed
+through `74ecc23` on 2026-09-28, and Supabase was brought up to date the same
+day: 37 migrations, row-level security on all 105 tables with no policies.
+
+**L0-2 content pack complete (2026-09-28):** C1–C5 are done
+(docs/analysis/lgu-content-pack.md §8): geography, lookups, versioned
+configuration as drafts, upload with the admin page, and map layers. C3–C4
+are committed as `9aa8989`. C5 adds no migration. **Next:** L0-4, the list of
+blocking domain questions for the Provincial Assessor's Office. Then the LP
+design document (offices, jurisdiction, provincial approval, delegation).
+The paragraphs below are the earlier history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so
 PRIME is the assessor's office system following the MRPAAO (CLAUDE.md §0).
