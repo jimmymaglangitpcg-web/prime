@@ -84,8 +84,8 @@ public interface ISwornStatementService
 /// and linking a NEW item to its unit once registered. Declared values are
 /// information only — nothing here touches valuation.
 /// </summary>
-public sealed class SwornStatementService(IApplicationDbContext db, INumberingService numbering, IClock clock, ICurrentUserService currentUser)
-    : ISwornStatementService
+public sealed class SwornStatementService(IApplicationDbContext db, INumberingService numbering, IClock clock, ICurrentUserService currentUser,
+    IJurisdiction jurisdiction) : ISwornStatementService
 {
     public async Task<Result<SwornStatementDto>> CreateAsync(SaveSwornStatementRequest request, CancellationToken cancellationToken = default)
     {
@@ -141,6 +141,10 @@ public sealed class SwornStatementService(IApplicationDbContext db, INumberingSe
         if (!await db.Municipalities.AnyAsync(x => x.Id == r.MunicipalityId, ct))
         {
             return Fail("MUNICIPALITY_NOT_FOUND", "The specified city/municipality does not exist.");
+        }
+        if (!jurisdiction.Allows(r.MunicipalityId))
+        {
+            return Fail(JurisdictionErrors.Code, JurisdictionErrors.Message);
         }
         if (r.DeclarantTaxpayerId is { } taxpayerId && !await db.Taxpayers.AnyAsync(x => x.Id == taxpayerId, ct))
         {

@@ -78,8 +78,26 @@ public sealed class FormService(
     IFormRenderer renderer,
     IEnumerable<IFormDataProvider> providers,
     IOptions<LguOptions> lgu,
-    IClock clock) : IFormService
+    IClock clock,
+    IJurisdiction jurisdiction) : IFormService
 {
+    /// <summary>
+    /// Whether an issued form's subject lies in the request's jurisdiction
+    /// (docs/analysis/province-wide-operation.md §3.3): the subject tables are
+    /// filtered, so a hidden subject reads as missing. Treasury subjects are not
+    /// jurisdiction-filtered (CLAUDE.md §0).
+    /// </summary>
+    private async Task<bool> SubjectVisibleAsync(FormSubjectType type, Guid id, CancellationToken ct) => !jurisdiction.Restricted || type switch
+    {
+        FormSubjectType.TaxDeclaration or FormSubjectType.Faas => await db.TaxDeclarations.AnyAsync(x => x.Id == id, ct),
+        FormSubjectType.NoticeOfAssessment => await db.NoticesOfAssessment.AnyAsync(x => x.Id == id, ct),
+        FormSubjectType.Assessment => await db.Assessments.AnyAsync(x => x.Id == id, ct),
+        FormSubjectType.StatementOfAccount => await db.Properties.AnyAsync(x => x.Id == id, ct),
+        FormSubjectType.Register => await db.RegisterRuns.AnyAsync(x => x.Id == id, ct),
+        FormSubjectType.SwornStatement => await db.SwornStatements.AnyAsync(x => x.Id == id, ct),
+        _ => true,
+    };
+
     public async Task<Result<FormDefinitionDto>> CreateDefinitionAsync(CreateFormDefinitionRequest request, CancellationToken cancellationToken = default)
     {
         var validation = await validator.ValidateAsync(request, cancellationToken);
@@ -195,13 +213,24 @@ public sealed class FormService(
 
     public async Task<Result<IssuedFormDto>> GetIssuedAsync(Guid id, CancellationToken cancellationToken = default) =>
         await db.IssuedForms.Include(x => x.FormDefinition).AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken) is { } issued
+            && await SubjectVisibleAsync(issued.SubjectType, issued.SubjectId, cancellationToken)
             ? Result.Success(ToDto(issued, issued.FormDefinition!.Title, includeHtml: true))
             : IssuedNotFound();
 
-    public async Task<Result<IReadOnlyList<IssuedFormDto>>> ListIssuedAsync(Guid subjectId, CancellationToken cancellationToken = default) =>
-        Result.Success<IReadOnlyList<IssuedFormDto>>((await db.IssuedForms.Include(x => x.FormDefinition).AsNoTracking()
-            .Where(x => x.SubjectId == subjectId).OrderByDescending(x => x.IssuedAt).ToListAsync(cancellationToken))
-            .Select(x => ToDto(x, x.FormDefinition!.Title, includeHtml: false)).ToList());
+    public async Task<Result<IReadOnlyList<IssuedFormDto>>> ListIssuedAsync(Guid subjectId, CancellationToken cancellationToken = default)
+    {
+        var rows = await db.IssuedForms.Include(x => x.FormDefinition).AsNoTracking()
+            .Where(x => x.SubjectId == subjectId).OrderByDescending(x => x.IssuedAt).ToListAsync(cancellationToken);
+        var visible = new List<IssuedFormDto>();
+        foreach (var x in rows)
+        {
+            if (await SubjectVisibleAsync(x.SubjectType, x.SubjectId, cancellationToken))
+            {
+                visible.Add(ToDto(x, x.FormDefinition!.Title, includeHtml: false));
+            }
+        }
+        return Result.Success<IReadOnlyList<IssuedFormDto>>(visible);
+    }
 
     public async Task<Result<IssuedFormDto>> CancelIssuedAsync(Guid id, string reason, CancellationToken cancellationToken = default)
     {
@@ -210,7 +239,7 @@ public sealed class FormService(
             return Result.Failure<IssuedFormDto>("VALIDATION_FAILED", "A cancellation reason is required (max 1000).");
         }
         var issued = await db.IssuedForms.Include(x => x.FormDefinition).FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (issued is null)
+        if (issued is null || !await SubjectVisibleAsync(issued.SubjectType, issued.SubjectId, cancellationToken))
         {
             return IssuedNotFound();
         }

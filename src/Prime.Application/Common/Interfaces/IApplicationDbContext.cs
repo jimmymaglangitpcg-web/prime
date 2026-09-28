@@ -86,6 +86,13 @@ public interface IApplicationDbContext
     DbSet<NoticeOfAssessmentItem> NoticeOfAssessmentItems { get; }
     /// <summary>Read by forms and approvals for signatory names.</summary>
     DbSet<AppUser> AppUsers { get; }
+    DbSet<Role> Roles { get; }
+    // Offices and jurisdiction (docs/analysis/province-wide-operation.md)
+    DbSet<Prime.Domain.Entities.Offices.Office> Offices { get; }
+    DbSet<Prime.Domain.Entities.Offices.OfficeJurisdiction> OfficeJurisdictions { get; }
+    DbSet<Prime.Domain.Entities.Offices.OfficeAssignment> OfficeAssignments { get; }
+    DbSet<Prime.Domain.Entities.Offices.OfficeAssignmentRole> OfficeAssignmentRoles { get; }
+    DbSet<Prime.Domain.Entities.Offices.ApprovalDelegation> ApprovalDelegations { get; }
     DbSet<BarangayBoundary> BarangayBoundaries { get; }
     DbSet<SectionBoundary> SectionBoundaries { get; }
     DbSet<ZoneBoundary> ZoneBoundaries { get; }

@@ -12,8 +12,26 @@ public sealed class TaxpayerService(
     IApplicationDbContext db,
     IValidator<CreateTaxpayerRequest> createValidator,
     IValidator<AddPropertyOwnerRequest> addOwnerValidator,
-    ICurrentUserService currentUser) : ITaxpayerService
+    ICurrentUserService currentUser,
+    IJurisdiction jurisdiction) : ITaxpayerService
 {
+    /// <summary>
+    /// Taxpayers are one provincial registry (docs/analysis/province-wide-operation.md Q5). A restricted
+    /// user sees a taxpayer in full only when they are a party to a property in the user's jurisdiction
+    /// (the party links are filtered by jurisdiction). Anyone else, including a taxpayer not yet linked to
+    /// any property, shows name and TIN only: enough to link them. Note: IgnoreQueryFilters in a subquery
+    /// would lift every filter of the whole query, so none is used here.
+    /// </summary>
+    private IQueryable<Taxpayer> FullyVisible(IQueryable<Taxpayer> query) => !jurisdiction.Restricted
+        ? query
+        : query.Where(t => db.PropertyTaxpayers.Any(pt => pt.TaxpayerId == t.Id));
+
+    private async Task<bool> IsFullyVisibleAsync(Guid taxpayerId, CancellationToken ct) =>
+        !jurisdiction.Restricted || await FullyVisible(db.Taxpayers).AnyAsync(t => t.Id == taxpayerId, ct);
+
+    /// <summary>Name and TIN only, so an existing owner is linked rather than registered twice (Q5; CLAUDE.md §61, §68).</summary>
+    private static TaxpayerDto Limited(TaxpayerDto dto) => dto with { Address = null, ContactNumber = null, Email = null, Limited = true };
+
     public async Task<Result<TaxpayerDto>> CreateAsync(CreateTaxpayerRequest request, CancellationToken cancellationToken = default)
     {
         var validation = await createValidator.ValidateAsync(request, cancellationToken);
@@ -49,25 +67,37 @@ public sealed class TaxpayerService(
     public async Task<Result<TaxpayerDto>> GetByIdAsync(Guid taxpayerId, CancellationToken cancellationToken = default)
     {
         var taxpayer = await db.Taxpayers.FirstOrDefaultAsync(t => t.Id == taxpayerId, cancellationToken);
-        return taxpayer is null
-            ? Result.Failure<TaxpayerDto>("TAXPAYER_NOT_FOUND", "No taxpayer was found with the given id.")
-            : Result.Success(ProjectToDto(taxpayer));
+        if (taxpayer is null)
+        {
+            return Result.Failure<TaxpayerDto>("TAXPAYER_NOT_FOUND", "No taxpayer was found with the given id.");
+        }
+        var dto = ProjectToDto(taxpayer);
+        return Result.Success(await IsFullyVisibleAsync(taxpayerId, cancellationToken) ? dto : Limited(dto));
     }
 
     public async Task<Result<PagedResult<TaxpayerDto>>> SearchAsync(TaxpayerSearchRequest request, CancellationToken cancellationToken = default)
     {
         var query = db.Taxpayers.AsQueryable();
+        var term = string.IsNullOrWhiteSpace(request.SearchTerm) ? null : request.SearchTerm.Trim().ToLower();
 
-        if (!string.IsNullOrWhiteSpace(request.SearchTerm))
+        if (term is not null)
         {
             // .ToLower().Contains() (not EF.Functions.ILike) — keeps
             // Application decoupled from the Npgsql-specific provider.
-            var term = request.SearchTerm.Trim().ToLower();
             query = query.Where(t =>
                 (t.LastName != null && t.LastName.ToLower().Contains(term)) ||
                 (t.FirstName != null && t.FirstName.ToLower().Contains(term)) ||
                 (t.CorporateName != null && t.CorporateName.ToLower().Contains(term)) ||
                 (t.Tin != null && t.Tin.ToLower().Contains(term)));
+        }
+        if (jurisdiction.Restricted)
+        {
+            // Outside the jurisdiction only an exact TIN or surname/corporate-name match is found (Q5).
+            var visible = FullyVisible(db.Taxpayers);
+            query = query.Where(t => visible.Any(v => v.Id == t.Id)
+                || (term != null && ((t.Tin != null && t.Tin.ToLower() == term)
+                    || (t.LastName != null && t.LastName.ToLower() == term)
+                    || (t.CorporateName != null && t.CorporateName.ToLower() == term))));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -77,10 +107,14 @@ public sealed class TaxpayerService(
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
+        var ids = items.Select(t => t.Id).ToList();
+        var full = jurisdiction.Restricted
+            ? (await FullyVisible(db.Taxpayers).Where(t => ids.Contains(t.Id)).Select(t => t.Id).ToListAsync(cancellationToken)).ToHashSet()
+            : ids.ToHashSet();
 
         return Result.Success(new PagedResult<TaxpayerDto>
         {
-            Items = items.Select(ProjectToDto).ToList(),
+            Items = items.Select(t => full.Contains(t.Id) ? ProjectToDto(t) : Limited(ProjectToDto(t))).ToList(),
             TotalCount = totalCount,
             Page = request.Page,
             PageSize = request.PageSize,

@@ -33,7 +33,7 @@ public interface IRegisterService
 /// A run records only its kind, scope and date; the rows come from the form
 /// data provider, and printing the run freezes them.
 /// </summary>
-public sealed class RegisterService(IApplicationDbContext db) : IRegisterService
+public sealed class RegisterService(IApplicationDbContext db, IJurisdiction jurisdiction) : IRegisterService
 {
     /// <summary>The form each register kind prints with (seeded MRPAAO layouts).</summary>
     public static string FormCode(RegisterKind kind) => kind switch
@@ -80,9 +80,17 @@ public sealed class RegisterService(IApplicationDbContext db) : IRegisterService
         {
             return Fail("VALIDATION_FAILED", "The Record of Assessment is kept by classification: name the classification.");
         }
-        if (barangayId is { } b && !await db.Barangays.AnyAsync(x => x.Id == b, cancellationToken))
+        if (barangayId is { } b)
         {
-            return Fail("BARANGAY_NOT_FOUND", "The specified barangay does not exist.");
+            var municipalityId = await db.Barangays.Where(x => x.Id == b).Select(x => (Guid?)x.MunicipalityId).FirstOrDefaultAsync(cancellationToken);
+            if (municipalityId is null)
+            {
+                return Fail("BARANGAY_NOT_FOUND", "The specified barangay does not exist.");
+            }
+            if (!jurisdiction.Allows(municipalityId.Value))
+            {
+                return Fail(JurisdictionErrors.Code, JurisdictionErrors.Message);
+            }
         }
         if (r.ClassificationId is { } c && !await db.Classifications.AnyAsync(x => x.Id == c, cancellationToken))
         {

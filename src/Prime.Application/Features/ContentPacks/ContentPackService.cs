@@ -216,9 +216,11 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
             await PreviewLookupAsync(work, files, cancellationToken);
         }
         CheckRequiredPropertyTypes(files, await db.PropertyTypes.AsNoTracking().Select(x => x.Code).ToListAsync(cancellationToken));
+        var newMunicipalities = files.Where(f => f.Entry.Kind == ContentFileKinds.Municipalities)
+            .SelectMany(f => f.Plan.Where(p => p.IsNew).Select(p => p.Key)).ToHashSet(StringComparer.Ordinal);
         foreach (var work in files.Where(f => f.Bytes is not null))
         {
-            await PreviewVersionedAsync(pack, work, cancellationToken);
+            await PreviewVersionedAsync(pack, work, newMunicipalities, cancellationToken);
         }
         // Map layers last: they may refer to barangays, zones and road types the pack adds.
         foreach (var work in files.Where(f => f.Geo is not null))
@@ -434,7 +436,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
                         provinceIndex[psgc] = index;
                     }
                     if (existing is { PinIndexNumber: { } current } && index is not null && index != current
-                        && await db.PinAssignments.AnyAsync(a => a.Kind == PinKind.Permanent && a.Barangay!.Municipality!.ProvinceId == existing.Id, ct))
+                        && await db.PinAssignments.IgnoreQueryFilters().AnyAsync(a => a.Kind == PinKind.Permanent && a.Barangay!.Municipality!.ProvinceId == existing.Id, ct))
                     {
                         provFile.Issues.Add(Error("PIN_INDEX_LOCKED", $"Province {psgc}: index number {current} is part of permanent PINs already issued and cannot change.", row.Line, "index_number"));
                     }
@@ -475,7 +477,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
                 Tally(munFile, row, psgc, name, existing is null, changes);
                 municipalityIndex[psgc] = (parent, index ?? (existing?.PinIndexNumber));
                 if (existing is { PinIndexNumber: { } current } && index is not null && index != current
-                    && await db.PinAssignments.AnyAsync(a => a.Kind == PinKind.Permanent && a.Barangay!.MunicipalityId == existing.Id, ct))
+                    && await db.PinAssignments.IgnoreQueryFilters().AnyAsync(a => a.Kind == PinKind.Permanent && a.Barangay!.MunicipalityId == existing.Id, ct))
                 {
                     munFile.Issues.Add(Error("PIN_INDEX_LOCKED", $"Municipality {psgc}: index number {current} is part of permanent PINs already issued and cannot change.", row.Line, "index_number"));
                 }
@@ -548,7 +550,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
                 Tally(brgyFile, row, psgc, name, existing is null, changes);
                 barangayIndex[psgc] = (parent, existing?.CityDistrictId, index ?? existing?.PinIndexNumber);
                 if (existing is { PinIndexNumber: { } current } && index is not null && index != current
-                    && await db.PinAssignments.AnyAsync(a => a.Kind == PinKind.Permanent && a.BarangayId == existing.Id, ct))
+                    && await db.PinAssignments.IgnoreQueryFilters().AnyAsync(a => a.Kind == PinKind.Permanent && a.BarangayId == existing.Id, ct))
                 {
                     brgyFile.Issues.Add(Error("PIN_INDEX_LOCKED", $"Barangay {psgc}: index number {current} is part of permanent PINs already issued and cannot change.", row.Line, "index_number"));
                 }
@@ -650,17 +652,23 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         work.Missing.AddRange(existing.Where(x => !work.Valid.ContainsKey(x.Code) && !Listed(work, x.Code)).Select(x => $"{x.Code} {x.Name}"));
     }
 
-    /// <summary>Step C3: transaction types, numbering schemes, approval chains and forms (<see cref="ContentPackVersionedContent"/>).</summary>
-    private async Task PreviewVersionedAsync(string pack, FileWork work, CancellationToken ct)
+    /// <summary>
+    /// Step C3: transaction types, numbering schemes, approval chains and forms; step LP-1: offices
+    /// (<see cref="ContentPackVersionedContent"/>).
+    /// </summary>
+    private async Task PreviewVersionedAsync(string pack, FileWork work, IReadOnlySet<string> newMunicipalities, CancellationToken ct)
     {
-        var r = await versioned.PreviewAsync(work.Entry.Kind, work.Entry.Path, work.Bytes!, work.Entry.Source, p => source.ReadAsync(pack, p, ct), ct);
+        var r = await versioned.PreviewAsync(work.Entry.Kind, work.Entry.Path, work.Bytes!, work.Entry.Source, p => source.ReadAsync(pack, p, ct), ct,
+            newMunicipalities);
         work.Issues.AddRange(r.Issues);
         work.Versions.AddRange(r.Versions);
         work.Referenced.AddRange(r.Referenced);
         work.ItemCount = r.Items;
-        work.New = r.Versions.Count;
+        work.New = r.Versions.Count(v => v.Action == ContentImportAction.Created);
+        work.Changed = r.Versions.Count(v => v.Action == ContentImportAction.Changed);
         work.Unchanged = r.Unchanged;
-        work.Changes.AddRange(r.Versions.Take(ChangeListLimit).Select(v => new ContentChangeDto(v.Key, v.Name, ContentChangeAction.New, v.Changes)));
+        work.Changes.AddRange(r.Versions.Take(ChangeListLimit).Select(v => new ContentChangeDto(v.Key, v.Name,
+            v.Action == ContentImportAction.Changed ? ContentChangeAction.Changed : ContentChangeAction.New, v.Changes)));
     }
 
     /// <summary>

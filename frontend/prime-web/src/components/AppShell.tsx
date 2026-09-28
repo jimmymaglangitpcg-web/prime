@@ -1,9 +1,10 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Alert, Layout, Menu, Switch, Tooltip, Typography } from 'antd';
-import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined, NumberOutlined, CloudUploadOutlined } from '@ant-design/icons';
+import { Alert, Layout, Menu, Select, Tag, Tooltip, Typography } from 'antd';
+import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined, NumberOutlined, CloudUploadOutlined, ApartmentOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { devActAsAvailable, isActingAsChecker, setActingAsChecker, subscribeActingAsChecker } from '../lib/devActAs';
+import { devActAsAvailable, getDevActAs, setDevActAs, subscribeDevActAs } from '../lib/devActAs';
+import { useCurrentUser, useDevUsers } from '../api/offices';
 
 const { Header, Sider, Content } = Layout;
 
@@ -15,6 +16,7 @@ const navItems = [
   { key: '/sworn-statements', icon: <AuditOutlined />, label: 'Sworn Statements' },
   { key: '/registers', icon: <BookOutlined />, label: 'Registers' },
   { key: '/collection', icon: <DollarOutlined />, label: 'Collection' },
+  { key: '/admin/offices', icon: <ApartmentOutlined />, label: 'Offices' },
   { key: '/admin/property-identification', icon: <NumberOutlined />, label: 'Property Identification' },
   { key: '/admin/valuation', icon: <CalculatorOutlined />, label: 'Valuation Rules' },
   { key: '/admin/forms', icon: <FileTextOutlined />, label: 'Forms & Numbering' },
@@ -68,14 +70,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         />
       </Sider>
       <Layout>
-        <Header style={{ background: '#fff', padding: narrow ? '0 16px 0 56px' : '0 24px', display: 'flex', alignItems: 'center', borderBottom: '1px solid #f0f0f0', minWidth: 0 }}>
-          <Typography.Title level={4} ellipsis={{ tooltip: true }} style={{ margin: 0, minWidth: 0 }}>
+        <Header style={{ background: '#fff', padding: narrow ? '0 16px 0 56px' : '0 24px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #f0f0f0', minWidth: 0 }}>
+          <Typography.Title level={4} ellipsis={{ tooltip: true }} style={{ margin: 0, minWidth: 0, flex: '1 1 auto' }}>
             {narrow ? 'PRIME' : 'Property Registry, Information, Mapping & Evaluation System'}
           </Typography.Title>
-          {devActAsAvailable && <DevCheckerSwitch />}
+          {!narrow && <CurrentOffice />}
+          {devActAsAvailable && <DevUserPicker />}
         </Header>
         <Content style={{ margin: narrow ? 16 : 24, minWidth: 0 }}>
-          {devActAsAvailable && <DevCheckerBanner />}
+          {devActAsAvailable && <DevActAsBanner />}
           {children}
         </Content>
       </Layout>
@@ -83,25 +86,45 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-const useActingAsChecker = () => useSyncExternalStore(subscribeActingAsChecker, isActingAsChecker);
-
-/** Development only: switch to the second development user to try approvals (docs/analysis/value-and-assess.md §4). */
-function DevCheckerSwitch() {
-  const acting = useActingAsChecker();
-  const queryClient = useQueryClient();
+/** The signed-in user's office (docs/analysis/province-wide-operation.md §3.2). */
+function CurrentOffice() {
+  const me = useCurrentUser();
+  if (!me.data) return null;
+  const { displayName, officeName, provinceWide, assigned } = me.data;
+  const label = !assigned ? 'No office' : officeName ?? (provinceWide ? 'Province-wide' : '');
   return (
-    <Tooltip title="Development only: act as the second development user, to approve what the usual user created.">
-      <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap', fontSize: 12 }}>
-        <Switch size="small" checked={acting} aria-label="Act as checker"
-          onChange={(v) => { setActingAsChecker(v); queryClient.invalidateQueries(); }} /> Act as checker (dev)
-      </span>
+    <Tooltip title={`${displayName ?? ''}${me.data.roles.length ? ` · ${me.data.roles.join(', ')}` : ''}`}>
+      <Tag color={assigned ? 'blue' : 'orange'} style={{ marginInlineEnd: 0, whiteSpace: 'nowrap', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {label}
+      </Tag>
     </Tooltip>
   );
 }
 
-function DevCheckerBanner() {
-  return useActingAsChecker()
-    ? <Alert type="warning" showIcon banner style={{ marginBottom: 16 }} title="Acting as DEV CHECKER — development only; requests are made as the second development user." />
-    : null;
+const useDevActAs = () => useSyncExternalStore(subscribeDevActAs, getDevActAs);
+
+/** Development only: act as one of the API's DEMO users, e.g. a municipal appraiser or the approving checker (Q13). */
+function DevUserPicker() {
+  const actingAs = useDevActAs();
+  const users = useDevUsers(true);
+  const queryClient = useQueryClient();
+  return (
+    <Tooltip title="Development only: act as another DEMO user to try offices and approvals.">
+      <Select size="small" style={{ width: 190 }} aria-label="Act as DEMO user" value={actingAs ?? ''}
+        onChange={(v: string) => { setDevActAs(v || null); queryClient.invalidateQueries(); }}
+        options={[
+          { value: '', label: 'Dev: usual user' },
+          ...(users.data ?? []).filter((u) => u.key !== 'admin').map((u) => ({ value: u.key, label: `Dev: ${u.displayName}` })),
+        ]} />
+    </Tooltip>
+  );
 }
 
+function DevActAsBanner() {
+  const actingAs = useDevActAs();
+  const users = useDevUsers(!!actingAs);
+  const name = users.data?.find((u) => u.key === actingAs)?.displayName ?? actingAs;
+  return actingAs
+    ? <Alert type="warning" showIcon banner style={{ marginBottom: 16 }} title={`Acting as ${name} — development only; requests are made as that DEMO user.`} />
+    : null;
+}

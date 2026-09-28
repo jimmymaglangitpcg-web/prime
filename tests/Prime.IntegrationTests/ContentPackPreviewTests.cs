@@ -94,6 +94,8 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
             (files[kind].New, files[kind].Rows).ShouldBe((1, 1)); // one Draft version each, from one catalogue item
         }
         files["forms"].Changes.Single().Fields.ShouldContain(f => f.Field == "template" && f.From == null);
+        // The office and its two jurisdictions; its towns are new in the same pack.
+        (files["offices"].Rows, files["offices"].New).ShouldBe((1, 3));
         // The layer's barangays are new in the same pack: they count as existing in the dry run.
         (files["gis-layer"].Layer, files["gis-layer"].Rows, files["gis-layer"].New).ShouldBe(("barangays", 2, 2));
         files.Values.ShouldAllBe(f => f.Sha256 != null && f.Supported);

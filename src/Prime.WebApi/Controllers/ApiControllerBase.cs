@@ -28,6 +28,8 @@ public abstract class ApiControllerBase : ControllerBase
         var statusCode = result.Code switch
         {
             not null when result.Code.EndsWith("_NOT_FOUND") => StatusCodes.Status404NotFound,
+            // Outside the user's jurisdiction (docs/analysis/province-wide-operation.md §3.3).
+            not null when result.Code.EndsWith("_FORBIDDEN") => StatusCodes.Status403Forbidden,
             not null when result.Code.EndsWith("_DUPLICATE") => StatusCodes.Status409Conflict,
             not null when result.Code.Contains("EXCEEDS") => StatusCodes.Status409Conflict,
             not null when result.Code.EndsWith("_CONFLICT") => StatusCodes.Status409Conflict,

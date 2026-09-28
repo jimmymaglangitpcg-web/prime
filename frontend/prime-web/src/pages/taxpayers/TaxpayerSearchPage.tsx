@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Input, Space, Table, Typography } from 'antd';
+import { Button, Input, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTaxpayerSearch } from '../../api/taxpayers';
@@ -47,7 +47,18 @@ export function TaxpayerSearchPage() {
           showSizeChanger: false,
         }}
         columns={[
-          { title: 'Name', dataIndex: 'displayName' },
+          {
+            title: 'Name', dataIndex: 'displayName', render: (name: string, t) => (
+              <Space size={4} wrap>
+                {name}
+                {t.limited && (
+                  <Tooltip title="Not a party to a property in your office's jurisdiction: only the name and TIN are shown, enough to link the existing record instead of registering it twice.">
+                    <Tag>other jurisdiction</Tag>
+                  </Tooltip>
+                )}
+              </Space>
+            ),
+          },
           { title: 'Type', dataIndex: 'taxpayerType' },
           { title: 'TIN', dataIndex: 'tin' },
           { title: 'Contact', dataIndex: 'contactNumber' },

@@ -38,12 +38,16 @@ public static class ContentFileKinds
     public const string ApprovalChains = "approval-chains";
     public const string Forms = "forms";
     public const string GisLayer = "gis-layer";
+    public const string Offices = "offices";
 
     /// <summary>CSV tables (step C1–C2).</summary>
     public static readonly IReadOnlySet<string> Csv = new HashSet<string> { Provinces, Municipalities, Barangays, Lookup };
 
-    /// <summary>JSON catalogues of versioned configuration, imported as Draft versions (step C3).</summary>
-    public static readonly IReadOnlySet<string> Versioned = new HashSet<string> { TransactionTypes, NumberingSchemes, ApprovalChains, Forms };
+    /// <summary>
+    /// JSON catalogues of versioned configuration, imported as Draft versions (step C3); offices from step LP-1
+    /// (office records apply on import, their jurisdictions arrive as drafts).
+    /// </summary>
+    public static readonly IReadOnlySet<string> Versioned = new HashSet<string> { TransactionTypes, NumberingSchemes, ApprovalChains, Forms, Offices };
 
     /// <summary>Kinds PRIME reads and imports; GeoJSON map layers from step C5.</summary>
     public static readonly IReadOnlySet<string> Supported = Csv.Union(Versioned).Append(GisLayer).ToHashSet();

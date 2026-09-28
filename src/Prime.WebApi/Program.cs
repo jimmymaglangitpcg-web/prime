@@ -68,6 +68,8 @@ if (useDevAuthBypass)
         .AddScheme<DevelopmentAuthOptions, DevelopmentAuthenticationHandler>(
             DevelopmentAuthenticationHandler.SchemeName,
             options => builder.Configuration.GetSection("DevAuth").Bind(options));
+    // DEMO offices and office assignments for the DEMO users (docs/analysis/province-wide-operation.md Q11, Q13).
+    builder.Services.AddHostedService<DevOfficeSeeder>();
 }
 else
 {
@@ -132,8 +134,17 @@ app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<AppUserProvisioningMiddleware>();
+app.UseMiddleware<JurisdictionMiddleware>();
 
 app.MapControllers();
+
+if (useDevAuthBypass)
+{
+    // Development only: the DEMO users the header switch can act as (Q13).
+    app.MapGet("/api/dev/users", (Microsoft.Extensions.Options.IOptionsMonitor<DevelopmentAuthOptions> options) =>
+            options.Get(DevelopmentAuthenticationHandler.SchemeName).EffectiveUsers.Select(u => new { u.Key, u.DisplayName, u.Office, u.Roles }))
+        .RequireAuthorization();
+}
 
 app.MapHealthChecks("/health", new HealthCheckOptions
 {

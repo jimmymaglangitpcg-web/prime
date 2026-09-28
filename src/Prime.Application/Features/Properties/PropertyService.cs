@@ -10,7 +10,8 @@ using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.Properties;
 
-public sealed class PropertyService(IApplicationDbContext db, IValidator<CreatePropertyRequest> validator, INumberingService numbering, IClock clock) : IPropertyService
+public sealed class PropertyService(IApplicationDbContext db, IValidator<CreatePropertyRequest> validator, INumberingService numbering, IClock clock,
+    IJurisdiction jurisdiction) : IPropertyService
 {
     public async Task<Result<PropertyDto>> CreateAsync(CreatePropertyRequest request, CancellationToken cancellationToken = default)
     {
@@ -27,6 +28,10 @@ public sealed class PropertyService(IApplicationDbContext db, IValidator<CreateP
         if (!await db.Municipalities.AnyAsync(x => x.Id == request.MunicipalityId && x.ProvinceId == request.ProvinceId, cancellationToken))
         {
             return Result.Failure<PropertyDto>("MUNICIPALITY_NOT_FOUND", "The specified municipality does not exist within the specified province.");
+        }
+        if (!jurisdiction.Allows(request.MunicipalityId))
+        {
+            return Result.Failure<PropertyDto>(JurisdictionErrors.Code, JurisdictionErrors.Message);
         }
         if (!await db.Barangays.AnyAsync(x => x.Id == request.BarangayId && x.MunicipalityId == request.MunicipalityId, cancellationToken))
         {
@@ -70,8 +75,9 @@ public sealed class PropertyService(IApplicationDbContext db, IValidator<CreateP
         {
             return Result.Failure<PropertyDto>(pin.Code!, pin.Message!);
         }
-        if (await db.Properties.AnyAsync(p => p.PropertyIdentificationNumber == pin.Value, cancellationToken)
-            || await db.PinAssignments.AnyAsync(p => p.Pin == pin.Value, cancellationToken))
+        // PINs are unique across the province, whoever's jurisdiction holds them.
+        if (await db.Properties.IgnoreQueryFilters().AnyAsync(p => p.PropertyIdentificationNumber == pin.Value, cancellationToken)
+            || await db.PinAssignments.IgnoreQueryFilters().AnyAsync(p => p.Pin == pin.Value, cancellationToken))
         {
             return Result.Failure<PropertyDto>("PROPERTY_PIN_DUPLICATE", $"PIN '{pin.Value}' has already been given; PINs are never reused.");
         }

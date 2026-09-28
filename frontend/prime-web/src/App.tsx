@@ -20,6 +20,7 @@ import { FormsAdminPage } from './pages/admin/FormsAdminPage';
 import { CollectionSetupPage } from './pages/admin/CollectionSetupPage';
 import { PropertyIdentificationPage } from './pages/admin/PropertyIdentificationPage';
 import { ContentPacksPage } from './pages/admin/ContentPacksPage';
+import { OfficesPage } from './pages/admin/OfficesPage';
 import { CollectionPage } from './pages/collection/CollectionPage';
 import { PaymentWorkspacePage } from './pages/collection/PaymentWorkspacePage';
 
@@ -62,6 +63,7 @@ export default function App() {
         <Route path="/admin/collection" element={<CollectionSetupPage />} />
         <Route path="/admin/property-identification" element={<PropertyIdentificationPage />} />
         <Route path="/admin/content-packs" element={<ContentPacksPage />} />
+        <Route path="/admin/offices" element={<OfficesPage />} />
         <Route path="/collection" element={<CollectionPage />} />
         <Route path="/collection/pay" element={<PaymentWorkspacePage />} />
       </Routes>

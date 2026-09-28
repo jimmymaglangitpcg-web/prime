@@ -201,6 +201,8 @@ export interface TaxpayerDto {
   email: string | null;
   status: RecordStatus;
   createdAt: string;
+  /** Not a party to a property in your office's jurisdiction: name and TIN only (docs/analysis/province-wide-operation.md Q5). */
+  limited?: boolean;
 }
 
 export interface TaxpayerSearchParams {

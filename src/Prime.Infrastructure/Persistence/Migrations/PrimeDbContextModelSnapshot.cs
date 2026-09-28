@@ -3838,6 +3838,335 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.Offices.ApprovalDelegation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DelegatingOfficialName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("DelegatingOfficialPosition")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly>("InstrumentDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("InstrumentReference")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("OfficeId")
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<string[]>("PropertyKinds")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid?>("RenewsDelegationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RevocationReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RevokedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("RevokedFrom")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.PrimitiveCollection<string[]>("SubjectTypes")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("ValidFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("ValidTo")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RenewsDelegationId");
+
+                    b.HasIndex("OfficeId", "Status", "ValidFrom");
+
+                    b.ToTable("ApprovalDelegations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ApprovalDelegations_Approval", "(\"Status\" = 'Approved') = (\"ApprovedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ApprovalDelegations_Period", "\"ValidTo\" >= \"ValidFrom\"");
+
+                            t.HasCheckConstraint("CK_ApprovalDelegations_Revocation", "(\"RevokedFrom\" IS NULL) = (\"RevokedAt\" IS NULL) AND (\"RevokedFrom\" IS NULL OR \"Status\" = 'Approved')");
+
+                            t.HasCheckConstraint("CK_ApprovalDelegations_Subjects", "cardinality(\"SubjectTypes\") > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Offices.Office", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Contact")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("HeadPosition")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("Kind")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Offices_OneProvincial")
+                        .HasFilter("\"Kind\" = 'Provincial'");
+
+                    b.ToTable("Offices");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Offices.OfficeAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AppUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LegalBasis")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("OfficeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppUserId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_OfficeAssignments_OpenApproved")
+                        .HasFilter("\"Status\" = 'Approved' AND \"EndDate\" IS NULL");
+
+                    b.HasIndex("OfficeId");
+
+                    b.HasIndex("Status", "EffectiveDate");
+
+                    b.ToTable("OfficeAssignments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_OfficeAssignments_Approval", "(\"Status\" IN ('Approved', 'Posted')) = (\"ApprovedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_OfficeAssignments_EndDate", "\"EndDate\" IS NULL OR \"EndDate\" >= \"EffectiveDate\"");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Offices.OfficeAssignmentRole", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OfficeAssignmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("OfficeAssignmentId", "RoleId")
+                        .IsUnique();
+
+                    b.ToTable("OfficeAssignmentRoles");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Offices.OfficeJurisdiction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LegalBasis")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("MunicipalityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OfficeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MunicipalityId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_OfficeJurisdictions_OpenApproved")
+                        .HasFilter("\"Status\" = 'Approved' AND \"EndDate\" IS NULL");
+
+                    b.HasIndex("OfficeId");
+
+                    b.HasIndex("Status", "EffectiveDate");
+
+                    b.ToTable("OfficeJurisdictions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_OfficeJurisdictions_Approval", "(\"Status\" IN ('Approved', 'Posted')) = (\"ApprovedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_OfficeJurisdictions_EndDate", "\"EndDate\" IS NULL OR \"EndDate\" >= \"EffectiveDate\"");
+                        });
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Parcel", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8051,6 +8380,76 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Assessment");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.Offices.ApprovalDelegation", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Offices.Office", "Office")
+                        .WithMany()
+                        .HasForeignKey("OfficeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Offices.ApprovalDelegation", null)
+                        .WithMany()
+                        .HasForeignKey("RenewsDelegationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Office");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Offices.OfficeAssignment", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Identity.AppUser", "AppUser")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Offices.Office", "Office")
+                        .WithMany()
+                        .HasForeignKey("OfficeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AppUser");
+
+                    b.Navigation("Office");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Offices.OfficeAssignmentRole", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Offices.OfficeAssignment", null)
+                        .WithMany("Roles")
+                        .HasForeignKey("OfficeAssignmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Identity.Role", "Role")
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Offices.OfficeJurisdiction", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.Municipality", "Municipality")
+                        .WithMany()
+                        .HasForeignKey("MunicipalityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Offices.Office", "Office")
+                        .WithMany()
+                        .HasForeignKey("OfficeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Municipality");
+
+                    b.Navigation("Office");
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Parcel", b =>
                 {
                     b.HasOne("Prime.Domain.Entities.Reference.Barangay", "Barangay")
@@ -8853,6 +9252,11 @@ namespace Prime.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Prime.Domain.Entities.Notices.NoticeOfAssessment", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Offices.OfficeAssignment", b =>
+                {
+                    b.Navigation("Roles");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.SwornStatements.SwornStatement", b =>

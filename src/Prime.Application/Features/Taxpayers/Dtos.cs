@@ -31,7 +31,8 @@ public sealed record TaxpayerDto(
     string? ContactNumber,
     string? Email,
     RecordStatus Status,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    bool Limited = false);
 
 public sealed class TaxpayerSearchRequest : Common.PagedRequest
 {

@@ -1,36 +1,43 @@
 /**
- * Development only: act as the second development user ("Local Dev Checker"),
- * so maker-checker approvals can be tried on screen
- * (docs/analysis/value-and-assess.md §4). The API honours the header only
- * where its development login bypass is enabled; production builds never send it.
+ * Development only: act as one of the API's named DEMO users (for example the
+ * DEMO municipal appraiser, or the "checker" who approves what the usual user
+ * created), so offices and maker-checker can be tried on screen
+ * (docs/analysis/province-wide-operation.md Q13). The API honours the header
+ * only where its development login bypass is enabled; production builds never send it.
  */
 export const devActAsAvailable = import.meta.env.DEV;
 
-const storageKey = 'prime.devActAsChecker';
-let actingAsChecker = false;
+const storageKey = 'prime.devActAs';
+const legacyKey = 'prime.devActAsChecker';
+let actingAs: string | null = null;
 try {
-  actingAsChecker = devActAsAvailable && window.localStorage.getItem(storageKey) === 'true';
+  if (devActAsAvailable) {
+    actingAs = window.localStorage.getItem(storageKey) || (window.localStorage.getItem(legacyKey) === 'true' ? 'checker' : null);
+  }
 } catch {
   // Storage can be unavailable (private window, blocked site data): start as the usual user.
 }
 
 const listeners = new Set<() => void>();
 
-export function isActingAsChecker(): boolean {
-  return devActAsAvailable && actingAsChecker;
+/** The DEMO user key to act as; null for the usual development user. */
+export function getDevActAs(): string | null {
+  return devActAsAvailable ? actingAs : null;
 }
 
-export function setActingAsChecker(value: boolean): void {
-  actingAsChecker = devActAsAvailable && value;
+export function setDevActAs(key: string | null): void {
+  actingAs = devActAsAvailable ? key : null;
   try {
-    window.localStorage.setItem(storageKey, String(actingAsChecker));
+    if (actingAs) window.localStorage.setItem(storageKey, actingAs);
+    else window.localStorage.removeItem(storageKey);
+    window.localStorage.removeItem(legacyKey);
   } catch {
     // Remembering the choice is a convenience only.
   }
   listeners.forEach((listener) => listener());
 }
 
-export function subscribeActingAsChecker(listener: () => void): () => void {
+export function subscribeDevActAs(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }

@@ -119,7 +119,8 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         {
             return Result.Failure<TaxDeclarationDto>(number.Code!, number.Message!);
         }
-        if (await db.TaxDeclarations.AnyAsync(td => td.TaxDeclarationNumber == number.Value, cancellationToken))
+        // TD numbers are unique across the province, whoever's jurisdiction holds them.
+        if (await db.TaxDeclarations.IgnoreQueryFilters().AnyAsync(td => td.TaxDeclarationNumber == number.Value, cancellationToken))
         {
             return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NUMBER_DUPLICATE", $"A Tax Declaration with number '{number.Value}' already exists.");
         }

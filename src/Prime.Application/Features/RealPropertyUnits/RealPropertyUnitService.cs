@@ -29,7 +29,8 @@ public sealed class RealPropertyUnitService(IApplicationDbContext db, IValidator
         {
             return Result.Failure<RpuDto>("PROPERTY_NOT_FOUND", "No property was found with the given id.");
         }
-        if (await db.RealPropertyUnits.AnyAsync(r => r.RpuNumber == request.RpuNumber, cancellationToken))
+        // RPU numbers are unique across the province, whoever's jurisdiction holds them.
+        if (await db.RealPropertyUnits.IgnoreQueryFilters().AnyAsync(r => r.RpuNumber == request.RpuNumber, cancellationToken))
         {
             return Result.Failure<RpuDto>("RPU_NUMBER_DUPLICATE", $"An RPU with number '{request.RpuNumber}' already exists.");
         }

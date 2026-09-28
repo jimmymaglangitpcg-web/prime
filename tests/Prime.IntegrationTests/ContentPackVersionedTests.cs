@@ -190,4 +190,56 @@ public class ContentPackVersionedTests(WebApplicationFactory<Program> factory) :
         (await c.Db.FormDefinitions.AnyAsync(x => x.Code == "DEMO_CP_TPL")).ShouldBeFalse();
         Directory.Delete(root, recursive: true);
     }
+
+    [Fact]
+    public async Task Offices_ApplyOnImport_TheirJurisdictionsWaitForASecondUser_AndMistakesAreRefused()
+    {
+        var tag = Random.Shared.Next(10_000_000, 99_999_999).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var (prov, town) = ($"92{tag}", $"92{tag[..6]}01");
+        var root = TempPack("offices", new Dictionary<string, string>
+        {
+            ["manifest.json"] = """
+                { "schemaVersion": 1, "pack": "offices", "version": "O1", "files": [
+                  { "kind": "provinces", "path": "p.csv", "source": "DEMO" },
+                  { "kind": "municipalities", "path": "m.csv", "source": "DEMO" },
+                  { "kind": "offices", "path": "o.json", "source": "DEMO" } ] }
+                """,
+            ["p.csv"] = $"psgc_code,name\n{prov},DEMO Offices Province\n",
+            ["m.csv"] = $"psgc_code,province_psgc,name\n{town},{prov},DEMO Offices Town\n",
+            ["o.json"] = $$"""[ { "code": "DEMO-O-{{tag}}", "name": "DEMO Office", "kind": "Municipal", "municipalities": ["{{town}}"], "effectiveDate": "2026-01-01" } ]""",
+        });
+        var (c, scope) = await BeginAsync(root);
+        await using var _ = scope;
+
+        var preview = (await c.Packs.PreviewAsync("offices")).Value;
+        preview.CanImport.ShouldBeTrue();
+        (await c.Packs.ImportAsync("offices", new(preview.Fingerprint))).Value.Applied.ShouldBeTrue();
+        var office = await c.Db.Offices.SingleAsync(o => o.Code == $"DEMO-O-{tag}");
+        var jurisdiction = await c.Db.OfficeJurisdictions.SingleAsync(j => j.OfficeId == office.Id);
+        (jurisdiction.Status, jurisdiction.CreatedBy).ShouldBe((WorkflowStatus.Draft, c.Importer.Id));
+        var offices = c.Services.GetRequiredService<Prime.Application.Features.Offices.IOfficeService>();
+        (await offices.ApproveJurisdictionAsync(jurisdiction.Id)).Code.ShouldBe("CANNOT_APPROVE_OWN_OFFICE_JURISDICTION");
+
+        // The same pack again: the office matches and its draft is pending, so nothing new.
+        (await c.Packs.ImportAsync("offices", new((await c.Packs.PreviewAsync("offices")).Value.Fingerprint))).Value.Applied.ShouldBeFalse();
+
+        // A renamed office is a change; mistakes are refused.
+        File.WriteAllText(Path.Combine(root, "offices", "o.json"), $$"""
+            [ { "code": "DEMO-O-{{tag}}", "name": "DEMO Office renamed", "kind": "Municipal" },
+              { "code": "DEMO-O-{{tag}}", "name": "Twice", "kind": "Municipal" },
+              { "code": "DEMO-P-{{tag}}", "name": "DEMO Second province office", "kind": "Provincial" },
+              { "code": "DEMO-Q-{{tag}}", "name": "DEMO Q", "kind": "Municipal", "municipalities": ["9199999999"], "effectiveDate": "2026-01-01" },
+              { "code": "DEMO-R-{{tag}}", "name": "DEMO R", "kind": "Municipal", "municipalities": ["{{town}}"] } ]
+            """);
+        var second = (await c.Packs.PreviewAsync("offices")).Value;
+        var file = second.Files.Single(f => f.Kind == "offices");
+        file.Changes.ShouldContain(ch => ch.Action == ContentChangeAction.Changed && ch.Fields.Any(f => f.Field == "name" && f.To == "DEMO Office renamed"));
+        var codes = file.Issues.Select(i => i.Code).ToList();
+        codes.ShouldContain("DUPLICATE_KEY");
+        codes.ShouldContain("OFFICE_PROVINCIAL_DUPLICATE");
+        codes.ShouldContain("PARENT_NOT_FOUND");
+        codes.ShouldContain("DATE_INVALID");
+        second.CanImport.ShouldBeFalse();
+        Directory.Delete(root, recursive: true);
+    }
 }

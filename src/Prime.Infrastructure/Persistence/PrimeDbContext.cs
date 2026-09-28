@@ -22,8 +22,13 @@ namespace Prime.Infrastructure.Persistence;
 /// <see cref="IApplicationDbContext"/> so Application handlers depend on
 /// that interface, not this concrete EF Core type.
 /// </summary>
-public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContext(options), IApplicationDbContext
+public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infrastructure.Identity.JurisdictionState? jurisdiction = null)
+    : DbContext(options), IApplicationDbContext
 {
+    // Read by the jurisdiction query filters for every query (EF evaluates context members per query).
+    private bool JurisdictionRestricted => jurisdiction?.Restricted ?? false;
+    private List<Guid> JurisdictionMunicipalities => jurisdiction?.FilterIds ?? [];
+
     // Reference / lookup data (CLAUDE.md §27)
     public DbSet<Province> Provinces => Set<Province>();
     public DbSet<Municipality> Municipalities => Set<Municipality>();
@@ -134,6 +139,13 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
 
+    // Offices and jurisdiction (CLAUDE.md §117; docs/analysis/province-wide-operation.md)
+    public DbSet<Prime.Domain.Entities.Offices.Office> Offices => Set<Prime.Domain.Entities.Offices.Office>();
+    public DbSet<Prime.Domain.Entities.Offices.OfficeJurisdiction> OfficeJurisdictions => Set<Prime.Domain.Entities.Offices.OfficeJurisdiction>();
+    public DbSet<Prime.Domain.Entities.Offices.OfficeAssignment> OfficeAssignments => Set<Prime.Domain.Entities.Offices.OfficeAssignment>();
+    public DbSet<Prime.Domain.Entities.Offices.OfficeAssignmentRole> OfficeAssignmentRoles => Set<Prime.Domain.Entities.Offices.OfficeAssignmentRole>();
+    public DbSet<Prime.Domain.Entities.Offices.ApprovalDelegation> ApprovalDelegations => Set<Prime.Domain.Entities.Offices.ApprovalDelegation>();
+
     // Documents (CLAUDE.md §59; Supabase Storage backed)
     public DbSet<Document> Documents => Set<Document>();
 
@@ -147,7 +159,39 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options) : DbContex
         modelBuilder.HasPostgresExtension("btree_gist");
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PrimeDbContext).Assembly);
+        ApplyJurisdictionFilters(modelBuilder);
 
         base.OnModelCreating(modelBuilder);
+    }
+
+    /// <summary>
+    /// Records belong to a municipality (docs/analysis/province-wide-operation.md §3.3, Q3):
+    /// the property's, for everything that hangs off a property. A restricted
+    /// request sees only its municipalities; everyone else sees all. Uniqueness
+    /// checks that must see the whole province use <c>IgnoreQueryFilters()</c>.
+    /// The frozen treasury tables are not filtered (CLAUDE.md §0).
+    /// </summary>
+    private void ApplyJurisdictionFilters(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PropertyEntity>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
+        modelBuilder.Entity<RealPropertyUnit>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<Parcel>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<Land>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<Building>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<Machinery>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<PropertyTaxpayer>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<PinAssignment>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<Valuation>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<Assessment>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<TaxDeclaration>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<NoticeOfAssessment>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        // No navigation to its property: look the property up (a notice's items belong to its own municipality).
+        modelBuilder.Entity<NoticeOfAssessmentItem>().HasQueryFilter(x => !JurisdictionRestricted
+            || Set<PropertyEntity>().Any(p => p.Id == x.PropertyId && JurisdictionMunicipalities.Contains(p.MunicipalityId)));
+        modelBuilder.Entity<PropertyTransaction>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<Prime.Domain.Entities.SwornStatements.SwornStatement>()
+            .HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
+        modelBuilder.Entity<Prime.Domain.Entities.Registers.RegisterRun>()
+            .HasQueryFilter(x => !JurisdictionRestricted || x.BarangayId == null || JurisdictionMunicipalities.Contains(x.Barangay!.MunicipalityId));
     }
 }

@@ -10,6 +10,7 @@ using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Approvals;
 using Prime.Application.Features.Forms;
 using Prime.Application.Features.Numbering;
+using Prime.Application.Features.Offices;
 using Prime.Application.Features.Transactions;
 using Prime.Domain.Common;
 using Prime.Domain.Enums;
@@ -21,7 +22,15 @@ namespace Prime.Application.Features.ContentPacks;
 /// is the create request of the owning service; <see cref="Item"/> is the
 /// 1-based position in the JSON catalogue.
 /// </summary>
-public sealed record PlannedVersion(string Kind, string Key, string Name, int Item, object Request, IReadOnlyList<ContentFieldChangeDto> Changes, string Source);
+/// <param name="Action">Created for a new record or version; Changed when an existing record is updated in place (an office's details).</param>
+public sealed record PlannedVersion(string Kind, string Key, string Name, int Item, object Request, IReadOnlyList<ContentFieldChangeDto> Changes, string Source,
+    ContentImportAction Action = ContentImportAction.Created);
+
+/// <summary>An office's details to update (step LP-1).</summary>
+public sealed record PackOfficeUpdate(Guid OfficeId, UpdateOfficeRequest Request);
+
+/// <summary>A jurisdiction draft; the office and municipality are resolved at import, when both exist (step LP-1).</summary>
+public sealed record PackOfficeJurisdiction(string OfficeCode, string MunicipalityPsgcCode, DateOnly EffectiveDate, string LegalBasis, string? Remarks);
 
 public sealed record VersionedPreview(List<ContentIssueDto> Issues, List<PlannedVersion> Versions, List<string> Referenced, int Items, int Unchanged);
 
@@ -41,10 +50,12 @@ public sealed class ContentPackVersionedContent(
     IValidator<CreateNumberingSchemeRequest> schemeValidator,
     IValidator<CreateApprovalChainRequest> chainValidator,
     IValidator<CreateFormDefinitionRequest> formValidator,
+    IValidator<CreateOfficeRequest> officeValidator,
     ITransactionService transactions,
     INumberingService numbering,
     IApprovalChainService chains,
-    IFormService forms)
+    IFormService forms,
+    IOfficeService offices)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
 
@@ -74,8 +85,12 @@ public sealed class ContentPackVersionedContent(
     private sealed record FormItem(string? Code, string? Title, string? SubjectType, string? Authority, string? Template, string? LegalBasis,
         string? SourceReference, string? EffectiveDate, string? Remarks, string? Source);
 
+    private sealed record OfficeItem(string? Code, string? Name, string? Kind, string? HeadPosition, string? Address, string? Contact,
+        List<string>? Municipalities, string? EffectiveDate, string? LegalBasis, string? Remarks, string? Source);
+
+    /// <param name="pendingMunicipalities">PSGC codes of municipalities the same pack adds; offices may cover them.</param>
     public async Task<VersionedPreview> PreviewAsync(string kind, string path, byte[] bytes, string? fileSource,
-        Func<string, Task<Result<ContentFileRead>>> readFile, CancellationToken ct)
+        Func<string, Task<Result<ContentFileRead>>> readFile, CancellationToken ct, IReadOnlySet<string>? pendingMunicipalities = null)
     {
         var result = new VersionedPreview([], [], [], 0, 0);
         try
@@ -86,6 +101,7 @@ public sealed class ContentPackVersionedContent(
                 ContentFileKinds.NumberingSchemes => await SchemesAsync(Parse<SchemeItem>(bytes), fileSource, result, ct),
                 ContentFileKinds.ApprovalChains => await ChainsAsync(Parse<ChainItem>(bytes), fileSource, result, ct),
                 ContentFileKinds.Forms => await FormsAsync(Parse<FormItem>(bytes), fileSource, readFile, result, ct),
+                ContentFileKinds.Offices => await OfficesAsync(Parse<OfficeItem>(bytes), fileSource, pendingMunicipalities ?? new HashSet<string>(), result, ct),
                 _ => throw new InvalidOperationException($"Not a versioned kind: {kind}"),
             };
         }
@@ -103,8 +119,25 @@ public sealed class ContentPackVersionedContent(
         CreateNumberingSchemeRequest r => Map("NumberingScheme", await numbering.CreateAsync(r, ct), x => x.Id),
         CreateApprovalChainRequest r => Map("ApprovalChain", await chains.CreateAsync(r, ct), x => x.Id),
         CreateFormDefinitionRequest r => Map("FormDefinition", await forms.CreateDefinitionAsync(r, ct), x => x.Id),
+        CreateOfficeRequest r => Map("Office", await offices.CreateAsync(r, ct), x => x.Id),
+        PackOfficeUpdate r => Map("Office", await offices.UpdateAsync(r.OfficeId, r.Request, ct), x => x.Id),
+        PackOfficeJurisdiction r => await CreateJurisdictionAsync(r, ct),
         _ => throw new InvalidOperationException("Unknown planned version."),
     };
+
+    /// <summary>Resolves the office and municipality by code now that the pack's offices and geography exist.</summary>
+    private async Task<Result<(string, Guid)>> CreateJurisdictionAsync(PackOfficeJurisdiction r, CancellationToken ct)
+    {
+        var officeId = await db.Offices.Where(o => o.Code == r.OfficeCode).Select(o => (Guid?)o.Id).FirstOrDefaultAsync(ct);
+        var municipalityId = await db.Municipalities.Where(m => m.PsgcCode == r.MunicipalityPsgcCode).Select(m => (Guid?)m.Id).FirstOrDefaultAsync(ct);
+        if (officeId is null || municipalityId is null)
+        {
+            return Result.Failure<(string, Guid)>("CONTENT_PACK_IMPORT_FAILED", $"Office {r.OfficeCode} or municipality {r.MunicipalityPsgcCode} was not found at import.");
+        }
+        return Map("OfficeJurisdiction",
+            await offices.CreateJurisdictionAsync(new CreateOfficeJurisdictionRequest(officeId.Value, municipalityId.Value, r.EffectiveDate, r.LegalBasis, r.Remarks), ct),
+            x => x.Id);
+    }
 
     private static Result<(string, Guid)> Map<T>(string type, Result<T> result, Func<T, Guid> id) =>
         result.IsSuccess ? Result.Success((type, id(result.Value))) : Result.Failure<(string, Guid)>(result.Code!, result.Message!);
@@ -224,7 +257,8 @@ public sealed class ContentPackVersionedContent(
             if (Trim(x.Office) is not null)
             {
                 result.Issues.Add(Error("OFFICE_NOT_YET_SUPPORTED",
-                    $"Item {n}: approval chains per office arrive with step LP (CLAUDE.md §117); remove 'office' or wait for LP.", null, $"[{n}].office"));
+                    $"Item {n}: approval chains per office arrive with step LP-4 (docs/analysis/province-wide-operation.md §3.4); remove 'office' for now.",
+                    null, $"[{n}].office"));
                 continue;
             }
             var steps = (x.Steps ?? []).Select((s, j) => new ApprovalStepRequest(j + 1, Trim(s.StepCode) ?? "", Trim(s.Label) ?? "", Trim(s.SignatoryPosition))).ToList();
@@ -323,6 +357,127 @@ public sealed class ContentPackVersionedContent(
             if (Plan(result, scope, n, effective))
             {
                 result.Versions.Add(new PlannedVersion(ContentFileKinds.Forms, request.Code, request.Title, n, request, changes, source));
+            }
+        }
+        return result with { Items = items.Count, Unchanged = unchanged };
+    }
+
+    // --- Offices (key: office code; step LP-1, docs/analysis/province-wide-operation.md §3.1) ---
+
+    /// <summary>
+    /// An office record is created or its details updated on import. Each
+    /// municipality it covers becomes a Draft jurisdiction a second user
+    /// approves, unless the office already covers it (or a draft says so).
+    /// </summary>
+    private async Task<VersionedPreview> OfficesAsync(List<OfficeItem> items, string? fileSource, IReadOnlySet<string> pendingMunicipalities,
+        VersionedPreview result, CancellationToken ct)
+    {
+        var existing = await db.Offices.AsNoTracking().ToListAsync(ct);
+        var byCode = existing.ToDictionary(o => o.Code, StringComparer.Ordinal);
+        var jurisdictions = await db.OfficeJurisdictions.AsNoTracking().Include(j => j.Municipality).ToListAsync(ct);
+        var known = await db.Municipalities.AsNoTracking().Select(m => m.PsgcCode).ToListAsync(ct);
+        var municipalities = known.Concat(pendingMunicipalities).ToHashSet(StringComparer.Ordinal);
+        var unchanged = 0;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var covered = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var i = 0; i < items.Count; i++)
+        {
+            var (n, x) = (i + 1, items[i]);
+            var source = Trim(x.Source) ?? fileSource ?? string.Empty;
+            if (source.Length is 0 or > 500)
+            {
+                result.Issues.Add(Error("SOURCE_MISSING", $"Item {n}: cite a source (at most 500 characters) on the item or its file.", null, $"[{n}].source"));
+                continue;
+            }
+            if (!TryEnum<OfficeKind>(result, n, "kind", x.Kind, out var kind))
+            {
+                continue;
+            }
+            var request = new CreateOfficeRequest(Trim(x.Code) ?? "", Trim(x.Name) ?? "", kind, Trim(x.HeadPosition), Trim(x.Address), Trim(x.Contact));
+            if (!await ValidAsync(officeValidator, request, result, n, ct) || !Unique(result, seen, request.Code, n, "code"))
+            {
+                continue;
+            }
+
+            var planned = result.Versions.Count;
+            byCode.TryGetValue(request.Code, out var office);
+            if (office is not null && office.Kind != kind)
+            {
+                result.Issues.Add(Error("OFFICE_KIND_MISMATCH", $"Item {n}: office {request.Code} is {office.Kind} in PRIME; its kind cannot change.", null, $"[{n}].kind"));
+                continue;
+            }
+            if (office is null && kind == OfficeKind.Provincial && existing.FirstOrDefault(o => o.Kind == OfficeKind.Provincial) is { } other)
+            {
+                result.Issues.Add(Error("OFFICE_PROVINCIAL_DUPLICATE",
+                    $"Item {n}: the province already has its provincial office ({other.Code}); there is exactly one.", null, $"[{n}].code"));
+                continue;
+            }
+            var list = (x.Municipalities ?? []).Select(m => m.Trim()).ToList();
+            if (kind == OfficeKind.Provincial && list.Count > 0)
+            {
+                result.Issues.Add(Error("OFFICE_NOT_MUNICIPAL", $"Item {n}: the provincial office covers the whole province; list no municipalities.", null, $"[{n}].municipalities"));
+                continue;
+            }
+            DateOnly effective = default;
+            if (list.Count > 0 && !DateOnly.TryParseExact(Trim(x.EffectiveDate), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out effective))
+            {
+                result.Issues.Add(Error("DATE_INVALID", $"Item {n}: effectiveDate (yyyy-MM-dd) is required when the office lists municipalities; got '{x.EffectiveDate}'.",
+                    null, $"[{n}].effectiveDate"));
+                continue;
+            }
+
+            if (office is null)
+            {
+                result.Versions.Add(new PlannedVersion(ContentFileKinds.Offices, request.Code, request.Name, n, request,
+                    [new ContentFieldChangeDto("name", null, request.Name), new ContentFieldChangeDto("kind", null, kind.ToString())], source));
+            }
+            else
+            {
+                var changes = new List<ContentFieldChangeDto>();
+                Diff(changes, "name", office.Name, request.Name);
+                Diff(changes, "headPosition", office.HeadPosition, request.HeadPosition);
+                Diff(changes, "address", office.Address, request.Address);
+                Diff(changes, "contact", office.Contact, request.Contact);
+                if (changes.Count > 0)
+                {
+                    var update = new UpdateOfficeRequest(request.Name, request.HeadPosition, request.Address, request.Contact, office.Status);
+                    result.Versions.Add(new PlannedVersion(ContentFileKinds.Offices, request.Code, request.Name, n, new PackOfficeUpdate(office.Id, update),
+                        changes, source, ContentImportAction.Changed));
+                }
+            }
+
+            foreach (var psgc in list)
+            {
+                if (!municipalities.Contains(psgc))
+                {
+                    result.Issues.Add(Error("PARENT_NOT_FOUND", $"Item {n}: municipality {psgc} is neither in the pack nor in PRIME.", null, $"[{n}].municipalities"));
+                    continue;
+                }
+                if (covered.TryGetValue(psgc, out var firstItem))
+                {
+                    result.Issues.Add(Error("DUPLICATE_KEY", $"Item {n}: municipality {psgc} is also listed under item {firstItem}; one office covers a municipality.",
+                        null, $"[{n}].municipalities"));
+                    continue;
+                }
+                covered[psgc] = n;
+                var scope = jurisdictions.Where(j => j.Municipality!.PsgcCode == psgc).ToList();
+                if (office is not null && Same(scope, j => j.OfficeId == office.Id))
+                {
+                    continue; // already covered by this office, or a draft says so
+                }
+                if (!Plan(result, scope, n, effective))
+                {
+                    continue;
+                }
+                var from = Current(scope) is { } current ? existing.FirstOrDefault(o => o.Id == current.OfficeId)?.Code : null;
+                result.Versions.Add(new PlannedVersion(ContentFileKinds.Offices, $"{request.Code} {psgc}", $"{request.Name}: {psgc}", n,
+                    new PackOfficeJurisdiction(request.Code, psgc, effective, Trim(x.LegalBasis) ?? source, Trim(x.Remarks)),
+                    [new ContentFieldChangeDto("office", from, request.Code), new ContentFieldChangeDto("effectiveDate", null, effective.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))],
+                    source));
+            }
+            if (result.Versions.Count == planned)
+            {
+                unchanged++;
             }
         }
         return result with { Items = items.Count, Unchanged = unchanged };

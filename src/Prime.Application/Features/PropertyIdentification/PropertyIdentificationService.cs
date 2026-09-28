@@ -99,7 +99,7 @@ public sealed partial class PropertyIdentificationService(IApplicationDbContext 
             return Result.Failure<ProvinceIndexDto>("VALIDATION_FAILED", problem);
         }
         if (province.PinIndexNumber is not null && province.PinIndexNumber != number
-            && await db.PinAssignments.AnyAsync(a => a.Kind == PinKind.Permanent && a.Barangay!.Municipality!.ProvinceId == id, cancellationToken))
+            && await db.PinAssignments.IgnoreQueryFilters().AnyAsync(a => a.Kind == PinKind.Permanent && a.Barangay!.Municipality!.ProvinceId == id, cancellationToken))
         {
             return Result.Failure<ProvinceIndexDto>("PIN_INDEX_LOCKED", LockedMessage(province.PinIndexNumber));
         }
@@ -136,7 +136,7 @@ public sealed partial class PropertyIdentificationService(IApplicationDbContext 
             return Result.Failure<MunicipalityIndexDto>("VALIDATION_FAILED", problem);
         }
         if (municipality.PinIndexNumber is not null && municipality.PinIndexNumber != number
-            && await db.PinAssignments.AnyAsync(a => a.Kind == PinKind.Permanent && a.Barangay!.MunicipalityId == id, cancellationToken))
+            && await db.PinAssignments.IgnoreQueryFilters().AnyAsync(a => a.Kind == PinKind.Permanent && a.Barangay!.MunicipalityId == id, cancellationToken))
         {
             return Result.Failure<MunicipalityIndexDto>("PIN_INDEX_LOCKED", LockedMessage(municipality.PinIndexNumber));
         }
@@ -223,7 +223,7 @@ public sealed partial class PropertyIdentificationService(IApplicationDbContext 
             return Result.Failure<BarangayIndexDto>("VALIDATION_FAILED", problem);
         }
         if ((barangay.PinIndexNumber is not null && barangay.PinIndexNumber != number || barangay.CityDistrictId != request.CityDistrictId)
-            && await db.PinAssignments.AnyAsync(a => a.Kind == PinKind.Permanent && a.BarangayId == id, cancellationToken))
+            && await db.PinAssignments.IgnoreQueryFilters().AnyAsync(a => a.Kind == PinKind.Permanent && a.BarangayId == id, cancellationToken))
         {
             return Result.Failure<BarangayIndexDto>("PIN_INDEX_LOCKED", LockedMessage(barangay.PinIndexNumber));
         }

@@ -48,6 +48,9 @@ public static class DependencyInjection
         services.AddScoped<Features.Collection.IPaymentService, Features.Collection.PaymentService>();
         services.AddScoped<Features.Collection.ICollectionSetupService, Features.Collection.CollectionSetupService>();
         services.AddScoped<Features.Collection.ICollectionReportService, Features.Collection.CollectionReportService>();
+        services.AddScoped<Features.Offices.IOfficeContext, Features.Offices.OfficeContext>();
+        services.AddScoped<Features.Offices.IOfficeService, Features.Offices.OfficeService>();
+        services.AddScoped<Features.Offices.IApprovalDelegationService, Features.Offices.ApprovalDelegationService>();
         services.AddScoped<INumberingService, NumberingService>();
         services.AddScoped<IApprovalChainService, ApprovalChainService>();
         services.AddScoped<IFormService, FormService>();

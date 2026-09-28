@@ -32,6 +32,9 @@ public static class DependencyInjection
         services.AddScoped<CurrentUserService>();
         services.AddScoped<ICurrentUserService>(sp => sp.GetRequiredService<CurrentUserService>());
         services.AddScoped<AuditSaveChangesInterceptor>();
+        // Jurisdiction of the request (docs/analysis/province-wide-operation.md §3.3); PrimeDbContext's query filters read it.
+        services.AddScoped<JurisdictionState>();
+        services.AddScoped<IJurisdiction>(sp => sp.GetRequiredService<JurisdictionState>());
 
         services.AddDbContext<PrimeDbContext>((serviceProvider, options) =>
         {

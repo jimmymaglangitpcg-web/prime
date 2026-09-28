@@ -18,6 +18,33 @@ public class DevelopmentAuthOptions : AuthenticationSchemeOptions
     /// </summary>
     public string CheckerUserId { get; set; } = "00000000-0000-0000-0000-000000000002";
     public string CheckerDisplayName { get; set; } = "Local Dev Checker";
+
+    /// <summary>
+    /// Named DEMO users a request selects with <see cref="DevelopmentAuthenticationHandler.ActAsHeader"/> = key
+    /// (docs/analysis/province-wide-operation.md Q13). <c>DevOfficeSeeder</c> gives each one its office and roles.
+    /// Empty (the usual case, since appsettings.*.json is not in git) means <see cref="DefaultUsers"/>.
+    /// </summary>
+    public List<DevelopmentUser> Users { get; set; } = [];
+
+    public IReadOnlyList<DevelopmentUser> EffectiveUsers => Users.Count > 0 ? Users : DefaultUsers;
+
+    public static readonly IReadOnlyList<DevelopmentUser> DefaultUsers =
+    [
+        new() { Key = "admin", UserId = "00000000-0000-0000-0000-000000000001", DisplayName = "Local Dev User", Office = "province-wide", Roles = ["SYSTEM_ADMIN"] },
+        new() { Key = "checker", UserId = "00000000-0000-0000-0000-000000000002", DisplayName = "Local Dev Checker", Office = "provincial", Roles = ["ASSESSOR"] },
+        new() { Key = "mun-appraiser", UserId = "00000000-0000-0000-0000-000000000003", DisplayName = "DEMO Municipal Appraiser", Office = "municipal", Roles = ["APPRAISER"] },
+        new() { Key = "mun-assessor", UserId = "00000000-0000-0000-0000-000000000004", DisplayName = "DEMO Municipal Assessor", Office = "municipal", Roles = ["ASSESSOR"] },
+    ];
+}
+
+/// <param name="Office">"province-wide", "provincial" or "municipal" (the first DEMO municipal office).</param>
+public sealed class DevelopmentUser
+{
+    public string Key { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Office { get; set; } = "provincial";
+    public string[] Roles { get; set; } = [];
 }
 
 /// <summary>
@@ -38,17 +65,19 @@ public class DevelopmentAuthenticationHandler(
 {
     public const string SchemeName = "DevelopmentBypass";
 
-    /// <summary>Development only: "checker" acts as the second development user.</summary>
+    /// <summary>Development only: the key of a configured DEMO user to act as (Q13); "checker" still selects the second user.</summary>
     public const string ActAsHeader = "X-Prime-Dev-Act-As";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         // Reachable only where this whole bypass is (Development + DevAuth:Enabled; Program.cs).
-        var checker = string.Equals(Request.Headers[ActAsHeader], "checker", StringComparison.OrdinalIgnoreCase);
+        var key = Request.Headers[ActAsHeader].ToString();
+        var named = Options.EffectiveUsers.FirstOrDefault(u => string.Equals(u.Key, key, StringComparison.OrdinalIgnoreCase));
+        var checker = named is null && string.Equals(key, "checker", StringComparison.OrdinalIgnoreCase);
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, checker ? Options.CheckerUserId : Options.UserId),
-            new(ClaimTypes.Name, checker ? Options.CheckerDisplayName : Options.DisplayName),
+            new(ClaimTypes.NameIdentifier, named?.UserId ?? (checker ? Options.CheckerUserId : Options.UserId)),
+            new(ClaimTypes.Name, named?.DisplayName ?? (checker ? Options.CheckerDisplayName : Options.DisplayName)),
         };
         claims.AddRange(Options.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
 

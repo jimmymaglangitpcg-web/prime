@@ -86,7 +86,7 @@ public sealed partial class ContentPackService
                     EntityType = created.Value.EntityType,
                     EntityId = created.Value.Id,
                     Key = version.Key,
-                    Action = ContentImportAction.Created,
+                    Action = version.Action,
                     ChangesJson = JsonSerializer.Serialize(version.Changes, Json),
                     Source = version.Source,
                     FilePath = work.Entry.Path,

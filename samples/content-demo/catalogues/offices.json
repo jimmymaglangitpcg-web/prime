@@ -1,0 +1,11 @@
+[
+  {
+    "code": "DEMO-CP-MUN",
+    "name": "DEMO Municipal Assessor's Office (content pack)",
+    "kind": "Municipal",
+    "headPosition": "DEMO Municipal Assessor",
+    "municipalities": [ "9900100000", "9900200000" ],
+    "effectiveDate": "2026-01-01",
+    "legalBasis": "DEMO — not an LGU office"
+  }
+]

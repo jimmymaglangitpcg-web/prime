@@ -50,6 +50,7 @@ export function PropertySearchPage() {
 
       <Table<PropertyDto>
         rowKey="id"
+        scroll={{ x: true }}
         loading={isLoading}
         dataSource={data?.items ?? []}
         onRow={(record) => ({ onClick: () => navigate(`/properties/${record.id}`), style: { cursor: 'pointer' } })}

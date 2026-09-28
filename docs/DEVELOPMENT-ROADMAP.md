@@ -932,8 +932,8 @@ is **LAM alignment** (CLAUDE.md §97):
 
 ```text
 10a  Real Property Identification System (MRPAAO)   done (d70a501)
-L0   Governance & groundwork                          in progress (L0-1 done; L0-2 content pack C1–C5 done)
-LP   Province-wide operation (CLAUDE.md §117)         next
+L0   Governance & groundwork                          done (L0-4 questions sent; answers pending)
+LP   Province-wide operation (CLAUDE.md §117)         in progress (LP-1 to LP-3 done)
 L1   Valuation foundation
 L2   Identification & numbering (LAM deltas)
 L3   Assessment, listing, exemptions
@@ -1066,10 +1066,28 @@ day: 37 migrations, row-level security on all 105 tables with no policies.
 **L0-2 content pack complete (2026-09-28):** C1–C5 are done
 (docs/analysis/lgu-content-pack.md §8): geography, lookups, versioned
 configuration as drafts, upload with the admin page, and map layers. C3–C4
-are committed as `9aa8989`. C5 adds no migration. **Next:** L0-4, the list of
-blocking domain questions for the Provincial Assessor's Office. Then the LP
-design document (offices, jurisdiction, provincial approval, delegation).
-The paragraphs below are the earlier history.
+are committed as `9aa8989`, C5 as `07ba6b4`; pushed. C5 adds no migration.
+
+**L0-4 (2026-09-29):** the blocking domain questions, plus the province-wide
+set-up questions (offices, delegation, approval steps, signatories, reports),
+are written for the Provincial Assessor's Office. The list is kept untracked
+in `docs/lam/`. Until answers arrive, PRIME uses the provisional defaults the
+list states, all as configuration.
+
+**LP design (2026-09-29):** `docs/analysis/province-wide-operation.md`:
+offices and jurisdiction, users in offices, jurisdiction filters, office
+approval chains with provincial final approval and dated delegation,
+per-office letterhead, transmittals. Delivery LP-1 to LP-6; all 13
+recommendations approved. **LP-1 done** (offices, jurisdictions,
+assignments, office context, `offices` content-pack kind, DEMO users per
+office, Offices page; migration `Offices` on the local database only).
+**LP-2 done** (jurisdiction query filters, write guards, province-wide
+uniqueness checks, taxpayer visibility, issued-form subject check; no
+migration). **LP-3 done** (dated delegation records with maker-checker,
+renewal, revocation and an in-force lookup; migration `ApprovalDelegations`
+on the local database only). **Next:** LP-4, office-aware approval chains
+with provincial or delegated final approval. The paragraphs below are the
+earlier history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so
 PRIME is the assessor's office system following the MRPAAO (CLAUDE.md §0).

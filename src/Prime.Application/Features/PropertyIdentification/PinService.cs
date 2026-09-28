@@ -281,9 +281,10 @@ public static class PermanentPins
                 $"Section {section.IndexNumber} has used every parcel number its PIN can hold. Draw the parcels on a new section (MRPAAO Ch. II §2 E.2).");
         }
         var pin = NumberPattern.Format(scheme.Pattern, context, number);
-        if (await db.PinAssignments.AnyAsync(x => x.Pin == pin, ct)
-            || await db.Properties.AnyAsync(x => x.Id != property.Id && x.PropertyIdentificationNumber == pin, ct)
-            || await db.Parcels.AnyAsync(x => x.SectionId == section.Id && x.ParcelNumber == (int)number, ct))
+        // Unique across the province, whoever's jurisdiction holds them.
+        if (await db.PinAssignments.IgnoreQueryFilters().AnyAsync(x => x.Pin == pin, ct)
+            || await db.Properties.IgnoreQueryFilters().AnyAsync(x => x.Id != property.Id && x.PropertyIdentificationNumber == pin, ct)
+            || await db.Parcels.IgnoreQueryFilters().AnyAsync(x => x.SectionId == section.Id && x.ParcelNumber == (int)number, ct))
         {
             return Fail("PIN_DUPLICATE", $"PIN {pin} has already been given; PINs are never reused.");
         }

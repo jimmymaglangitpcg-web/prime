@@ -58,6 +58,11 @@
       "source": "DEMO data"
     },
     {
+      "kind": "offices",
+      "path": "catalogues/offices.json",
+      "source": "DEMO data"
+    },
+    {
       "kind": "gis-layer",
       "layer": "barangays",
       "effectiveDate": "2026-01-01",
