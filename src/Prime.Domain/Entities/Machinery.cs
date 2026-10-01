@@ -58,6 +58,23 @@ public sealed class Machinery : AuditableEntity
 
     public RecordStatus Status { get; set; } = RecordStatus.Active;
 
+    // Derived replacement cost (LAM Bk III pp.73–75; docs/analysis/valuation-foundation.md §4.6).
+    /// <summary>Imported machinery: its cost is converted at the exchange rates of acquisition and valuation.</summary>
+    public bool IsImported { get; set; }
+    /// <summary>ISO 4217 code of the currency it was bought in (imported machinery).</summary>
+    public string? AcquisitionCurrency { get; set; }
+    /// <summary>Its cost in that currency; recorded for the FAAS (the peso <see cref="AcquisitionCost"/> is the basis).</summary>
+    public decimal? ForeignAcquisitionCost { get; set; }
+    public string? OriginCountry { get; set; }
+    /// <summary>The price index series (an origin country's, or the local one) that trends its cost; null: the replacement cost is entered.</summary>
+    public string? PriceIndexSeries { get; set; }
+    /// <summary>Years of use count from here, else from <see cref="DateAcquired"/>.</summary>
+    public DateOnly? DateInstalled { get; set; }
+    /// <summary>LGC §225: the minimum remaining value holds only while the machine is useful and in operation (Q12).</summary>
+    public bool IsInOperation { get; set; } = true;
+    /// <summary>The acquisition cost items: freight, insurance, duties, installation … (LAM Bk III p.75).</summary>
+    public List<MachineryCostItem> CostItems { get; set; } = [];
+
     /// <summary>
     /// The machine's own classification and actual use, when it differs from
     /// its unit's Tax Declaration's (MRPAAO Att. 3: one assessment row per

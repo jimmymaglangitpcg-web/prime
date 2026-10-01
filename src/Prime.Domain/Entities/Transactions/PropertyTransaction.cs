@@ -34,6 +34,13 @@ public sealed class TransactionType : EffectiveDatedConfiguration
     /// A later one is flagged, not refused.
     /// </summary>
     public int? CauseWindowDays { get; set; }
+
+    /// <summary>
+    /// Whether a building valued for this transaction takes a new depreciation for its age (a first
+    /// declaration, a general revision, the owner's request; LAM Bk III p.73). Otherwise the
+    /// depreciation percent of its last posted valuation is kept (docs/analysis/valuation-foundation.md §4.5, Q10).
+    /// </summary>
+    public bool AllowsNewDepreciation { get; set; }
 }
 
 /// <summary>One prerequisite of a transaction type, e.g. proof of transfer-tax payment (LGC §135(b)).</summary>

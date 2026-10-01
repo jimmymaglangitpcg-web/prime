@@ -43,8 +43,8 @@ public sealed class BuildingComponentConfiguration : IEntityTypeConfiguration<Bu
     public void Configure(EntityTypeBuilder<BuildingComponent> builder)
     {
         builder.HasKey(x => x.Id);
-        // An additional item carries a cost: it is added to the construction cost (MRPAAO Att. 2).
-        builder.ToTable(t => t.HasCheckConstraint("CK_BuildingComponents_AdditionalItemCost", "NOT \"IsAdditionalItem\" OR \"Cost\" IS NOT NULL"));
+        // An additional item carries a cost, or a quantity priced from the SMV (MRPAAO Att. 2; valuation-foundation.md §4.5).
+        builder.ToTable(t => t.HasCheckConstraint("CK_BuildingComponents_AdditionalItemCost", "NOT \"IsAdditionalItem\" OR \"Cost\" IS NOT NULL OR \"Quantity\" IS NOT NULL"));
         builder.HasOne<BuildingUsePortion>().WithMany().HasForeignKey(x => x.BuildingUsePortionId).OnDelete(DeleteBehavior.Restrict);
 
         builder.Property(x => x.Description).HasMaxLength(500);

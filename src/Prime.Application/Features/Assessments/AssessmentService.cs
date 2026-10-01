@@ -205,6 +205,14 @@ public sealed class AssessmentService(
                 $"The valuation was made as of {valuation.EffectiveDate:yyyy-MM-dd}, but the assessment takes effect on {effectiveDate:yyyy-MM-dd}. "
                 + "Value the unit as of the assessment's effective date, then assess that valuation.");
         }
+        // A building's depreciation depends on the transaction it was valued for (valuation-foundation.md §4.5, Q10).
+        if (request.RevisionReference is null && valuation.TransactionTypeId != effectivity.TransactionTypeId
+            && valuation.Lines.Any(l => l.BreakdownJson.Contains("\"DepreciationPercent\"")))
+        {
+            return Result.Failure<Calculated>("VALUATION_TRANSACTION_MISMATCH",
+                "The building was valued for a different transaction, and the transaction decides whether it takes a new depreciation. "
+                + "Value it again for this transaction, then assess that valuation.");
+        }
 
         if (request.PreviousAssessmentId is { } previousId)
         {

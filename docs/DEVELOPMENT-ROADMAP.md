@@ -934,7 +934,7 @@ is **LAM alignment** (CLAUDE.md §97):
 10a  Real Property Identification System (MRPAAO)   done (d70a501)
 L0   Governance & groundwork                          done (L0-4 questions sent; answers pending)
 LP   Province-wide operation (CLAUDE.md §117)         done (LP-1 to LP-6)
-L1   Valuation foundation                         in progress (L1-1 to L1-4 done)
+L1   Valuation foundation                         in progress (L1-1 to L1-6 done)
 L2   Identification & numbering (LAM deltas)
 L3   Assessment, listing, exemptions
 L4   Condominium                                      deferred
@@ -1113,7 +1113,14 @@ class on strips; SMV, unit-value and level pack files; migration `SmvModel` on t
 database only). **L1-4 done** (factor rule kinds by road type, distance, corner and depth;
 land distances and subdivision flag; rounding setting, off; separately owned trees and
 plants; adjustment-factor pack files; migration `LandAdjustmentRules` on the local
-database only). Next: L1-5 (buildings). The paragraphs below are the earlier
+database only). **L1-5 done** (SMV construction costs, extra-item costs and depreciation
+tables; buildings valued on them with depreciation by age, carried over unless the transaction
+or a general revision allows a new one; building-table pack files; migration
+`BuildingCostTables` on the local database only). **L1-6 done** (exchange rates and price indices;
+machine currency, series, installation date, in-operation status and cost items; replacement cost
+derived from them with the 5 % yearly cap and the minimum only while in operation; rate and index
+pack files; migration `MachineryDerivedCost` on the local database only). Next: L1-7 (independent
+appraisal). The paragraphs below are the earlier
 history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so

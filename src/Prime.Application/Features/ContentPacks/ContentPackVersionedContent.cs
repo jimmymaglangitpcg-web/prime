@@ -65,7 +65,9 @@ public sealed partial class ContentPackVersionedContent(
     IValidator<AssessmentLevels.CreateAssessmentLevelRequest> levelValidator,
     Smv.ISmvService smvs,
     AssessmentLevels.IAssessmentLevelService levels,
-    Smv.IAdjustmentFactorService factors)
+    Smv.IAdjustmentFactorService factors,
+    Smv.IBuildingCostTableService buildingTables,
+    Valuation.IMachineryIndexService machineryIndices)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
 
@@ -81,7 +83,7 @@ public sealed partial class ContentPackVersionedContent(
 
     private sealed record TypeItem(string? Code, string? Name, string? Kind, int? Rank, string? Description, string? LegalBasis, string? EffectiveDate,
         string? Remarks, List<RequirementItem>? Requirements, string? Source, string? EffectivityRule = null, string? EffectivityLegalBasis = null,
-        int? CauseWindowDays = null);
+        int? CauseWindowDays = null, bool? AllowsNewDepreciation = null);
 
     private sealed record RequirementItem(string? Code, string? Label, bool? Mandatory, string? LegalBasis);
 
@@ -120,6 +122,11 @@ public sealed partial class ContentPackVersionedContent(
                 ContentFileKinds.SmvSchedules => await SchedulesAsync(bytes, fileSource, pending ?? PackPending.None, result, ct),
                 ContentFileKinds.AssessmentLevels => await LevelsAsync(bytes, fileSource, pending ?? PackPending.None, result, ct),
                 ContentFileKinds.AdjustmentFactors => await FactorsAsync(Parse<FactorItem>(bytes), fileSource, pending ?? PackPending.None, result, ct),
+                ContentFileKinds.BuildingCosts => await BuildingCostsAsync(Parse<BuildingCostItem>(bytes), fileSource, pending ?? PackPending.None, result, ct),
+                ContentFileKinds.ExtraItemCosts => await ExtraItemCostsAsync(Parse<ExtraItemCostItem>(bytes), fileSource, pending ?? PackPending.None, result, ct),
+                ContentFileKinds.DepreciationRates => await DepreciationAsync(Parse<DepreciationItem>(bytes), fileSource, pending ?? PackPending.None, result, ct),
+                ContentFileKinds.ExchangeRates => await ExchangeRatesAsync(bytes, fileSource, result, ct),
+                ContentFileKinds.PriceIndices => await PriceIndicesAsync(bytes, fileSource, result, ct),
                 _ => throw new InvalidOperationException($"Not a versioned kind: {kind}"),
             };
         }
@@ -145,6 +152,11 @@ public sealed partial class ContentPackVersionedContent(
         PackSmvSchedule r => await CreateScheduleAsync(r, ct),
         PackAssessmentLevel r => await CreateLevelAsync(r, ct),
         PackAdjustmentFactor r => await CreateFactorAsync(r, ct),
+        PackBuildingCost r => await CreateBuildingCostAsync(r, ct),
+        PackExtraItemCost r => await CreateExtraItemCostAsync(r, ct),
+        PackDepreciationSchedule r => await CreateDepreciationScheduleAsync(r, ct),
+        Valuation.CreateExchangeRateRequest r => Map("ExchangeRate", await machineryIndices.CreateExchangeRateAsync(r, ct), x => x.Id),
+        Valuation.CreatePriceIndexRequest r => Map("PriceIndex", await machineryIndices.CreatePriceIndexAsync(r, ct), x => x.Id),
         _ => throw new InvalidOperationException("Unknown planned version."),
     };
 
@@ -201,7 +213,8 @@ public sealed partial class ContentPackVersionedContent(
             var requirements = (x.Requirements ?? []).Select((r, j) => new TransactionRequirementRequest(j + 1, Trim(r.Code) ?? "", Trim(r.Label) ?? "",
                 r.Mandatory ?? true, Trim(r.LegalBasis))).ToList();
             var request = new CreateTransactionTypeRequest(Trim(x.LegalBasis) ?? "", effective, Trim(x.Remarks), Trim(x.Code) ?? "", Trim(x.Name) ?? "",
-                kindValue, x.Rank, Trim(x.Description), requirements, rule, Trim(x.EffectivityLegalBasis), x.CauseWindowDays);
+                kindValue, x.Rank, Trim(x.Description), requirements, rule, Trim(x.EffectivityLegalBasis), x.CauseWindowDays,
+                x.AllowsNewDepreciation ?? false);
             if (!await ValidAsync(typeValidator, request, result, n, ct) || !Unique(result, seen, request.Code, n, "code"))
             {
                 continue;
@@ -217,12 +230,13 @@ public sealed partial class ContentPackVersionedContent(
             Diff(changes, "effectivityRule", current?.EffectivityRule?.ToString(), request.EffectivityRule?.ToString());
             Diff(changes, "effectivityLegalBasis", current?.EffectivityLegalBasis, request.EffectivityLegalBasis);
             Diff(changes, "causeWindowDays", current?.CauseWindowDays?.ToString(CultureInfo.InvariantCulture), request.CauseWindowDays?.ToString(CultureInfo.InvariantCulture));
+            Diff(changes, "allowsNewDepreciation", current is null ? null : current.AllowsNewDepreciation ? "true" : "false", request.AllowsNewDepreciation ? "true" : "false");
             Diff(changes, "requirements", current is null ? null : Requirements(current.Requirements.OrderBy(r => r.Sequence)
                 .Select(r => (r.Code, r.Label, r.IsMandatory, r.LegalBasis))), Requirements(requirements.Select(r => (r.Code, r.Label, r.IsMandatory, r.LegalBasis))));
             if (Same(scope, s => Equal(s.Name, request.Name) && s.Kind == request.Kind && s.Rank == request.Rank && Equal(s.Description, request.Description)
                     && Equal(s.LegalBasis, request.LegalBasis)
                     && s.EffectivityRule == request.EffectivityRule && Equal(s.EffectivityLegalBasis, request.EffectivityLegalBasis)
-                    && s.CauseWindowDays == request.CauseWindowDays
+                    && s.CauseWindowDays == request.CauseWindowDays && s.AllowsNewDepreciation == request.AllowsNewDepreciation
                     && Requirements(s.Requirements.OrderBy(r => r.Sequence).Select(r => (r.Code, r.Label, r.IsMandatory, r.LegalBasis)))
                         == Requirements(requirements.Select(r => (r.Code, r.Label, r.IsMandatory, r.LegalBasis)))))
             {

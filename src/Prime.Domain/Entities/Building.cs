@@ -41,6 +41,7 @@ public sealed class Building : AuditableEntity
     public decimal CompletionPercentage { get; set; } = 100m;
 
     public decimal? MarketValue { get; set; }
+    /// <summary>The depreciation percent of its last valuation on the SMV's construction cost (valuation-foundation.md §4.5); the amounts are in the valuation's breakdown.</summary>
     public decimal? Depreciation { get; set; }
     public decimal? DepreciatedValue { get; set; }
     public decimal? AssessedValue { get; set; }

@@ -7,7 +7,7 @@ using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.MachineryUnits;
 
-public sealed class MachineryService(IApplicationDbContext db, IValidator<CreateMachineryRequest> validator) : IMachineryService
+public sealed class MachineryService(IApplicationDbContext db, IValidator<CreateMachineryRequest> validator, ICurrentUserService currentUser) : IMachineryService
 {
     public async Task<Result<MachineryDto>> CreateAsync(CreateMachineryRequest request, CancellationToken cancellationToken = default)
     {
@@ -61,6 +61,14 @@ public sealed class MachineryService(IApplicationDbContext db, IValidator<Create
             ReplacementCost = request.ReplacementCost,
             EconomicLifeYears = request.EconomicLifeYears,
             RemainingLifeYears = request.RemainingLifeYears,
+            IsImported = request.IsImported,
+            AcquisitionCurrency = request.AcquisitionCurrency?.Trim(),
+            ForeignAcquisitionCost = request.ForeignAcquisitionCost,
+            OriginCountry = string.IsNullOrWhiteSpace(request.OriginCountry) ? null : request.OriginCountry.Trim(),
+            PriceIndexSeries = request.PriceIndexSeries?.Trim(),
+            DateInstalled = request.DateInstalled,
+            IsInOperation = request.IsInOperation,
+            CostItems = Items(request.CostItems ?? []),
         };
 
         db.MachineryUnits.Add(machinery);
@@ -69,6 +77,50 @@ public sealed class MachineryService(IApplicationDbContext db, IValidator<Create
         return Result.Success(await MapToDto(machinery.Id, cancellationToken)
             ?? throw new InvalidOperationException("Machinery was just created but could not be reloaded."));
     }
+
+    /// <summary>Changes what the derived replacement cost reads, with a reason (audited); valuations already made keep their figures.</summary>
+    public async Task<Result<MachineryDto>> UpdateValuationInputsAsync(Guid machineryId, UpdateMachineryValuationInputsRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var machine = await db.MachineryUnits.Include(x => x.CostItems).FirstOrDefaultAsync(x => x.Id == machineryId, cancellationToken);
+        if (machine is null)
+        {
+            return Result.Failure<MachineryDto>("MACHINERY_NOT_FOUND", "No Machinery record was found with the given id.");
+        }
+        var items = request.CostItems ?? [];
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 500)
+        {
+            return Result.Failure<MachineryDto>("VALIDATION_FAILED", "A reason (max 500) is required.");
+        }
+        if (MachineryInputs.Problem(request.IsImported, request.AcquisitionCurrency, request.ForeignAcquisitionCost, request.OriginCountry,
+                request.PriceIndexSeries, items) is { } problem)
+        {
+            return Result.Failure<MachineryDto>("VALIDATION_FAILED", problem);
+        }
+        machine.IsImported = request.IsImported;
+        machine.AcquisitionCurrency = request.AcquisitionCurrency?.Trim();
+        machine.ForeignAcquisitionCost = request.ForeignAcquisitionCost;
+        machine.OriginCountry = string.IsNullOrWhiteSpace(request.OriginCountry) ? null : request.OriginCountry.Trim();
+        machine.PriceIndexSeries = request.PriceIndexSeries?.Trim();
+        machine.DateInstalled = request.DateInstalled;
+        machine.IsInOperation = request.IsInOperation;
+        db.MachineryCostItems.RemoveRange(machine.CostItems);
+        // New rows go through the set: entity keys are set on construction (see LandService.Track).
+        foreach (var item in Items(items))
+        {
+            item.MachineryId = machine.Id;
+            db.MachineryCostItems.Add(item);
+        }
+        currentUser.Reason = request.Reason.Trim();
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success((await MapToDto(machineryId, cancellationToken))!);
+    }
+
+    private static List<MachineryCostItem> Items(IReadOnlyList<MachineryCostItemRequest> items) =>
+        items.Select((i, n) => new MachineryCostItem
+        {
+            Sequence = n + 1, Kind = i.Kind, Amount = i.Amount, Description = string.IsNullOrWhiteSpace(i.Description) ? null : i.Description.Trim(),
+        }).ToList();
 
     public async Task<Result<MachineryDto>> GetByIdAsync(Guid machineryId, CancellationToken cancellationToken = default)
     {
@@ -103,7 +155,8 @@ public sealed class MachineryService(IApplicationDbContext db, IValidator<Create
     private static IQueryable<Machinery> IncludeReferences(IQueryable<Machinery> query) => query
         .Include(x => x.MachineryType)
         .Include(x => x.Classification)
-        .Include(x => x.ActualUse);
+        .Include(x => x.ActualUse)
+        .Include(x => x.CostItems);
 
     private static MachineryDto ProjectToDto(Machinery x) => new(
         x.Id,
@@ -136,5 +189,13 @@ public sealed class MachineryService(IApplicationDbContext db, IValidator<Create
         x.ActualUse?.Name,
         x.YearInstalled,
         x.YearOfInitialOperation,
-        x.ConversionFactor);
+        x.ConversionFactor,
+        x.IsImported,
+        x.AcquisitionCurrency,
+        x.ForeignAcquisitionCost,
+        x.OriginCountry,
+        x.PriceIndexSeries,
+        x.DateInstalled,
+        x.IsInOperation,
+        x.CostItems.OrderBy(i => i.Sequence).Select(i => new MachineryCostItemDto(i.Sequence, i.Kind, i.Amount, i.Description)).ToList());
 }

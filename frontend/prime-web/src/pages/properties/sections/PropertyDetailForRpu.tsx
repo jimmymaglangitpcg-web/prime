@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Descriptions, Empty, Table, Tag } from 'antd';
+import { Button, Descriptions, Empty, Space, Table, Tag } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import type { MachineryDto, RpuSummaryDto } from '../../../lib/types';
 import { useLandByRpu } from '../../../api/land';
@@ -12,6 +12,7 @@ import { ApiRequestError } from '../../../lib/apiClient';
 import { LandAppraisalRows } from './LandAppraisalRows';
 import { BuildingAppraisalRows } from './BuildingAppraisalRows';
 import { MachineryDescriptionModal } from '../modals/DescriptionModals';
+import { MachineryInputsModal } from '../modals/MachineryInputsModal';
 import { formatMoney } from '../../../lib/format';
 
 // A LAND_NOT_FOUND/BUILDING_NOT_FOUND/MACHINERY_NOT_FOUND response (mapped
@@ -116,6 +117,7 @@ function MachineryDetail({ propertyId, rpuId }: { propertyId: string; rpuId: str
   const { data = [], isLoading, isError } = useMachineryUnitsByRpu(rpuId);
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<MachineryDto | null>(null);
+  const [inputs, setInputs] = useState<MachineryDto | null>(null);
 
   if (isError) {
     return <Empty description="Could not load the machinery" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
@@ -136,10 +138,23 @@ function MachineryDetail({ propertyId, rpuId }: { propertyId: string; rpuId: str
           { title: 'Economic / remaining life', render: (_, m) => `${m.economicLifeYears ?? '—'} / ${m.remainingLifeYears ?? '—'} yrs` },
           { title: 'Assessed under', render: (_, m) => (m.actualUseName ? `${m.classificationName ?? ''} / ${m.actualUseName}` : 'Tax Declaration’s use') },
           { title: 'Installed / operating since', render: (_, m) => `${m.yearInstalled ?? '—'} / ${m.yearOfInitialOperation ?? '—'}` },
+          {
+            title: 'Replacement cost', render: (_, m) => m.isBrandNew ? 'Acquisition cost'
+              : m.priceIndexSeries ? `Derived: ${m.priceIndexSeries}${m.isImported ? `, ${m.acquisitionCurrency}` : ', local'}` : 'Entered',
+          },
+          { title: 'Operation', dataIndex: 'isInOperation', render: (v: boolean) => (v ? 'In operation' : <Tag color="orange">Not in operation</Tag>) },
           { title: 'Market value', dataIndex: 'marketValue', align: 'right', render: (v: number | null) => (v === null ? 'Not yet valued' : formatMoney(v)) },
-          { title: '', render: (_, m) => <Button size="small" onClick={() => setEditing(m)}>Edit</Button> },
+          {
+            title: '', render: (_, m) => (
+              <Space size={4}>
+                <Button size="small" onClick={() => setEditing(m)}>Edit</Button>
+                <Button size="small" onClick={() => setInputs(m)}>Valuation inputs</Button>
+              </Space>
+            ),
+          },
         ]} />
       {editing && <MachineryDescriptionModal machine={editing} rpuId={rpuId} onClose={() => setEditing(null)} />}
+      {inputs && <MachineryInputsModal machine={inputs} rpuId={rpuId} onClose={() => setInputs(null)} />}
       <AddMachineryModal propertyId={propertyId} rpuId={rpuId} open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
   );

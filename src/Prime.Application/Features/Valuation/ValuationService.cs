@@ -202,14 +202,21 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
 
     /// <summary>
     /// Values a building by use portion (MRPAAO Att. 2; docs/analysis/mrpaao-forms-model.md
-    /// §8.3): each portion's floor area at the SMV rate for its classification and
-    /// use, plus its additional items (items not tied to a portion are spread by
-    /// floor area), × completion. A building with no portions is one portion under
-    /// its Tax Declaration's classification and use, as before.
+    /// §8.3), each portion keeping its classification and use for the level. Where an SMV in
+    /// force covering the property has construction costs, each portion is valued on them
+    /// (docs/analysis/valuation-foundation.md §4.5): floor area × BUCC for the structural type,
+    /// plus the extra items priced from the SMV, × completion, less depreciation. Otherwise, as
+    /// before: the floor area at the rate for its classification and use, plus the entered cost
+    /// of its additional items, × completion. Items not tied to a portion are spread by floor
+    /// area. A building with no portions is one portion under its Tax Declaration's.
     /// </summary>
-    public async Task<Result<ValuationDto>> ComputeForBuildingAsync(Guid buildingId, CancellationToken cancellationToken = default, DateOnly? asOf = null)
+    /// <param name="transactionTypeId">The transaction it is valued for: whether its type allows a new depreciation.</param>
+    /// <param name="generalRevision">A general revision: a new depreciation (LAM Bk III p.73).</param>
+    public async Task<Result<ValuationDto>> ComputeForBuildingAsync(Guid buildingId, CancellationToken cancellationToken = default, DateOnly? asOf = null,
+        Guid? transactionTypeId = null, bool generalRevision = false)
     {
-        var building = await db.Buildings.Include(x => x.UsePortions).Include(x => x.Components)
+        var building = await db.Buildings.Include(x => x.UsePortions).Include(x => x.Components).ThenInclude(c => c.ComponentType)
+            .Include(x => x.StructuralType)
             .FirstOrDefaultAsync(x => x.Id == buildingId, cancellationToken);
         if (building is null)
         {
@@ -242,19 +249,34 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 $"The use portions cover {portions.Sum(x => x.Area):#,0.####} sqm of the building's {building.TotalFloorArea:#,0.####} sqm total floor area.");
         }
 
+        var date = asOf ?? clock.Today;
+        var location = await LocationAsync(building.PropertyId, cancellationToken);
+        if (transactionTypeId is { } typeId && !await db.TransactionTypes.InForce(clock.Today).AnyAsync(x => x.Id == typeId, cancellationToken))
+        {
+            return Result.Failure<ValuationDto>("TRANSACTION_TYPE_NOT_IN_FORCE", "The transaction type is not one in force today.");
+        }
+
+        // The SMV's construction costs, if the SMV in force covering the property has any (§4.5).
+        var costs = await db.SmvBuildingCosts.InForce(date).Include(x => x.Smv)
+            .Where(x => x.Smv!.Status == WorkflowStatus.Approved && x.Smv.EffectivityDate <= date
+                && (!x.Smv.Coverage.Any() || x.Smv.Coverage.Any(c => c.MunicipalityId == location.MunicipalityId)))
+            .ToListAsync(cancellationToken);
+        if (costs.Count > 0)
+        {
+            return await ValueBuildingByCostAsync(building, portions.Select(p => (p.Source, p.SourceId, p.PortionId, p.ClassificationId, p.SubClassificationId, p.ActualUseId, p.Area)).ToList(),
+                costs, date, transactionTypeId, generalRevision, cancellationToken);
+        }
+
         // Additional items: those tied to a portion go to it; the rest are spread by floor area.
         var items = building.Components.Where(c => c.IsAdditionalItem).ToList();
         var spread = ValuationCalculator.SpreadByArea(items.Where(c => c.BuildingUsePortionId == null).Sum(c => c.Cost ?? 0m),
             portions.Select(p => p.Area).ToList());
 
-        var date = asOf ?? clock.Today;
-        var location = await LocationAsync(building.PropertyId, cancellationToken);
         var lines = new List<(ValuationLine Line, SmvSchedule Schedule, ValuationCalculationResult Calc)>();
         for (var i = 0; i < portions.Count; i++)
         {
             var p = portions[i];
             // Zone-based rates exist on Land only (§24): buildings resolve a zone-agnostic schedule.
-            // Construction costs by structural type replace these rates in step L1-5.
             var schedule = await ResolveScheduleAsync(p.ClassificationId, propertyType.Id, null, location.MunicipalityId,
                 new SmvRateKey(null, null, null, p.ActualUseId), date, cancellationToken);
             if (schedule is null)
@@ -274,10 +296,145 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
 
         var valuation = PersistLines(building.RpuId, building.PropertyId, ValuationSourceType.Building, building.Id,
             lines.Select(x => (x.Line, x.Calc)).ToList(), lines[0].Schedule.SmvId, lines.Count == 1 ? lines[0].Schedule.Id : null, date);
+        valuation.TransactionTypeId = transactionTypeId;
         building.MarketValue = valuation.ComputedMarketValue;
         await db.SaveChangesAsync(cancellationToken);
 
         return Result.Success(await MapAsync(valuation.Id, cancellationToken));
+    }
+
+    /// <summary>
+    /// A building valued on the SMV's construction cost (docs/analysis/valuation-foundation.md §4.5).
+    /// The SMV is the latest in force with construction costs; its BUCC for the structural type, the
+    /// building's kind and the portion's classification (the most specific row wins), its extra-item
+    /// costs, and its depreciation table for the structural type. Whatever the SMV does not give
+    /// stops the valuation with the reason; an independent appraisal is step L1-7.
+    /// </summary>
+    private async Task<Result<ValuationDto>> ValueBuildingByCostAsync(Building building,
+        List<(ValuationLineSource Source, Guid SourceId, Guid? PortionId, Guid ClassificationId, Guid? SubClassificationId, Guid ActualUseId, decimal Area)> portions,
+        List<SmvBuildingCost> costs, DateOnly date, Guid? transactionTypeId, bool generalRevision, CancellationToken ct)
+    {
+        var smv = costs.Select(x => x.Smv!).OrderByDescending(x => x.EffectivityDate).First();
+        var structure = building.StructuralType!.Name;
+        var ofStructure = costs.Where(x => x.SmvId == smv.Id && x.StructuralTypeId == building.StructuralTypeId
+            && (x.BuildingTypeId == null || x.BuildingTypeId == building.BuildingTypeId)).ToList();
+        // Each portion's BUCC: the most specific row for the building's kind and the portion's classification.
+        var buccs = new List<SmvBuildingCost>();
+        for (var i = 0; i < portions.Count; i++)
+        {
+            var bucc = ofStructure.Where(x => x.ClassificationId == null || x.ClassificationId == portions[i].ClassificationId)
+                .OrderByDescending(x => x.BuildingTypeId != null).ThenByDescending(x => x.ClassificationId != null).FirstOrDefault();
+            if (bucc is null)
+            {
+                return Result.Failure<ValuationDto>("BUILDING_COST_NOT_FOUND",
+                    $"The SMV {smv.Reference} gives no construction cost for structural type {structure} and this building's kind"
+                    + (portions.Count > 1 ? $" (use portion {i + 1})" : "") + $" as of {date:yyyy-MM-dd}. A building outside the SMV needs an independent appraisal.");
+            }
+            buccs.Add(bucc);
+        }
+
+        // Extra items, each priced from the SMV: those tied to a portion go to it; the rest are spread by floor area.
+        var areas = portions.Select(p => p.Area).ToList();
+        var shares = portions.Select(_ => new List<(string Code, decimal Cost)>()).ToList();
+        foreach (var item in building.Components.Where(c => c.IsAdditionalItem))
+        {
+            var name = item.ComponentType!.Name + (item.Description is { } d ? $" ({d})" : "");
+            var price = await db.SmvExtraItemCosts.InForce(date).FirstOrDefaultAsync(x => x.SmvId == smv.Id && x.ComponentTypeId == item.ComponentTypeId, ct);
+            if (price is null)
+            {
+                return Result.Failure<ValuationDto>("EXTRA_ITEM_COST_NOT_FOUND",
+                    $"The SMV {smv.Reference} gives no cost for the extra item {name} as of {date:yyyy-MM-dd}. An item outside the SMV needs an independent appraisal.");
+            }
+            if (item.Quantity is not > 0)
+            {
+                return Result.Failure<ValuationDto>("EXTRA_ITEM_QUANTITY_REQUIRED",
+                    $"The extra item {name} is priced from the SMV per {price.Unit}; enter its quantity.");
+            }
+            var cost = item.Quantity.Value * price.UnitCost;
+            var code = item.ComponentType.Code;
+            if (item.BuildingUsePortionId is { } portionId)
+            {
+                shares[portions.FindIndex(p => p.PortionId == portionId)].Add((code, cost));
+            }
+            else
+            {
+                var spread = ValuationCalculator.SpreadByArea(cost, areas);
+                for (var i = 0; i < portions.Count; i++)
+                {
+                    shares[i].Add((code, spread[i]));
+                }
+            }
+        }
+
+        // Depreciation: a new one for the building's age where allowed, else the last posted one's percent (Q10).
+        var allowsNew = generalRevision
+            || transactionTypeId is { } typeId && await db.TransactionTypes.AnyAsync(x => x.Id == typeId && x.AllowsNewDepreciation, ct);
+        var carried = allowsNew ? null : await LastPostedDepreciationPercentAsync(building.RpuId, ct);
+        BuildingDepreciationInput depreciation;
+        if (carried is { } percent)
+        {
+            depreciation = new BuildingDepreciationInput(percent, null, true, false);
+        }
+        else
+        {
+            var table = await db.SmvDepreciationSchedules.InForce(date).Include(x => x.Rows)
+                .FirstOrDefaultAsync(x => x.SmvId == smv.Id && x.StructuralTypeId == building.StructuralTypeId, ct);
+            if (table is null)
+            {
+                return Result.Failure<ValuationDto>("DEPRECIATION_TABLE_NOT_FOUND",
+                    $"The SMV {smv.Reference} has no approved depreciation table for structural type {structure} in force on {date:yyyy-MM-dd}.");
+            }
+            if (BuildingDepreciation.Age(building, date) is not { } age)
+            {
+                return Result.Failure<ValuationDto>("BUILDING_AGE_UNKNOWN",
+                    "The building's age is read from the year it was completed, else constructed, else occupied; record one of them.");
+            }
+            var outcome = BuildingDepreciation.Percent(table.Reading, table.Rows, table.MinimumRemainingPercent, age);
+            if (outcome.Problem is { } problem)
+            {
+                return Result.Failure<ValuationDto>("DEPRECIATION_NOT_APPLICABLE", problem);
+            }
+            depreciation = new BuildingDepreciationInput(outcome.Percent, age, false, outcome.Capped);
+        }
+
+        var lines = new List<(ValuationLine Line, ValuationCalculationResult Calc)>();
+        for (var i = 0; i < portions.Count; i++)
+        {
+            var (p, bucc) = (portions[i], buccs[i]);
+            lines.Add((new ValuationLine
+            {
+                Source = p.Source, SourceId = p.SourceId, ClassificationId = p.ClassificationId, SubClassificationId = p.SubClassificationId,
+                ActualUseId = p.ActualUseId, Quantity = p.Area, Unit = "sqm", UnitValue = bucc.CostPerSquareMetre, Description = structure,
+            }, Rounded(ValuationCalculator.CalculateBuildingByCost(p.Area, bucc.CostPerSquareMetre, shares[i], building.CompletionPercentage, depreciation))));
+        }
+
+        var valuation = PersistLines(building.RpuId, building.PropertyId, ValuationSourceType.Building, building.Id, lines, smv.Id, null, date);
+        valuation.TransactionTypeId = transactionTypeId;
+        building.MarketValue = valuation.ComputedMarketValue;
+        building.Depreciation = depreciation.Percent;
+        building.DepreciatedValue = valuation.ComputedMarketValue;
+        await db.SaveChangesAsync(ct);
+        return Result.Success(await MapAsync(valuation.Id, ct));
+    }
+
+    /// <summary>The depreciation percent of the building unit's last posted valuation, if it recorded one.</summary>
+    private async Task<decimal?> LastPostedDepreciationPercentAsync(Guid rpuId, CancellationToken ct)
+    {
+        var valuationId = await db.Assessments.Where(a => a.RpuId == rpuId && a.Status == WorkflowStatus.Posted)
+            .OrderByDescending(a => a.EffectiveDate).ThenByDescending(a => a.PostedAt).Select(a => (Guid?)a.ValuationId).FirstOrDefaultAsync(ct);
+        if (valuationId is null)
+        {
+            return null;
+        }
+        var breakdowns = await db.ValuationLines.Where(l => l.ValuationId == valuationId).OrderBy(l => l.Sequence).Select(l => l.BreakdownJson).ToListAsync(ct);
+        foreach (var json in breakdowns)
+        {
+            if (JsonSerializer.Deserialize<Dictionary<string, decimal>>(json ?? "{}") is { } b && b.TryGetValue("DepreciationPercent", out var percent))
+            {
+                return percent;
+            }
+        }
+        return null;
     }
 
     /// <summary>
@@ -292,19 +449,35 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         {
             return Result.Failure<ValuationDto>("MACHINERY_NOT_FOUND", "No Machinery record was found with the given id.");
         }
-        var machines = await db.MachineryUnits.Where(x => x.RpuId == machinery.RpuId).OrderBy(x => x.CreatedAt).ToListAsync(cancellationToken);
+        var machines = await db.MachineryUnits.Include(x => x.CostItems).Where(x => x.RpuId == machinery.RpuId).OrderBy(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
 
-        var parameters = new MachineryValuationParameters(options.Value.MachineryMinimumRemainingValuePercent!.Value);
+        var date = asOf ?? clock.Today;
+        var parameters = new MachineryValuationParameters(options.Value.MachineryMinimumRemainingValuePercent!.Value,
+            options.Value.MachineryMaximumYearlyDepreciationPercent);
         var lines = new List<(ValuationLine Line, ValuationCalculationResult Calc)>();
         foreach (var machine in machines)
         {
-            if (ValuationCalculator.MissingMachineryInputs(machine) is { } missing)
+            var name = string.Join(" ", new[] { machine.Brand, machine.Model, machine.SerialNumber }.Where(x => !string.IsNullOrWhiteSpace(x)));
+            ValuationCalculationResult calc;
+            if (!machine.IsBrandNew && machine.PriceIndexSeries is not null)
             {
-                var name = string.Join(" ", new[] { machine.Brand, machine.Model, machine.SerialNumber }.Where(x => !string.IsNullOrWhiteSpace(x)));
-                return Result.Failure<ValuationDto>("MACHINERY_VALUATION_INPUTS_MISSING",
-                    $"Machinery that is not brand-new is valued from its replacement or reproduction cost and its remaining vs. estimated economic life (LGC §224(a)). {(name.Length > 0 ? name : "A machine")} is missing: {missing}.");
+                var derived = await DeriveMachineryAsync(machine, parameters, date, name.Length > 0 ? name : "A machine", cancellationToken);
+                if (derived.IsFailure)
+                {
+                    return Result.Failure<ValuationDto>(derived.Code!, derived.Message!);
+                }
+                calc = Rounded(derived.Value);
             }
-            var calc = Rounded(ValuationCalculator.CalculateMachinery(machine, parameters));
+            else
+            {
+                if (ValuationCalculator.MissingMachineryInputs(machine) is { } missing)
+                {
+                    return Result.Failure<ValuationDto>("MACHINERY_VALUATION_INPUTS_MISSING",
+                        $"Machinery that is not brand-new is valued from its replacement or reproduction cost and its remaining vs. estimated economic life (LGC §224(a)), or derived from a price index. {(name.Length > 0 ? name : "A machine")} is missing: {missing}.");
+                }
+                calc = Rounded(ValuationCalculator.CalculateMachinery(machine, parameters));
+            }
             lines.Add((new ValuationLine
             {
                 Source = ValuationLineSource.Machinery, SourceId = machine.Id,
@@ -312,20 +485,80 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 Description = string.Join(" ", new[] { machine.Brand, machine.Model, machine.Description }.Where(x => !string.IsNullOrWhiteSpace(x))) is { Length: > 0 } d ? d : null,
             }, calc));
             machine.MarketValue = calc.MarketValue;
+            if (calc.Breakdown.TryGetValue("DepreciationPercent", out var depreciationPercent))
+            {
+                machine.Depreciation = depreciationPercent;
+            }
         }
 
         // Valuation.SourceId names the unit's first machine; the lines name each machine.
-        var valuation = PersistLines(machinery.RpuId, machinery.PropertyId, ValuationSourceType.Machinery, machines[0].Id, lines, null, null, asOf ?? clock.Today);
+        var valuation = PersistLines(machinery.RpuId, machinery.PropertyId, ValuationSourceType.Machinery, machines[0].Id, lines, null, null, date);
         await db.SaveChangesAsync(cancellationToken);
 
         return Result.Success(await MapAsync(valuation.Id, cancellationToken));
     }
 
     /// <summary>
+    /// The derived replacement cost's inputs for one machine (LAM Bk III pp.73–75; valuation-foundation.md §4.6):
+    /// the approved price indices of its series for the acquisition and valuation years and, for imported
+    /// machinery, the approved exchange rates on or before the acquisition and valuation dates. Whatever is
+    /// missing stops the valuation with the reason.
+    /// </summary>
+    private async Task<Result<ValuationCalculationResult>> DeriveMachineryAsync(Machinery machine, MachineryValuationParameters parameters, DateOnly date,
+        string name, CancellationToken ct)
+    {
+        Result<ValuationCalculationResult> Fail(string code, string message) => Result.Failure<ValuationCalculationResult>(code, $"{name}: {message}");
+        if (parameters.MaximumYearlyDepreciationPercent is null)
+        {
+            return Fail("MACHINERY_DEPRECIATION_LIMIT_NOT_CONFIGURED",
+                "the derived replacement cost needs Valuation:MachineryMaximumYearlyDepreciationPercent (LGC §225) configured.");
+        }
+        if (machine.DateAcquired is not { } acquired || machine.EconomicLifeYears is not > 0)
+        {
+            return Fail("MACHINERY_VALUATION_INPUTS_MISSING", "the derived replacement cost needs the date acquired and the estimated economic life (years, > 0).");
+        }
+        var series = machine.PriceIndexSeries!;
+        var indices = await db.PriceIndices.AsNoTracking()
+            .Where(x => x.Series == series && x.Status == WorkflowStatus.Approved && (x.Year == acquired.Year || x.Year == date.Year))
+            .ToDictionaryAsync(x => x.Year, x => x.Value, ct);
+        foreach (var year in new[] { acquired.Year, date.Year }.Distinct())
+        {
+            if (!indices.ContainsKey(year))
+            {
+                return Fail("PRICE_INDEX_NOT_FOUND", $"no approved {series} price index for {year}.");
+            }
+        }
+        decimal? rateAtAcquisition = null, rateAtValuation = null;
+        if (machine.IsImported)
+        {
+            var currency = machine.AcquisitionCurrency!;
+            async Task<decimal?> RateOn(DateOnly d) => await db.ExchangeRates.AsNoTracking()
+                .Where(x => x.Currency == currency && x.Status == WorkflowStatus.Approved && x.RateDate <= d)
+                .OrderByDescending(x => x.RateDate).Select(x => (decimal?)x.PesosPerUnit).FirstOrDefaultAsync(ct);
+            rateAtAcquisition = await RateOn(acquired);
+            rateAtValuation = await RateOn(date);
+            if (rateAtAcquisition is null || rateAtValuation is null)
+            {
+                return Fail("EXCHANGE_RATE_NOT_FOUND",
+                    $"no approved {currency} exchange rate on or before {(rateAtAcquisition is null ? acquired : date):yyyy-MM-dd}.");
+            }
+        }
+        // Cost, insurance and freight is converted and trended; the other expenses are added at their recorded cost.
+        var freightInsurance = machine.CostItems.Where(i => i.Kind is MachineryCostItemKind.Freight or MachineryCostItemKind.Insurance).Sum(i => i.Amount);
+        var otherItems = machine.CostItems.Where(i => i.Kind is not (MachineryCostItemKind.Freight or MachineryCostItemKind.Insurance)).Sum(i => i.Amount);
+        var input = new MachineryDerivationInput(
+            machine.AcquisitionCost + freightInsurance, (machine.InstallationCost ?? 0m) + (machine.OtherCost ?? 0m) + otherItems,
+            rateAtAcquisition, rateAtValuation, indices[acquired.Year], indices[date.Year],
+            ValuationCalculator.YearsBetween(machine.DateInstalled ?? acquired, date), machine.EconomicLifeYears.Value, machine.IsInOperation);
+        return Result.Success(ValuationCalculator.CalculateMachineryDerived(input, parameters));
+    }
+
+    /// <summary>
     /// Values the whole unit — every row it holds — in one valuation
     /// (docs/analysis/mrpaao-forms-model.md §8.4). Used by general revision.
     /// </summary>
-    public async Task<Result<ValuationDto>> ComputeForRpuAsync(Guid rpuId, CancellationToken cancellationToken = default, DateOnly? asOf = null)
+    public async Task<Result<ValuationDto>> ComputeForRpuAsync(Guid rpuId, CancellationToken cancellationToken = default, DateOnly? asOf = null,
+        Guid? transactionTypeId = null, bool generalRevision = false)
     {
         var rpu = await db.RealPropertyUnits.FirstOrDefaultAsync(x => x.Id == rpuId, cancellationToken);
         if (rpu is null)
@@ -343,7 +576,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 var building = await db.Buildings.Where(x => x.RpuId == rpuId).Select(x => (Guid?)x.Id).FirstOrDefaultAsync(cancellationToken);
                 return building is null
                     ? Result.Failure<ValuationDto>("BUILDING_NOT_FOUND", "No Building record exists for this RPU.")
-                    : await ComputeForBuildingAsync(building.Value, cancellationToken, asOf);
+                    : await ComputeForBuildingAsync(building.Value, cancellationToken, asOf, transactionTypeId, generalRevision);
             case RpuType.OtherImprovement:
                 return await ComputeForSeparateImprovementsAsync(rpu, cancellationToken, asOf);
             case RpuType.Machinery:

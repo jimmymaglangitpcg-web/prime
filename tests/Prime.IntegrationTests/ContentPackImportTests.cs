@@ -87,13 +87,14 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
         result.Applied.ShouldBeTrue();
         var record = result.Import.ShouldNotBeNull();
         // 1 province, 2 towns, 4 barangays, 2 classifications, 1 sub-class, 1 actual use, 2 parts, 2 materials,
-        // 4 draft versions, 1 office with 2 draft jurisdictions, a draft SMV with 2 unit values, 2 factors and 1 level, 2 barangay boundaries
-        record.CreatedCount.ShouldBe(30);
+        // 4 draft versions, 1 office with 2 draft jurisdictions, a draft SMV with 2 unit values, 2 factors and 1 level, 2 barangay boundaries,
+        // 1 structural type, 1 building kind, 1 component type, and the SMV's construction cost, extra-item cost and depreciation table (L1-5), 2 exchange rates and 1 price index (L1-6)
+        record.CreatedCount.ShouldBe(39);
         record.ChangedCount.ShouldBe(0);
         record.ImportedBy.ShouldBe(c.Importer.Id);
         record.ImportedByName.ShouldBe("DEMO Importer");
         record.Fingerprint.ShouldBe(preview.Fingerprint);
-        record.Files.Count.ShouldBe(18);
+        record.Files.Count.ShouldBe(26);
 
         var province = await c.Db.Provinces.SingleAsync(x => x.PsgcCode == "9900000000");
         province.PinIndexNumber.ShouldBe("998");
@@ -116,9 +117,16 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
             [(1000m, (Guid?)null, (string?)null, (string?)null, WorkflowStatus.Draft), (1200m, null, "DEMO-CP-R1", "9900100001", WorkflowStatus.Draft)]);
         (await c.Db.AssessmentLevels.Include(x => x.ActualUse).SingleAsync(x => x.OrdinanceNumber == "DEMO-CP-ORD"))
             .ShouldSatisfyAllConditions(l => l.ActualUse!.Code.ShouldBe("DEMO-CP-RU"), l => l.AssessmentPercentage.ShouldBe(20m), l => l.Status.ShouldBe(WorkflowStatus.Draft));
+        // Step L1-5: the SMV's building tables, as drafts, with their codes resolved.
+        (await c.Db.SmvBuildingCosts.Include(x => x.StructuralType).Include(x => x.BuildingType).SingleAsync(x => x.SmvId == smv.Id))
+            .ShouldSatisfyAllConditions(b => b.StructuralType!.Code.ShouldBe("DEMO-CP-ST-C"), b => b.BuildingType!.Code.ShouldBe("DEMO-CP-BT-RES"),
+                b => b.CostPerSquareMetre.ShouldBe(9000m), b => b.Status.ShouldBe(WorkflowStatus.Draft));
+        (await c.Db.SmvExtraItemCosts.SingleAsync(x => x.SmvId == smv.Id)).ShouldSatisfyAllConditions(e => e.Unit.ShouldBe("linear m"), e => e.UnitCost.ShouldBe(1500m));
+        var table = await c.Db.SmvDepreciationSchedules.Include(x => x.Rows).SingleAsync(x => x.SmvId == smv.Id);
+        (table.Reading, table.MinimumRemainingPercent, table.Rows.Count, table.Status).ShouldBe((DepreciationReading.YearlyWithinBand, 20m, 2, WorkflowStatus.Draft));
 
         var items = (await c.Service.ListImportItemsAsync(record.Id, new PagedRequest { PageSize = 100 })).Value;
-        items.TotalCount.ShouldBe(30);
+        items.TotalCount.ShouldBe(39);
         items.Items.ShouldAllBe(i => i.Action == ContentImportAction.Created && i.Source.Length > 0 && i.Line >= 1);
         items.Items.Single(i => i.Key == "9900200001").Source.ShouldBe("DEMO data (row-level source)");
         items.Items.Single(i => i.Key == "9900200001").EntityId.ShouldBe((await c.Db.Barangays.SingleAsync(x => x.PsgcCode == "9900200001")).Id);

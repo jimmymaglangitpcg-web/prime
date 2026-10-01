@@ -19,6 +19,7 @@ public sealed class ValuationConfiguration : IEntityTypeConfiguration<Valuation>
         builder.HasOne(x => x.Property).WithMany().HasForeignKey(x => x.PropertyId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Smv).WithMany().HasForeignKey(x => x.SmvId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.SmvSchedule).WithMany().HasForeignKey(x => x.SmvScheduleId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Prime.Domain.Entities.Transactions.TransactionType>().WithMany().HasForeignKey(x => x.TransactionTypeId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => x.RpuId);
         builder.HasIndex(x => new { x.SourceType, x.SourceId, x.ComputedAt });

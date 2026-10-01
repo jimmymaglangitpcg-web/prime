@@ -1,0 +1,10 @@
+[
+  {
+    "smv": "DEMO-CP-CERT-2099",
+    "componentType": "DEMO-CP-FENCE",
+    "unit": "linear m",
+    "unitCost": 1500,
+    "legalBasis": "DEMO — not an SMV provision",
+    "effectiveDate": "2099-01-01"
+  }
+]

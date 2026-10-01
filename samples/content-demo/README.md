@@ -7,7 +7,11 @@ prefixed `DEMO`. Real packs (LAM, ordinance and LGU data) go in the gitignored
 
 `catalogues/smv.json`, `valuation/smv-schedules.csv` and `valuation/assessment-levels.csv`
 hold a DEMO certified SMV for Town A (effective 2099), two invented unit values and one
-level. They import as drafts for a second user to approve.
+level. They import as drafts for a second user to approve. `valuation/adjustment-factors.json`
+adds two invented factors; `building-costs.json`, `extra-item-costs.json` and
+`depreciation-rates.json` add an invented construction cost, fence cost and depreciation table
+for a DEMO structural type; `exchange-rates.csv` and `price-indices.csv` add two invented USD rates
+(dated 2099) and one invented index for machinery.
 
 The map layer `gis/barangays.geojson` draws the two DEMO barangays of Town A
 as small squares in the open Philippine Sea, so they cannot be mistaken for a

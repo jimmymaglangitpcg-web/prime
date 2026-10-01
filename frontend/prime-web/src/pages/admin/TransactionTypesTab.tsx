@@ -46,6 +46,7 @@ export function TransactionTypesTab() {
               </span>
             ),
           },
+          { title: 'Building depreciation', dataIndex: 'allowsNewDepreciation', render: (v: boolean) => (v ? 'New for the age' : 'Kept') },
           {
             title: 'Requirements', render: (_, t) => t.requirements.length === 0 ? '—' : (
               <ol style={{ margin: 0, paddingLeft: 18 }}>
@@ -72,6 +73,7 @@ export function TransactionTypesTab() {
             effectivityRule: v.effectivityRule ?? null,
             effectivityLegalBasis: v.effectivityRule ? v.effectivityLegalBasis : null,
             causeWindowDays: v.effectivityRule === 'NextQuarter' ? v.causeWindowDays ?? null : null,
+            allowsNewDepreciation: !!v.allowsNewDepreciation,
             requirements: (v.requirements ?? []).map((r: { code: string; label: string; isMandatory?: boolean; legalBasis?: string }, i: number) =>
               ({ ...r, isMandatory: r.isMandatory ?? true, sequence: i + 1 })),
           }, { onSuccess: () => { form.resetFields(); setOpen(false); } })}>
@@ -99,6 +101,10 @@ export function TransactionTypesTab() {
               </Form.Item>
             )}
           </Space>
+          <Form.Item name="allowsNewDepreciation" label="Buildings take a new depreciation" valuePropName="checked"
+            extra="On for a first declaration, a general revision or the owner's request (LAM Bk III p.73); off, a building keeps the depreciation of its last posted valuation.">
+            <Switch />
+          </Form.Item>
           <Typography.Text strong>Prerequisites (checklist)</Typography.Text>
           <Form.List name="requirements">
             {(fields, { add, remove }) => (

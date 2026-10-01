@@ -137,9 +137,10 @@ public sealed class BuildingService(IApplicationDbContext db, IValidator<CreateB
             return Fail("VALIDATION_FAILED", "Quantity, unit cost and cost cannot be negative; description max 500.");
         }
         var cost = request.Cost ?? (request.Quantity is { } q && request.UnitCost is { } u ? Math.Round(q * u, 2, MidpointRounding.AwayFromZero) : null);
-        if (request.IsAdditionalItem && cost is null)
+        // With a quantity alone, the item is priced from the SMV's extra-item cost (valuation-foundation.md §4.5).
+        if (request.IsAdditionalItem && cost is null && request.Quantity is null)
         {
-            return Fail("VALIDATION_FAILED", "An additional item needs a cost, or a quantity and unit cost.");
+            return Fail("VALIDATION_FAILED", "An additional item needs a quantity (priced from the SMV), or a cost.");
         }
         if (request.BuildingUsePortionId is { } portionId && (!request.IsAdditionalItem || building.UsePortions.All(x => x.Id != portionId)))
         {

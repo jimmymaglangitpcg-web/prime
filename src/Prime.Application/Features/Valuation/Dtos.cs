@@ -40,7 +40,14 @@ public static class ValuationBreakdown
 
     public static IReadOnlyList<ValuationBreakdownItemDto> Ordered(string json) =>
         (JsonSerializer.Deserialize<Dictionary<string, decimal>>(json) ?? [])
-        .OrderBy(kv => kv.Key == "MarketValue" ? int.MaxValue : Rank.GetValueOrDefault(kv.Key, int.MaxValue - 1))
+        .OrderBy(kv => Position(kv.Key))
         .ThenBy(kv => kv.Key, StringComparer.Ordinal)
         .Select(kv => new ValuationBreakdownItemDto(kv.Key, kv.Value)).ToList();
+
+    /// <summary>Listed keys in order; each extra item just before their total, each factor just before the total percent; others before MarketValue.</summary>
+    private static long Position(string key) =>
+        key == "MarketValue" ? long.MaxValue
+        : key.StartsWith(ValuationCalculator.ExtraItemKeyPrefix, StringComparison.Ordinal) ? 2L * Rank["AdditionalItemsCost"] - 1
+        : key.StartsWith(ValuationCalculator.AdjustmentKeyPrefix, StringComparison.Ordinal) ? 2L * Rank["AdjustmentPercent"] - 1
+        : Rank.TryGetValue(key, out var r) ? 2L * r : long.MaxValue - 1;
 }

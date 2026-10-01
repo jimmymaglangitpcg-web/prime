@@ -10,7 +10,7 @@ public sealed record CreateTransactionTypeRequest(
     string LegalBasis, DateOnly EffectiveDate, string? Remarks,
     string Code, string Name, PropertyTransactionKind Kind, int? Rank, string? Description,
     IReadOnlyList<TransactionRequirementRequest> Requirements,
-    EffectivityRule? EffectivityRule = null, string? EffectivityLegalBasis = null, int? CauseWindowDays = null);
+    EffectivityRule? EffectivityRule = null, string? EffectivityLegalBasis = null, int? CauseWindowDays = null, bool AllowsNewDepreciation = false);
 
 public sealed record TransactionRequirementDto(int Sequence, string Code, string Label, bool IsMandatory, string? LegalBasis);
 
@@ -19,7 +19,7 @@ public sealed record TransactionTypeDto(
     IReadOnlyList<TransactionRequirementDto> Requirements,
     string LegalBasis, DateOnly EffectiveDate, DateOnly? EndDate, WorkflowStatus Status,
     Guid? CreatedBy, DateTimeOffset CreatedAt, Guid? ApprovedBy, DateTimeOffset? ApprovedAt, string? Remarks,
-    EffectivityRule? EffectivityRule = null, string? EffectivityLegalBasis = null, int? CauseWindowDays = null);
+    EffectivityRule? EffectivityRule = null, string? EffectivityLegalBasis = null, int? CauseWindowDays = null, bool AllowsNewDepreciation = false);
 
 // --- Transactions ---
 

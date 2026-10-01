@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiGet, apiPost } from '../lib/apiClient';
-import type { CreateMachineryRequest, MachineryDto } from '../lib/types';
+import { apiGet, apiPost, apiPut } from '../lib/apiClient';
+import type { CreateMachineryRequest, MachineryDto, UpdateMachineryValuationInputsRequest } from '../lib/types';
 
 export function useMachineryByRpu(rpuId: string | undefined) {
   return useQuery({
@@ -28,5 +28,17 @@ export function useMachineryUnitsByRpu(rpuId: string | undefined) {
     queryKey: ['rpus', rpuId, 'machinery', 'units'],
     queryFn: () => apiGet<MachineryDto[]>(`/api/rpus/${rpuId}/machinery-units`),
     enabled: !!rpuId,
+  });
+}
+
+/** What the derived replacement cost reads, changed with a reason (audited; valuation-foundation.md §4.6). */
+export function useUpdateMachineryValuationInputs(machineryId: string, rpuId: string, propertyId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: UpdateMachineryValuationInputsRequest) => apiPut<MachineryDto>(`/api/machinery/${machineryId}/valuation-inputs`, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rpus', rpuId, 'machinery'] });
+      queryClient.invalidateQueries({ queryKey: ['properties', propertyId] });
+    },
   });
 }

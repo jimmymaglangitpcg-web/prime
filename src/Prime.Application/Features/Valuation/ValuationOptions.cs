@@ -22,6 +22,16 @@ public sealed class ValuationOptions
     public string? MachineryMinimumRemainingValueLegalBasis { get; set; }
 
     /// <summary>
+    /// LGC §225: machinery depreciation "not exceeding five percent (5%) ... for each year of use",
+    /// applied as a cap on years of use ÷ economic life in the derived method (Q11). Null: machinery
+    /// cannot be valued by the derived method.
+    /// </summary>
+    public decimal? MachineryMaximumYearlyDepreciationPercent { get; set; }
+
+    /// <summary>Citation for <see cref="MachineryMaximumYearlyDepreciationPercent"/>; required when it is set.</summary>
+    public string? MachineryMaximumYearlyDepreciationLegalBasis { get; set; }
+
+    /// <summary>
     /// The step each row's market value is rounded to (e.g. 10 = the nearest ten, as the LAM's
     /// FAAS annexes show), half away from zero. Null: no rounding — the default until the
     /// office confirms the rule ([C5]; docs/analysis/valuation-foundation.md §4.4).

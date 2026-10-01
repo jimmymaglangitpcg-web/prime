@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
-import type { Dayjs } from 'dayjs';
 import {
   useAllAdjustmentFactors, useApproveAdjustmentFactor, useApproveAssessmentLevel, useApproveSmv, useApproveSmvSchedule, useAssessmentLevels,
   useCreateAdjustmentFactor, useCreateAssessmentLevel, useCreateSmv, useCreateSmvSchedule, useSmvSchedules, useSmvs,
@@ -10,29 +9,15 @@ import {
   useActualUses, useAllMunicipalities, useBarangays, useClassifications, useImprovementKinds, usePropertyTypes, useRoadTypes, useSubClassifications,
   useZones,
 } from '../../api/referenceData';
-import { ApiRequestError } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/format';
 import {
-  adjustmentRuleKinds, distanceReferences, type AdjustmentFactorDto, type AdjustmentRuleKind, type AssessmentLevelDto, type LookupDto, type SmvBasis,
-  type SmvDto, type SmvScheduleDto, type WorkflowStatus,
+  adjustmentRuleKinds, distanceReferences, type AdjustmentFactorDto, type AdjustmentRuleKind, type AssessmentLevelDto, type SmvBasis,
+  type SmvDto, type SmvScheduleDto,
 } from '../../lib/types';
-
-const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error)?.message);
-const day = (d: Dayjs | null | undefined) => (d ? d.format('YYYY-MM-DD') : null);
-const lookup = (rows: LookupDto[]) => rows.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}` }));
-const statusTag = (s: WorkflowStatus) => <Tag color={s === 'Approved' ? 'green' : s === 'Draft' ? 'default' : 'orange'}>{s}</Tag>;
-const period = (from: string, to: string | null) => `${from} → ${to ?? 'open'}`;
-const pct = (v: number) => `${new Intl.NumberFormat('en-PH', { maximumFractionDigits: 4 }).format(v)}%`;
-
-/** The approve button of a rule; the creator cannot approve (maker-checker, CLAUDE.md §46). */
-function ApproveButton({ status, onApprove, pending }: { status: WorkflowStatus; onApprove: () => void; pending: boolean }) {
-  return status === 'Draft' ? <Button size="small" loading={pending} onClick={onApprove}>Approve</Button> : null;
-}
-
-function useToast() {
-  const [toast, context] = message.useMessage();
-  return { context, fail: (e: unknown) => toast.error(errorText(e)) };
-}
+import { day, errorText, lookup, pct, period, statusTag, useToast } from './ruleHelpers';
+import { ApproveButton } from './ApproveButton';
+import { BuildingCostsTab } from './BuildingCostsTab';
+import { MachineryIndicesTab } from './MachineryIndicesTab';
 
 /**
  * The rules valuation and assessment use (docs/analysis/value-and-assess.md §3):
@@ -50,6 +35,8 @@ export function ValuationRulesPage() {
       <Tabs items={[
         { key: 'smv', label: 'Schedules of Market Values', children: <SmvTab /> },
         { key: 'factors', label: 'Adjustment factors', children: <FactorsTab /> },
+        { key: 'buildings', label: 'Building costs', children: <BuildingCostsTab /> },
+        { key: 'machinery', label: 'Machinery indices', children: <MachineryIndicesTab /> },
         { key: 'levels', label: 'Assessment levels', children: <LevelsTab /> },
       ]} />
     </Space>

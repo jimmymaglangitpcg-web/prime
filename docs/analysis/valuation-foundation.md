@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-10-01 |
-| Status | **Approved 2026-10-01: all recommendations Q1–Q16 accepted (§8).** L1-1 to L1-4 done (§9); L1-5 next |
+| Status | **Approved 2026-10-01: all recommendations Q1–Q16 accepted (§8).** L1-1 to L1-6 done (§9); L1-7 next |
 | Rules | CLAUDE.md §5–§7, §28–§32, §65, §75–§77, §97 (L1), §118 |
 | Sources | LAM 2025 Book III Ch. II (appraisal, pp.69–80), Ch. III §4–§6 (assessment cases and effectivity, pp.84–85); Book IV Ch. I §2 (SMV contents, pp.107–110), Ch. III (certification and publication); RA 7160 §§219–225; RA 12001 |
 | Commit status | Cites and paraphrases the LAM; reproduces none of its tables or figures. May be committed (§118) |
@@ -593,3 +593,150 @@ visible on the FAAS. Automatic application can be added if the office wants it.
   land, corner lot and 1.5 km to the poblacion recorded with a reason, the corner factor added,
   and the land valued as of 2026-06-01 at 660,000 (500,000 + 50,000 and 100,000 + 10,000).
   No script errors. Dev DB now holds factors DEMO-L14-CNR, DEMO-L14-KM and that land state.
+
+### L1-5 — buildings: construction cost, extra items, depreciation (2026-10-01)
+
+**Built**
+- **SMV building tables (G-6):** `SmvBuildingCost` (SMV × structural type × optional building
+  kind × optional classification → cost per sqm), `SmvExtraItemCost` (SMV × component type →
+  cost per unit, with the unit) and `SmvDepreciationSchedule` (SMV × structural type → age bands,
+  how they read, and the minimum remaining percent). Each is effective-dated configuration with
+  maker-checker approval (`/api/building-costs`, `/api/extra-item-costs`,
+  `/api/depreciation-schedules`), one open approved version per scope.
+- **How a depreciation table reads (Q8, [C3]):** `Cumulative` (the band's percent is the total
+  for an age in it) or `YearlyWithinBand` (the band's percent per year of age in it, added band by
+  band). Bands must follow each other without gap or overlap; only the last may be open. An age
+  below the first band is not depreciated; an age beyond a closed last band is refused. The
+  result never exceeds 100 minus the minimum remaining percent (the breakdown says when it is
+  capped). Pure rules in `BuildingDepreciation`.
+- **Calculation (§4.5):** where an approved SMV in force covering the property has construction
+  costs, each use portion is valued as floor area × BUCC (the most specific row for the
+  building's kind and the portion's classification) + its extra items (quantity × the SMV's
+  cost; items not tied to a portion spread by floor area) = total, × completion, less
+  depreciation = market value; then rounding if configured (`ValuationCalculator.CalculateBuildingByCost`).
+  The breakdown lists each figure in FAAS order, with each extra item just before their total.
+  The valuation names that SMV. What the SMV does not give stops the valuation with the reason:
+  `BUILDING_COST_NOT_FOUND`, `EXTRA_ITEM_COST_NOT_FOUND`, `EXTRA_ITEM_QUANTITY_REQUIRED`,
+  `DEPRECIATION_TABLE_NOT_FOUND`, `BUILDING_AGE_UNKNOWN`, `DEPRECIATION_NOT_APPLICABLE`
+  (an independent appraisal is L1-7).
+- **Legacy path kept:** under an SMV without construction costs a building is valued as before
+  (rate by classification and use, entered cost of additional items, no depreciation), so every
+  existing DEMO valuation still values (exit criterion 4).
+- **Age (Q9):** valuation year − year completed, else constructed, else the year of the date
+  constructed or occupied; never below zero.
+- **When depreciation may change (G-7, Q10):** `TransactionType.AllowsNewDepreciation`. A new
+  depreciation for the age applies in a general revision (the job passes it), for a transaction
+  whose type allows it, or when the building has no posted valuation that recorded a
+  depreciation percent. Otherwise the percent of the last posted valuation is carried over
+  (breakdown `DepreciationCarriedOver`). The valuation endpoints take `?transactionTypeId=`; the
+  valuation records it, and an assessment of a depreciated building made under another
+  transaction is refused (`VALUATION_TRANSACTION_MISMATCH`). The Value-and-assess drawer sends the
+  chosen transaction when it values.
+- **Extra items by quantity:** an additional item may now be recorded with a quantity alone (priced
+  from the SMV); the check `CK_BuildingComponents_AdditionalItemCost` accepts a cost or a quantity.
+  `Building.Depreciation` (numeric 9,6, a rate) holds the depreciation percent of the last
+  cost-based valuation; `DepreciatedValue` its market value.
+- **Content pack:** `building-costs`, `extra-item-costs` and `depreciation-rates` are read (JSON,
+  like adjustment factors), imported as Draft versions keyed by SMV and scope. The DEMO pack gained
+  a structural type, building kind and component type, and one row of each table.
+- **Screens:** Valuation Rules → Building costs (three tables, create and approve); Transaction
+  types show and set "Buildings take a new depreciation"; the valuation breakdown shows flags as
+  Yes/No and percents with %; the component dialog says a quantity is priced from the SMV.
+- Migration `BuildingCostTables`, additive (three tables and rows, two columns, the relaxed check),
+  **local database only**.
+
+**Deviations:** the pack files are JSON, not CSV (as for adjustment factors in L1-4); a building
+under an SMV without construction costs keeps the older rate method rather than being refused.
+
+**Verified**
+- 15 unit tests (`BuildingDepreciationTests`: age sources, both readings at band edges, the cap,
+  ages beyond the table, band checks, the FAAS figures and a carried-over percent).
+- 6 integration tests (`BuildingCostValuationTests`, DEMO figures): 100 sqm × 10,000 + 20 m of
+  fence × 1,500 = 1,030,000; age 10 at 2 % a year for 1–5 and 3 % from 6 = 25 %; depreciation
+  257,500; market value 772,500; assessed at 50 % = 386,250 (exit criterion 2). Carried over (25 %)
+  for a transaction that does not allow it and with none; renewed (31 % at age 12) for one that does
+  and in a general revision; assessment under another transaction refused; each refusal; a
+  cumulative table capped at 70 % by a 30 % remaining value; band checks and maker-checker.
+  Content-pack tests updated (36 records, 24 files).
+- Full suite: 550 tests pass (197 domain, 56 application, 297 integration). `npm run build` and
+  `npm run lint` clean.
+- Browser (Playwright, API :5231, dev server :5174): the DEMO pack previewed (one new record for
+  each new kind) and imported (36 records); on Building costs a BUCC (12,000/sqm), a fence cost
+  (1,500 per linear m) and a yearly depreciation table (1–10 at 1.5 %, 11+ at 2 %, 20 % remaining)
+  created under DEMO-L13-CERT and approved by the dev checker; DEMO-BLDG-562763 given its year
+  (2089, with a reason), a use portion and 20 m of fence, and valued as of 2099-01-01 at 96,900
+  (84,000 + 30,000 = 114,000, less 15 %). No sideways scroll at 390 px; no script errors. The
+  DEMO pack import was then removed from the dev database (the pack tests expect it absent), with
+  the fence that used its item type; the building now values at 71,400. Dev DB keeps: the
+  `BUILDING` property type (demo pack `demo-l15`), the three DEMO-L13-CERT rows (the fence cost
+  removed), and the building's year and portion.
+
+### L1-6 — machinery: derived replacement cost, 5 % cap, in operation (2026-10-01)
+
+**Built**
+- **Observations:** `ExchangeRate` (currency, date, pesos per unit, source) and `PriceIndex` (series,
+  year, value, source). Each is created as a Draft and approved by a second user, never edited, and
+  unique once approved (per currency and date, per series and year). Unlike effective-dated rules they
+  are entered in any order; a valuation reads the latest approved rate on or before the date it
+  needs. `/api/exchange-rates`, `/api/price-indices`.
+- **Machine fields:** imported or local, acquisition currency (ISO 4217), cost in that currency,
+  origin country, price index series, date installed, in operation (default yes) and an itemised
+  list of acquisition cost items (`MachineryCostItem`: freight, insurance, bank charges, brokerage,
+  arrastre, duties, inland transport, installation, other). They are set when the machine is
+  created or through `PUT /api/machinery/{id}/valuation-inputs` with a reason (audited), which
+  replaces the item list.
+- **Derived method (Q11; LAM Bk III pp.73–75, Formulas 7–12):** for a machine that is not
+  brand-new and names a price index series, replacement cost = (acquisition cost + freight +
+  insurance) × (rate at valuation ÷ rate at acquisition, imported only) × (index of the valuation
+  year ÷ index of the acquisition year) + the other expenses (installation, duties … and the older
+  installation and other cost fields) at their recorded cost. Years of use = completed years from
+  installation, else acquisition. Depreciation = replacement cost × the smaller of years ÷ economic
+  life and `Valuation:MachineryMaximumYearlyDepreciationPercent` (5, LGC §225, configuration with its
+  legal basis) × years, at most 100 %. The minimum remaining value (20 %) applies only while the
+  machine is in operation (Q12). Method `DerivedReplacementCost`; the breakdown keeps every input
+  (rates, indices, factor, years, the cap and whether it bound). Missing data stops the valuation:
+  `PRICE_INDEX_NOT_FOUND`, `EXCHANGE_RATE_NOT_FOUND`, `MACHINERY_VALUATION_INPUTS_MISSING`,
+  `MACHINERY_DEPRECIATION_LIMIT_NOT_CONFIGURED`.
+- **Entered method kept:** a machine without a series is valued from its entered replacement cost
+  and remaining life as before; it now also gets no minimum when not in operation (Q12). Brand-new
+  machinery adds its cost items to the acquisition cost.
+- `Machinery.Depreciation` (numeric 9,6) holds the depreciation percent of the last derived valuation.
+- **Content pack:** `exchange-rates` (CSV: currency, rate-date, pesos-per-unit, source, remarks) and
+  `price-indices` (CSV: series, year, value, source, remarks) are read; each row becomes a Draft; a
+  row PRIME already holds is unchanged; an approved observation with another value is refused. No
+  kind is left "not yet read". The DEMO pack gained two DEMO USD rates (dated 2099) and one DEMO index.
+- **Screens:** Valuation Rules → Machinery indices (rates and indices, create and approve); on a
+  machinery unit, a "Replacement cost" column (acquisition cost / derived: series, currency / entered),
+  an operation tag and a "Valuation inputs" dialog (with the cost item list and a reason); the
+  breakdown shows the flags as Yes/No and lists depreciation before the depreciated value.
+- Migration `MachineryDerivedCost`, additive (machine columns, cost items, rates, indices), **local
+  database only**.
+
+**Decisions within the approved design (DOMAIN VERIFICATION with the province, [C4]):**
+- The LAM's "price index (international price or trending factor)" is applied as the ratio of the
+  index of the valuation year to that of the acquisition year. If the province supplies trending
+  factors directly, they need their own table (series, acquisition year, valuation year → factor).
+- The other acquisition expenses are added untrended; the LAM converts the cost, insurance and
+  freight and says the appraisal includes the other expenses, without saying whether they are trended.
+
+**Verified**
+- 12 unit tests (`MachineryDerivationTests`: completed years, conversion and trending, the cap at
+  its edges, the minimum in and out of operation, no limit configured, the entered method out of
+  operation, brand-new cost items).
+- 4 integration tests (`MachineryDerivedCostTests`, DEMO XTS figures): 1,000,000 + 50,000 freight +
+  10,000 insurance = 1,060,000 × 60/50 × 110/100 + 40,000 installation = 1,439,200; 5 years with a
+  10-year life → 25 % (capped from 50 %) → 1,079,400. A local machine of 18 years: 90 %, held at
+  20 % (200,000) in operation and 10 % (100,000) once recorded as not in operation (audited reason);
+  missing index, missing or draft-only rate, the latest earlier rate used, the entered method without
+  a series; validation, maker-checker and no second approved value. Content-pack tests updated (39
+  records, 26 files; the broken pack now has a malformed exchange-rates file).
+- Full suite: 566 tests pass (209 domain, 56 application, 301 integration). One full run had
+  `EndToEndFlowTests.CreatePropertyToVerifiedBalance` fail once; it passed alone and in two later
+  full runs (intermittent, not investigated further). `npm run build` and `npm run lint` clean.
+- Browser (Playwright, API :5231, dev server :5174): XTS rates (50 on 2020-01-01, 60 on 2026-01-01)
+  and DEMO-L16 indices (100 for 2020, 110 for 2026) created and approved by the dev checker; a
+  machinery unit DEMO-MACH-L16 added on DEMO-BILL-AE94B8 with one machine (1,000,000, acquired
+  2020-01-15, 10-year life); its valuation inputs set with a reason (imported, XTS, installed
+  2020-03-01, freight, insurance, installation); valued as of 2026-01-01 at 1,079,400 with the full
+  breakdown. Machinery indices tab without sideways scroll at 390 px; no script errors. These stay in
+  the dev database.

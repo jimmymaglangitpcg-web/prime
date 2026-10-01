@@ -18,4 +18,11 @@ public enum ValuationMethod
 
     /// <summary>Brand-new machinery valued at acquisition cost (LGC §224(a)).</summary>
     AcquisitionCost = 2,
+
+    /// <summary>
+    /// Machinery not brand-new: replacement cost derived from the acquisition cost, the exchange
+    /// rates and a price index, then depreciated (LAM Bk III pp.73–75; valuation-foundation.md §4.6).
+    /// <see cref="ReplacementCost"/> stays the method for an entered replacement cost.
+    /// </summary>
+    DerivedReplacementCost = 3,
 }

@@ -554,6 +554,39 @@ export const distanceReferences: { value: DistanceReference; label: string }[] =
   { value: 'Poblacion', label: 'to the poblacion' },
 ];
 
+/** The SMV's building tables (valuation-foundation.md §4.5); every cost and percent is LGU data. */
+export interface BuildingCostDto {
+  id: string; smvId: string; smvReference: string; structuralTypeId: string; structuralTypeName: string; buildingTypeId: string | null;
+  buildingTypeName: string | null; classificationId: string | null; classificationName: string | null; costPerSquareMetre: number;
+  legalBasis: string; effectiveDate: string; endDate: string | null; status: WorkflowStatus;
+}
+export interface CreateBuildingCostRequest {
+  smvId: string; structuralTypeId: string; buildingTypeId: string | null; classificationId: string | null; costPerSquareMetre: number;
+  legalBasis: string; effectiveDate: string; remarks: string | null;
+}
+export interface ExtraItemCostDto {
+  id: string; smvId: string; smvReference: string; componentTypeId: string; componentTypeName: string; unit: string; unitCost: number;
+  legalBasis: string; effectiveDate: string; endDate: string | null; status: WorkflowStatus;
+}
+export interface CreateExtraItemCostRequest {
+  smvId: string; componentTypeId: string; unit: string; unitCost: number; legalBasis: string; effectiveDate: string; remarks: string | null;
+}
+/** How an SMV's depreciation table reads (Q8). */
+export type DepreciationReading = 'Cumulative' | 'YearlyWithinBand';
+export const depreciationReadings: { value: DepreciationReading; label: string }[] = [
+  { value: 'Cumulative', label: 'Total percent for an age in the band' },
+  { value: 'YearlyWithinBand', label: 'Percent per year within the band' },
+];
+export interface DepreciationRowDto { sequence: number; fromAge: number; toAge: number | null; percent: number }
+export interface DepreciationScheduleDto {
+  id: string; smvId: string; smvReference: string; structuralTypeId: string; structuralTypeName: string; reading: DepreciationReading;
+  minimumRemainingPercent: number; rows: DepreciationRowDto[]; legalBasis: string; effectiveDate: string; endDate: string | null; status: WorkflowStatus;
+}
+export interface CreateDepreciationScheduleRequest {
+  smvId: string; structuralTypeId: string; reading: DepreciationReading; minimumRemainingPercent: number;
+  rows: { fromAge: number; toAge: number | null; percent: number }[]; legalBasis: string; effectiveDate: string; remarks: string | null;
+}
+
 export interface AdjustmentFactorRowDto {
   sequence: number; roadTypeId: string | null; roadTypeName: string | null; overValue: number | null; upToValue: number | null; depthBand: number | null; percent: number;
 }
@@ -686,7 +719,39 @@ export interface MachineryDto {
   yearInstalled: number | null;
   yearOfInitialOperation: number | null;
   conversionFactor: number | null;
+  /** Derived replacement cost (valuation-foundation.md §4.6). */
+  isImported: boolean;
+  acquisitionCurrency: string | null;
+  foreignAcquisitionCost: number | null;
+  originCountry: string | null;
+  priceIndexSeries: string | null;
+  dateInstalled: string | null;
+  isInOperation: boolean;
+  costItems: MachineryCostItemDto[];
 }
+
+/** An item of a machine's acquisition cost (LAM Bk III p.75); freight and insurance are part of the cost, insurance and freight. */
+export type MachineryCostItemKind =
+  'Freight' | 'Insurance' | 'BankCharges' | 'Brokerage' | 'Arrastre' | 'Duties' | 'InlandTransport' | 'Installation' | 'Other';
+export const machineryCostItemKinds: { value: MachineryCostItemKind; label: string }[] = [
+  { value: 'Freight', label: 'Freight' }, { value: 'Insurance', label: 'Insurance' }, { value: 'BankCharges', label: 'Bank charges' },
+  { value: 'Brokerage', label: 'Brokerage' }, { value: 'Arrastre', label: 'Arrastre' }, { value: 'Duties', label: 'Duties and taxes' },
+  { value: 'InlandTransport', label: 'Inland transport' }, { value: 'Installation', label: 'Installation' }, { value: 'Other', label: 'Other' },
+];
+export interface MachineryCostItemDto { sequence: number; kind: MachineryCostItemKind; amount: number; description: string | null }
+export interface MachineryCostItemRequest { kind: MachineryCostItemKind; amount: number; description: string | null }
+export interface UpdateMachineryValuationInputsRequest {
+  isImported: boolean; acquisitionCurrency: string | null; foreignAcquisitionCost: number | null; originCountry: string | null;
+  priceIndexSeries: string | null; dateInstalled: string | null; isInOperation: boolean; costItems: MachineryCostItemRequest[]; reason: string;
+}
+
+/** Exchange rates and price indices for machinery (valuation-foundation.md §4.6); source data, approved by a second user. */
+export interface ExchangeRateDto {
+  id: string; currency: string; rateDate: string; pesosPerUnit: number; source: string; status: WorkflowStatus; remarks: string | null;
+}
+export interface CreateExchangeRateRequest { currency: string; rateDate: string; pesosPerUnit: number; source: string; remarks: string | null }
+export interface PriceIndexDto { id: string; series: string; year: number; value: number; source: string; status: WorkflowStatus; remarks: string | null }
+export interface CreatePriceIndexRequest { series: string; year: number; value: number; source: string; remarks: string | null }
 
 // --- Billing (Phase 8; docs/BILLING.md §4–§6) ---
 
@@ -1260,6 +1325,8 @@ export interface TransactionTypeDto {
   effectivityRule: EffectivityRule | null;
   effectivityLegalBasis: string | null;
   causeWindowDays: number | null;
+  /** A building valued for this transaction takes a new depreciation (valuation-foundation.md §4.5). */
+  allowsNewDepreciation: boolean;
 }
 
 /** How an assessment finds its effectivity date (docs/analysis/valuation-foundation.md §4.2). */
@@ -1284,6 +1351,7 @@ export interface CreateTransactionTypeRequest {
   effectivityRule?: EffectivityRule | null;
   effectivityLegalBasis?: string | null;
   causeWindowDays?: number | null;
+  allowsNewDepreciation?: boolean;
 }
 
 export interface NewPartyRequest {

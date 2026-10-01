@@ -10,6 +10,11 @@ public class MachineryController(IMachineryService machineryService) : ApiContro
     public async Task<ActionResult<MachineryDto>> Create(CreateMachineryRequest request, CancellationToken cancellationToken) =>
         HandleCreated(await machineryService.CreateAsync(request, cancellationToken), nameof(GetById), dto => new { id = dto.Id });
 
+    /// <summary>What the derived replacement cost reads, changed with a reason (docs/analysis/valuation-foundation.md §4.6).</summary>
+    [HttpPut("{id:guid}/valuation-inputs")]
+    public async Task<ActionResult<MachineryDto>> UpdateValuationInputs(Guid id, UpdateMachineryValuationInputsRequest request, CancellationToken cancellationToken) =>
+        HandleResult(await machineryService.UpdateValuationInputsAsync(id, request, cancellationToken));
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<MachineryDto>> GetById(Guid id, CancellationToken cancellationToken) =>
         HandleResult(await machineryService.GetByIdAsync(id, cancellationToken));

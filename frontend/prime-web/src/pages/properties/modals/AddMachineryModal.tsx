@@ -132,7 +132,7 @@ export function AddMachineryModal({
             <Form.Item
               name="replacementCost"
               label="Replacement / Reproduction Cost"
-              extra="Needed before this machinery can be valued."
+              extra="Needed before this machinery can be valued, unless a price index series is set under Valuation inputs (the cost is then derived)."
             >
               <InputNumber min={0} style={{ width: '100%' }} />
             </Form.Item>

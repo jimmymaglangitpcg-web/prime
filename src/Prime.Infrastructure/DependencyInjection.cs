@@ -61,6 +61,9 @@ public static class DependencyInjection
                 "Valuation:MachineryMinimumRemainingValuePercent is required (0-100).")
             .Validate(o => !string.IsNullOrWhiteSpace(o.MachineryMinimumRemainingValueLegalBasis),
                 "Valuation:MachineryMinimumRemainingValueLegalBasis is required.")
+            .Validate(o => o.MachineryMaximumYearlyDepreciationPercent is null
+                    || o.MachineryMaximumYearlyDepreciationPercent is > 0m and <= 100m && !string.IsNullOrWhiteSpace(o.MachineryMaximumYearlyDepreciationLegalBasis),
+                "Valuation:MachineryMaximumYearlyDepreciationPercent must be above 0 and at most 100, with Valuation:MachineryMaximumYearlyDepreciationLegalBasis.")
             .Validate(o => o.MarketValueRoundingStep is null || o.MarketValueRoundingStep > 0 && !string.IsNullOrWhiteSpace(o.MarketValueRoundingLegalBasis),
                 "Valuation:MarketValueRoundingStep must be positive and needs Valuation:MarketValueRoundingLegalBasis.")
             .ValidateOnStart();

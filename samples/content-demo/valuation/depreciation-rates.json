@@ -1,0 +1,14 @@
+[
+  {
+    "smv": "DEMO-CP-CERT-2099",
+    "structuralType": "DEMO-CP-ST-C",
+    "reading": "YearlyWithinBand",
+    "minimumRemainingPercent": 20,
+    "rows": [
+      { "fromAge": 1, "toAge": 10, "percent": 1.5 },
+      { "fromAge": 11, "percent": 2 }
+    ],
+    "legalBasis": "DEMO — not an SMV provision",
+    "effectiveDate": "2099-01-01"
+  }
+]

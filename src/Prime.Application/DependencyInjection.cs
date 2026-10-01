@@ -61,6 +61,8 @@ public static class DependencyInjection
         services.AddScoped<IFormDataProvider, NoticeFormDataProvider>();
         services.AddScoped<IAppraisalRecordService, AppraisalRecordService>();
         services.AddScoped<Features.Smv.IAdjustmentFactorService, Features.Smv.AdjustmentFactorService>();
+        services.AddScoped<Features.Smv.IBuildingCostTableService, Features.Smv.BuildingCostTableService>();
+        services.AddScoped<Features.Valuation.IMachineryIndexService, Features.Valuation.MachineryIndexService>();
         services.AddScoped<Features.Descriptions.IDescriptionService, Features.Descriptions.DescriptionService>();
         services.AddScoped<IFormDataProvider, AppraisalRecordFormDataProvider>();
         services.AddScoped<IFormDataProvider, StatementOfAccountFormDataProvider>();

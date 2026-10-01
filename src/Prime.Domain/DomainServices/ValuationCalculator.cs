@@ -13,11 +13,12 @@ namespace Prime.Domain.DomainServices;
 /// CLAUDE.md forbids inventing rates or assumptions (§5-§7): every input
 /// used below is either a value already entered on the entity (e.g.
 /// <see cref="Machinery.RemainingLifeYears"/>, an appraiser's own figure) or
-/// a resolved <see cref="SmvSchedule"/> rate. Where a legally-mandated
-/// method exists but no sourced rule is available yet — building
-/// depreciation by age, which would need an economic-life-by-building-type
-/// table nobody has supplied — no formula is invented; the corresponding
-/// output is simply not computed. See the Building method below.
+/// a resolved SMV rate, construction cost or depreciation table. Where a
+/// legally-mandated method has no configured table, no formula is invented:
+/// a building priced at the older rate by classification and use is not
+/// depreciated (<see cref="CalculateBuildingPortion"/>); one priced on the
+/// SMV's construction cost is depreciated by the SMV's own table
+/// (<see cref="CalculateBuildingByCost"/>).
 /// </summary>
 public static class ValuationCalculator
 {
@@ -30,10 +31,14 @@ public static class ValuationCalculator
     public static readonly IReadOnlyList<string> BreakdownOrder =
     [
         "Area", "TotalFloorArea", "FloorArea", "Quantity", "Rate", "LocationFactor", "CompletionPercentage",
-        "IsBrandNew", "AcquisitionCost", "InstallationCost", "OtherCost", "TotalAcquisitionCost",
-        "ReplacementCost", "EconomicLifeYears", "RemainingLifeYears", "RemainingFraction", "DepreciatedValue",
-        "MinimumRemainingValuePercent", "MinimumRemainingValue", "MinimumApplied",
-        "BaseValue", "AdditionalItemsCost", "TotalConstructionCost", "AdjustmentPercent", "ValueAdjustment", "ValueBeforeClamp", "MinimumValue", "MaximumValue",
+        "IsBrandNew", "AcquisitionCost", "InstallationCost", "OtherCost", "CostItems", "TotalAcquisitionCost",
+        "CostInsuranceFreight", "ExchangeRateAtAcquisition", "ExchangeRateAtValuation", "PriceIndexAtAcquisition", "PriceIndexAtValuation",
+        "PriceIndexFactor", "OtherExpenses",
+        "ReplacementCost", "YearsInUse", "EconomicLifeYears", "RemainingLifeYears", "RemainingFraction", "MaximumYearlyDepreciationPercent",
+        "BaseValue", "AdditionalItemsCost", "TotalConstructionCost", "AdjustmentPercent", "ValueAdjustment",
+        "Age", "DepreciationPercent", "DepreciationCapped", "DepreciationCarriedOver", "Depreciation",
+        "DepreciatedValue", "InOperation", "MinimumRemainingValuePercent", "MinimumRemainingValue", "MinimumApplied",
+        "ValueBeforeClamp", "MinimumValue", "MaximumValue",
         "MarketValueBeforeRounding", "RoundingStep", "MarketValue",
     ];
 
@@ -147,8 +152,8 @@ public static class ValuationCalculator
     /// One use portion of a building (MRPAAO Att. 2 "Property Appraisal"):
     /// building core = floor area × the SMV rate; + the cost of its
     /// additional items = total construction cost; × completion; then the
-    /// schedule's limits. Depreciation is not applied (plan A9: no
-    /// configured table yet — DOMAIN VERIFICATION REQUIRED).
+    /// schedule's limits. Depreciation is not applied. Used only where the
+    /// SMV has no construction costs (legacy and DEMO SMVs; valuation-foundation.md §4.5).
     /// </summary>
     public static ValuationCalculationResult CalculateBuildingPortion(decimal floorArea, SmvSchedule schedule, decimal additionalItemsCost,
         decimal completionPercentage)
@@ -165,6 +170,47 @@ public static class ValuationCalculator
             ["ValueBeforeClamp"] = value, ["MarketValue"] = marketValue,
         };
         AddClampBoundsIfPresent(breakdown, schedule.MinimumValue, schedule.MaximumValue);
+        return new ValuationCalculationResult(ValuationMethod.SmvBased, marketValue, breakdown);
+    }
+
+    /// <summary>Breakdown key prefix for one extra item's cost, e.g. "ExtraItem:FENCE".</summary>
+    public const string ExtraItemKeyPrefix = "ExtraItem:";
+
+    /// <summary>
+    /// One use portion of a building valued on the SMV's construction cost (LAM Bk III p.72;
+    /// docs/analysis/valuation-foundation.md §4.5), as the FAAS lays it out:
+    /// core = floor area × BUCC; + the extra items (each priced from the SMV) = total construction
+    /// cost; × completion; depreciation = that × the depreciation percent; market value = the rest.
+    /// The depreciation percent is the table's for the building's age, or the one carried over
+    /// from the last posted valuation (Q10); the caller decides which and says so.
+    /// </summary>
+    public static ValuationCalculationResult CalculateBuildingByCost(decimal floorArea, decimal costPerSquareMetre,
+        IReadOnlyList<(string Code, decimal Cost)> extraItems, decimal completionPercentage, BuildingDepreciationInput depreciation)
+    {
+        var core = floorArea * costPerSquareMetre;
+        var extras = extraItems.Sum(x => x.Cost);
+        var total = (core + extras) * completionPercentage / 100m;
+        var amount = total * depreciation.Percent / 100m;
+        var marketValue = total - amount;
+        var breakdown = new Dictionary<string, decimal>
+        {
+            ["FloorArea"] = floorArea, ["Rate"] = costPerSquareMetre, ["BaseValue"] = core, ["AdditionalItemsCost"] = extras,
+            ["CompletionPercentage"] = completionPercentage, ["TotalConstructionCost"] = total,
+            ["DepreciationPercent"] = depreciation.Percent, ["DepreciationCarriedOver"] = depreciation.CarriedOver ? 1m : 0m,
+            ["Depreciation"] = amount, ["MarketValue"] = marketValue,
+        };
+        foreach (var (code, cost) in extraItems.GroupBy(x => x.Code).Select(g => (g.Key, g.Sum(x => x.Cost))))
+        {
+            breakdown[ExtraItemKeyPrefix + code] = cost;
+        }
+        if (depreciation.Age is { } age)
+        {
+            breakdown["Age"] = age;
+        }
+        if (depreciation.Capped)
+        {
+            breakdown["DepreciationCapped"] = 1m;
+        }
         return new ValuationCalculationResult(ValuationMethod.SmvBased, marketValue, breakdown);
     }
 
@@ -267,9 +313,9 @@ public static class ValuationCalculator
     /// </list>
     /// Throws when <see cref="MissingMachineryInputs"/> is not null — callers
     /// check first and report the gap to the user.
-    /// DOMAIN VERIFICATION REQUIRED: whether §225's "not exceeding 5% … for
-    /// each year of use" limits the §224 life ratio, and how machinery that
-    /// is no longer "useful and in operation" is treated; neither is applied.
+    /// This is the entered-replacement-cost method, kept for legacy records and machinery without
+    /// index data (valuation-foundation.md §4.6); the derived method is
+    /// <see cref="CalculateMachineryDerived"/>. Machinery not in operation gets no minimum (Q12).
     /// </summary>
     public static ValuationCalculationResult CalculateMachinery(Machinery machinery, MachineryValuationParameters parameters)
     {
@@ -280,8 +326,9 @@ public static class ValuationCalculator
 
         if (machinery.IsBrandNew)
         {
-            var acquisitionCost = machinery.AcquisitionCost + (machinery.InstallationCost ?? 0m) + (machinery.OtherCost ?? 0m);
-            return new ValuationCalculationResult(ValuationMethod.AcquisitionCost, acquisitionCost, new Dictionary<string, decimal>
+            var items = machinery.CostItems.Sum(i => i.Amount);
+            var acquisitionCost = machinery.AcquisitionCost + (machinery.InstallationCost ?? 0m) + (machinery.OtherCost ?? 0m) + items;
+            var brandNew = new Dictionary<string, decimal>
             {
                 ["IsBrandNew"] = 1m,
                 ["AcquisitionCost"] = machinery.AcquisitionCost,
@@ -289,7 +336,12 @@ public static class ValuationCalculator
                 ["OtherCost"] = machinery.OtherCost ?? 0m,
                 ["TotalAcquisitionCost"] = acquisitionCost,
                 ["MarketValue"] = acquisitionCost,
-            });
+            };
+            if (items != 0m)
+            {
+                brandNew["CostItems"] = items;
+            }
+            return new ValuationCalculationResult(ValuationMethod.AcquisitionCost, acquisitionCost, brandNew);
         }
 
         var replacementCost = machinery.ReplacementCost!.Value;
@@ -298,7 +350,8 @@ public static class ValuationCalculator
         var remainingFraction = (decimal)remainingLife / economicLife;
         var depreciatedValue = replacementCost * remainingFraction;
         var minimumRemainingValue = replacementCost * parameters.MinimumRemainingValuePercent / 100m;
-        var floorApplied = depreciatedValue < minimumRemainingValue;
+        // LGC §225: the minimum holds "for so long as the machinery is useful and in operation" (Q12).
+        var floorApplied = machinery.IsInOperation && depreciatedValue < minimumRemainingValue;
         var marketValue = floorApplied ? minimumRemainingValue : depreciatedValue;
 
         return new ValuationCalculationResult(ValuationMethod.ReplacementCost, marketValue, new Dictionary<string, decimal>
@@ -311,9 +364,82 @@ public static class ValuationCalculator
             ["DepreciatedValue"] = depreciatedValue,
             ["MinimumRemainingValuePercent"] = parameters.MinimumRemainingValuePercent,
             ["MinimumRemainingValue"] = minimumRemainingValue,
+            ["InOperation"] = machinery.IsInOperation ? 1m : 0m,
             ["MinimumApplied"] = floorApplied ? 1m : 0m,
             ["MarketValue"] = marketValue,
         });
+    }
+
+    /// <summary>Completed years from <paramref name="start"/> to <paramref name="date"/>, never below zero.</summary>
+    public static int YearsBetween(DateOnly start, DateOnly date)
+    {
+        var years = date.Year - start.Year;
+        if (date < start.AddYears(years))
+        {
+            years--;
+        }
+        return Math.Max(0, years);
+    }
+
+    /// <summary>
+    /// Machinery that is not brand-new, from its acquisition cost (LAM Bk III pp.73–75, Formulas 7–12;
+    /// docs/analysis/valuation-foundation.md §4.6, Q11, Q12):
+    /// <list type="bullet">
+    /// <item>replacement cost = cost, insurance and freight × (exchange rate at valuation ÷ at acquisition,
+    /// imported machinery only) × (price index of the valuation year ÷ of the acquisition year), plus the
+    /// other acquisition expenses at their recorded cost;</item>
+    /// <item>depreciation = replacement cost × the smaller of years of use ÷ economic life and the configured
+    /// yearly maximum × years of use (LGC §225: not exceeding 5% a year), at most all of it;</item>
+    /// <item>market value = the rest, but not below the configured minimum remaining value while the machine
+    /// is in operation.</item>
+    /// </list>
+    /// Whether the other expenses are trended too is DOMAIN VERIFICATION REQUIRED ([C4]); they are not.
+    /// </summary>
+    public static ValuationCalculationResult CalculateMachineryDerived(MachineryDerivationInput input, MachineryValuationParameters parameters)
+    {
+        if (parameters.MaximumYearlyDepreciationPercent is not { } maxRate)
+        {
+            throw new InvalidOperationException("The maximum yearly depreciation of machinery is not configured.");
+        }
+        var exchangeFactor = input.ExchangeRateAtAcquisition is { } fxA && input.ExchangeRateAtValuation is { } fxV ? fxV / fxA : 1m;
+        var indexFactor = input.PriceIndexAtValuation / input.PriceIndexAtAcquisition;
+        var replacementCost = input.CostInsuranceFreight * exchangeFactor * indexFactor + input.OtherExpenses;
+        var byLife = (decimal)input.YearsInUse / input.EconomicLifeYears;
+        var byCap = maxRate * input.YearsInUse / 100m;
+        var fraction = Math.Min(1m, Math.Min(byLife, byCap));
+        var depreciation = replacementCost * fraction;
+        var depreciatedValue = replacementCost - depreciation;
+        var minimum = replacementCost * parameters.MinimumRemainingValuePercent / 100m;
+        var floorApplied = input.InOperation && depreciatedValue < minimum;
+        var marketValue = floorApplied ? minimum : depreciatedValue;
+        var breakdown = new Dictionary<string, decimal>
+        {
+            ["IsBrandNew"] = 0m,
+            ["CostInsuranceFreight"] = input.CostInsuranceFreight,
+            ["PriceIndexAtAcquisition"] = input.PriceIndexAtAcquisition,
+            ["PriceIndexAtValuation"] = input.PriceIndexAtValuation,
+            ["PriceIndexFactor"] = indexFactor,
+            ["OtherExpenses"] = input.OtherExpenses,
+            ["ReplacementCost"] = replacementCost,
+            ["YearsInUse"] = input.YearsInUse,
+            ["EconomicLifeYears"] = input.EconomicLifeYears,
+            ["MaximumYearlyDepreciationPercent"] = maxRate,
+            ["DepreciationPercent"] = fraction * 100m,
+            ["DepreciationCapped"] = byCap < byLife ? 1m : 0m,
+            ["Depreciation"] = depreciation,
+            ["DepreciatedValue"] = depreciatedValue,
+            ["InOperation"] = input.InOperation ? 1m : 0m,
+            ["MinimumRemainingValuePercent"] = parameters.MinimumRemainingValuePercent,
+            ["MinimumRemainingValue"] = minimum,
+            ["MinimumApplied"] = floorApplied ? 1m : 0m,
+            ["MarketValue"] = marketValue,
+        };
+        if (input.ExchangeRateAtAcquisition is { } a && input.ExchangeRateAtValuation is { } v)
+        {
+            breakdown["ExchangeRateAtAcquisition"] = a;
+            breakdown["ExchangeRateAtValuation"] = v;
+        }
+        return new ValuationCalculationResult(ValuationMethod.DerivedReplacementCost, marketValue, breakdown);
     }
 
     private static decimal ClampToRange(decimal value, decimal? min, decimal? max)
@@ -341,6 +467,22 @@ public static class ValuationCalculator
         }
     }
 }
+
+/// <summary>
+/// The depreciation a building is valued with: the percent, the age it was read for (null when
+/// carried over), whether it was carried over from the last posted valuation, and whether the
+/// table's minimum remaining value capped it.
+/// </summary>
+public sealed record BuildingDepreciationInput(decimal Percent, int? Age, bool CarriedOver, bool Capped);
+
+/// <summary>
+/// What a derived machinery valuation reads: the cost, insurance and freight and the other expenses
+/// (pesos, at acquisition), the exchange rates (imported only), the price indices of the acquisition
+/// and valuation years, the years of use, the economic life and whether the machine is in operation.
+/// </summary>
+public sealed record MachineryDerivationInput(decimal CostInsuranceFreight, decimal OtherExpenses, decimal? ExchangeRateAtAcquisition,
+    decimal? ExchangeRateAtValuation, decimal PriceIndexAtAcquisition, decimal PriceIndexAtValuation, int YearsInUse, int EconomicLifeYears,
+    bool InOperation);
 
 /// <summary>One adjustment factor as applied: its code, name and the percent in force.</summary>
 public sealed record LandAdjustmentInput(string Code, string Name, decimal Percent);

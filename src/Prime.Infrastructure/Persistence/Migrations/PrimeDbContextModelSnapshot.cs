@@ -1524,7 +1524,7 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.ToTable("BuildingComponents", t =>
                         {
-                            t.HasCheckConstraint("CK_BuildingComponents_AdditionalItemCost", "NOT \"IsAdditionalItem\" OR \"Cost\" IS NOT NULL");
+                            t.HasCheckConstraint("CK_BuildingComponents_AdditionalItemCost", "NOT \"IsAdditionalItem\" OR \"Cost\" IS NOT NULL OR \"Quantity\" IS NOT NULL");
                         });
                 });
 
@@ -2518,6 +2518,71 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("RelatedEntityType", "RelatedEntityId");
 
                     b.ToTable("Documents");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.ExchangeRate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<decimal>("PesosPerUnit")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
+                    b.Property<DateOnly>("RateDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Currency", "RateDate")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ExchangeRates_Approved")
+                        .HasFilter("\"Status\" = 'Approved'");
+
+                    b.ToTable("ExchangeRates", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ExchangeRates_Approval", "(\"Status\" = 'Approved') = (\"ApprovedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ExchangeRates_Rate", "\"PesosPerUnit\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.Forms.FormDefinition", b =>
@@ -3624,6 +3689,10 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<string>("AcquisitionCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
                     b.Property<Guid?>("ActualUseId")
                         .HasColumnType("uuid");
 
@@ -3659,6 +3728,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("DateAcquired")
                         .HasColumnType("date");
 
+                    b.Property<DateOnly?>("DateInstalled")
+                        .HasColumnType("date");
+
                     b.Property<decimal?>("Depreciation")
                         .HasPrecision(9, 6)
                         .HasColumnType("numeric(9,6)");
@@ -3670,12 +3742,24 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<int?>("EconomicLifeYears")
                         .HasColumnType("integer");
 
+                    b.Property<decimal?>("ForeignAcquisitionCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<decimal?>("InstallationCost")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
                     b.Property<bool>("IsBrandNew")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsImported")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsInOperation")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<Guid>("MachineryTypeId")
                         .HasColumnType("uuid");
@@ -3688,9 +3772,17 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.Property<string>("OriginCountry")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<decimal?>("OtherCost")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("PriceIndexSeries")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
 
                     b.Property<Guid>("PropertyId")
                         .HasColumnType("uuid");
@@ -3745,6 +3837,42 @@ namespace Prime.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_MachineryUnits_BrandNewNoReplacementCost", "NOT \"IsBrandNew\" OR \"ReplacementCost\" IS NULL");
 
                             t.HasCheckConstraint("CK_MachineryUnits_ReplacementCost", "\"ReplacementCost\" IS NULL OR \"ReplacementCost\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.MachineryCostItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("MachineryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MachineryId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("MachineryCostItems", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MachineryCostItems_Amount", "\"Amount\" >= 0");
                         });
                 });
 
@@ -4489,6 +4617,71 @@ namespace Prime.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_PinAssignments_Retired", "(\"RetiredAt\" IS NULL) = (\"RetirementReason\" IS NULL)");
 
                             t.HasCheckConstraint("CK_PinAssignments_TieUp", "(\"OfficeTieUpAt\" IS NULL OR \"Kind\" = 'Temporary') AND (\"FieldConfirmedAt\" IS NULL OR \"OfficeTieUpAt\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.PriceIndex", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Series")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Series", "Year")
+                        .IsUnique()
+                        .HasDatabaseName("UX_PriceIndices_Approved")
+                        .HasFilter("\"Status\" = 'Approved'");
+
+                    b.ToTable("PriceIndices", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PriceIndices_Approval", "(\"Status\" = 'Approved') = (\"ApprovedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_PriceIndices_Value", "\"Value\" > 0");
                         });
                 });
 
@@ -6229,6 +6422,93 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.SmvBuildingCost", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BuildingTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("CostPerSquareMetre")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LegalBasis")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("SmvId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("StructuralTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BuildingTypeId");
+
+                    b.HasIndex("ClassificationId");
+
+                    b.HasIndex("StructuralTypeId");
+
+                    b.HasIndex("Status", "EffectiveDate");
+
+                    b.HasIndex("SmvId", "StructuralTypeId", "BuildingTypeId", "ClassificationId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SmvBuildingCosts_OpenApproved")
+                        .HasFilter("\"Status\" = 'Approved' AND \"EndDate\" IS NULL");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("SmvId", "StructuralTypeId", "BuildingTypeId", "ClassificationId"), false);
+
+                    b.ToTable("SmvBuildingCosts", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SmvBuildingCosts_Approval", "(\"Status\" IN ('Approved', 'Posted')) = (\"ApprovedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_SmvBuildingCosts_Cost", "\"CostPerSquareMetre\" > 0");
+
+                            t.HasCheckConstraint("CK_SmvBuildingCosts_EndDate", "\"EndDate\" IS NULL OR \"EndDate\" >= \"EffectiveDate\"");
+                        });
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.SmvCoverage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6249,6 +6529,201 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("SmvCoverages", (string)null);
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvDepreciationRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("FromAge")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Percent")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SmvDepreciationScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ToAge")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SmvDepreciationScheduleId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("SmvDepreciationRows", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SmvDepreciationRows_Ages", "\"FromAge\" >= 0 AND (\"ToAge\" IS NULL OR \"ToAge\" >= \"FromAge\")");
+
+                            t.HasCheckConstraint("CK_SmvDepreciationRows_Percent", "\"Percent\" >= 0 AND \"Percent\" <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvDepreciationSchedule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LegalBasis")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal>("MinimumRemainingPercent")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
+                    b.Property<string>("Reading")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("SmvId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("StructuralTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StructuralTypeId");
+
+                    b.HasIndex("SmvId", "StructuralTypeId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SmvDepreciationSchedules_OpenApproved")
+                        .HasFilter("\"Status\" = 'Approved' AND \"EndDate\" IS NULL");
+
+                    b.HasIndex("Status", "EffectiveDate");
+
+                    b.ToTable("SmvDepreciationSchedules", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SmvDepreciationSchedules_Approval", "(\"Status\" IN ('Approved', 'Posted')) = (\"ApprovedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_SmvDepreciationSchedules_EndDate", "\"EndDate\" IS NULL OR \"EndDate\" >= \"EffectiveDate\"");
+
+                            t.HasCheckConstraint("CK_SmvDepreciationSchedules_Remaining", "\"MinimumRemainingPercent\" >= 0 AND \"MinimumRemainingPercent\" <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvExtraItemCost", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ComponentTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("LegalBasis")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("SmvId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal>("UnitCost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ComponentTypeId");
+
+                    b.HasIndex("SmvId", "ComponentTypeId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SmvExtraItemCosts_OpenApproved")
+                        .HasFilter("\"Status\" = 'Approved' AND \"EndDate\" IS NULL");
+
+                    b.HasIndex("Status", "EffectiveDate");
+
+                    b.ToTable("SmvExtraItemCosts", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SmvExtraItemCosts_Approval", "(\"Status\" IN ('Approved', 'Posted')) = (\"ApprovedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_SmvExtraItemCosts_Cost", "\"UnitCost\" > 0");
+
+                            t.HasCheckConstraint("CK_SmvExtraItemCosts_EndDate", "\"EndDate\" IS NULL OR \"EndDate\" >= \"EffectiveDate\"");
+                        });
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.SmvSchedule", b =>
@@ -7211,6 +7686,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("AllowsNewDepreciation")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTimeOffset?>("ApprovedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -7470,6 +7948,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<Guid?>("TransactionTypeId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -7490,6 +7971,8 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("SmvId");
 
                     b.HasIndex("SmvScheduleId");
+
+                    b.HasIndex("TransactionTypeId");
 
                     b.HasIndex("SourceType", "SourceId", "ComputedAt");
 
@@ -8728,6 +9211,15 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Rpu");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.MachineryCostItem", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Machinery", null)
+                        .WithMany("CostItems")
+                        .HasForeignKey("MachineryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Notices.NoticeOfAssessment", b =>
                 {
                     b.HasOne("Prime.Domain.Entities.Taxpayer", null)
@@ -9201,6 +9693,39 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Taxpayer");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.SmvBuildingCost", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.BuildingType", "BuildingType")
+                        .WithMany()
+                        .HasForeignKey("BuildingTypeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Classification", "Classification")
+                        .WithMany()
+                        .HasForeignKey("ClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Smv", "Smv")
+                        .WithMany()
+                        .HasForeignKey("SmvId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Reference.StructuralType", "StructuralType")
+                        .WithMany()
+                        .HasForeignKey("StructuralTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BuildingType");
+
+                    b.Navigation("Classification");
+
+                    b.Navigation("Smv");
+
+                    b.Navigation("StructuralType");
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.SmvCoverage", b =>
                 {
                     b.HasOne("Prime.Domain.Entities.Reference.Municipality", "Municipality")
@@ -9216,6 +9741,53 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Municipality");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvDepreciationRow", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.SmvDepreciationSchedule", null)
+                        .WithMany("Rows")
+                        .HasForeignKey("SmvDepreciationScheduleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvDepreciationSchedule", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Smv", "Smv")
+                        .WithMany()
+                        .HasForeignKey("SmvId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Reference.StructuralType", "StructuralType")
+                        .WithMany()
+                        .HasForeignKey("StructuralTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Smv");
+
+                    b.Navigation("StructuralType");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvExtraItemCost", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.BuildingComponentType", "ComponentType")
+                        .WithMany()
+                        .HasForeignKey("ComponentTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Smv", "Smv")
+                        .WithMany()
+                        .HasForeignKey("SmvId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ComponentType");
+
+                    b.Navigation("Smv");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.SmvSchedule", b =>
@@ -9591,6 +10163,11 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SmvScheduleId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Prime.Domain.Entities.Transactions.TransactionType", null)
+                        .WithMany()
+                        .HasForeignKey("TransactionTypeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Property");
 
                     b.Navigation("Rpu");
@@ -9771,6 +10348,11 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Strips");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.Machinery", b =>
+                {
+                    b.Navigation("CostItems");
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Notices.NoticeOfAssessment", b =>
                 {
                     b.Navigation("Items");
@@ -9789,6 +10371,11 @@ namespace Prime.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Prime.Domain.Entities.Smv", b =>
                 {
                     b.Navigation("Coverage");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvDepreciationSchedule", b =>
+                {
+                    b.Navigation("Rows");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.SwornStatements.SwornStatement", b =>

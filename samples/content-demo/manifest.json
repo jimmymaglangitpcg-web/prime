@@ -50,6 +50,24 @@
       "source": "DEMO data"
     },
     {
+      "kind": "lookup",
+      "lookup": "structural-types",
+      "path": "lookups/structural-types.csv",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "lookup",
+      "lookup": "building-types",
+      "path": "lookups/building-types.csv",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "lookup",
+      "lookup": "building-component-types",
+      "path": "lookups/building-component-types.csv",
+      "source": "DEMO data"
+    },
+    {
       "kind": "transaction-types",
       "path": "catalogues/transaction-types.json",
       "source": "DEMO data"
@@ -87,6 +105,31 @@
     {
       "kind": "adjustment-factors",
       "path": "valuation/adjustment-factors.json",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "building-costs",
+      "path": "valuation/building-costs.json",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "extra-item-costs",
+      "path": "valuation/extra-item-costs.json",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "depreciation-rates",
+      "path": "valuation/depreciation-rates.json",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "exchange-rates",
+      "path": "valuation/exchange-rates.csv",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "price-indices",
+      "path": "valuation/price-indices.csv",
       "source": "DEMO data"
     },
     {

@@ -48,6 +48,12 @@ public interface IApplicationDbContext
     DbSet<LandImprovement> LandImprovements { get; }
     DbSet<LandAdjustment> LandAdjustments { get; }
     DbSet<AdjustmentFactor> AdjustmentFactors { get; }
+    DbSet<SmvBuildingCost> SmvBuildingCosts { get; }
+    DbSet<SmvExtraItemCost> SmvExtraItemCosts { get; }
+    DbSet<SmvDepreciationSchedule> SmvDepreciationSchedules { get; }
+    DbSet<MachineryCostItem> MachineryCostItems { get; }
+    DbSet<ExchangeRate> ExchangeRates { get; }
+    DbSet<PriceIndex> PriceIndices { get; }
     DbSet<TaxRate> TaxRates { get; }
     DbSet<PaymentSchedule> PaymentSchedules { get; }
     DbSet<DiscountRule> DiscountRules { get; }

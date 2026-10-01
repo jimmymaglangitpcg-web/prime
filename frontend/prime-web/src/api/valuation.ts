@@ -3,6 +3,8 @@ import { apiGet, apiPost } from '../lib/apiClient';
 import type {
   AdjustmentFactorDto, AssessmentLevelDto, AssessmentPreviewDto, AssessmentSummaryDto, CreateAdjustmentFactorRequest,
   CreateAssessmentLevelRequest, CreateAssessmentRequest, EffectivityDto, CreateSmvRequest, CreateSmvScheduleRequest, PagedResult, SmvDto, SmvScheduleDto, ValuationDto,
+  BuildingCostDto, CreateBuildingCostRequest, CreateDepreciationScheduleRequest, CreateExtraItemCostRequest, DepreciationScheduleDto, ExtraItemCostDto,
+  CreateExchangeRateRequest, CreatePriceIndexRequest, ExchangeRateDto, PriceIndexDto,
 } from '../lib/types';
 
 // --- Value and assess a unit (docs/analysis/value-and-assess.md §3) ---
@@ -17,12 +19,19 @@ export function useRpuValuations(rpuId: string | undefined) {
 
 /**
  * Values the whole unit as of a date (default today), under the rules in force then
- * (docs/analysis/valuation-foundation.md §4.1); every run is saved as a valuation (history).
+ * (docs/analysis/valuation-foundation.md §4.1), for a transaction when one is chosen: it
+ * decides whether a building takes a new depreciation (§4.5). Every run is saved (history).
  */
 export function useValueRpu(rpuId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (asOf?: string) => apiPost<ValuationDto>(`/api/rpus/${rpuId}/valuations${asOf ? `?asOf=${asOf}` : ''}`, {}),
+    mutationFn: ({ asOf, transactionTypeId }: { asOf?: string; transactionTypeId?: string }) => {
+      const query = new URLSearchParams();
+      if (asOf) query.set('asOf', asOf);
+      if (transactionTypeId) query.set('transactionTypeId', transactionTypeId);
+      const qs = query.toString();
+      return apiPost<ValuationDto>(`/api/rpus/${rpuId}/valuations${qs ? `?${qs}` : ''}`, {});
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rpus', rpuId, 'valuations'] }),
   });
 }
@@ -103,3 +112,37 @@ export const useCreateAdjustmentFactor = () =>
   useRuleMutation((r: CreateAdjustmentFactorRequest) => apiPost<AdjustmentFactorDto>('/api/adjustment-factors', r), [['adjustment-factors']]);
 export const useApproveAdjustmentFactor = () =>
   useRuleMutation((id: string) => apiPost<AdjustmentFactorDto>(`/api/adjustment-factors/${id}/approve`, {}), [['adjustment-factors']]);
+
+// The SMV's building tables (docs/analysis/valuation-foundation.md §4.5).
+export const useBuildingCosts = () =>
+  useQuery({ queryKey: ['building-costs'], queryFn: () => apiGet<BuildingCostDto[]>('/api/building-costs') });
+export const useCreateBuildingCost = () =>
+  useRuleMutation((r: CreateBuildingCostRequest) => apiPost<BuildingCostDto>('/api/building-costs', r), [['building-costs']]);
+export const useApproveBuildingCost = () =>
+  useRuleMutation((id: string) => apiPost<BuildingCostDto>(`/api/building-costs/${id}/approve`, {}), [['building-costs']]);
+export const useExtraItemCosts = () =>
+  useQuery({ queryKey: ['extra-item-costs'], queryFn: () => apiGet<ExtraItemCostDto[]>('/api/extra-item-costs') });
+export const useCreateExtraItemCost = () =>
+  useRuleMutation((r: CreateExtraItemCostRequest) => apiPost<ExtraItemCostDto>('/api/extra-item-costs', r), [['extra-item-costs']]);
+export const useApproveExtraItemCost = () =>
+  useRuleMutation((id: string) => apiPost<ExtraItemCostDto>(`/api/extra-item-costs/${id}/approve`, {}), [['extra-item-costs']]);
+export const useDepreciationSchedules = () =>
+  useQuery({ queryKey: ['depreciation-schedules'], queryFn: () => apiGet<DepreciationScheduleDto[]>('/api/depreciation-schedules') });
+export const useCreateDepreciationSchedule = () =>
+  useRuleMutation((r: CreateDepreciationScheduleRequest) => apiPost<DepreciationScheduleDto>('/api/depreciation-schedules', r), [['depreciation-schedules']]);
+export const useApproveDepreciationSchedule = () =>
+  useRuleMutation((id: string) => apiPost<DepreciationScheduleDto>(`/api/depreciation-schedules/${id}/approve`, {}), [['depreciation-schedules']]);
+
+// Exchange rates and price indices for machinery (docs/analysis/valuation-foundation.md §4.6).
+export const useExchangeRates = () =>
+  useQuery({ queryKey: ['exchange-rates'], queryFn: () => apiGet<ExchangeRateDto[]>('/api/exchange-rates') });
+export const useCreateExchangeRate = () =>
+  useRuleMutation((r: CreateExchangeRateRequest) => apiPost<ExchangeRateDto>('/api/exchange-rates', r), [['exchange-rates']]);
+export const useApproveExchangeRate = () =>
+  useRuleMutation((id: string) => apiPost<ExchangeRateDto>(`/api/exchange-rates/${id}/approve`, {}), [['exchange-rates']]);
+export const usePriceIndices = () =>
+  useQuery({ queryKey: ['price-indices'], queryFn: () => apiGet<PriceIndexDto[]>('/api/price-indices') });
+export const useCreatePriceIndex = () =>
+  useRuleMutation((r: CreatePriceIndexRequest) => apiPost<PriceIndexDto>('/api/price-indices', r), [['price-indices']]);
+export const useApprovePriceIndex = () =>
+  useRuleMutation((id: string) => apiPost<PriceIndexDto>(`/api/price-indices/${id}/approve`, {}), [['price-indices']]);

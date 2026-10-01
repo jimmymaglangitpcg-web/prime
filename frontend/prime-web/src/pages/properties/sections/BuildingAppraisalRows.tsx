@@ -154,6 +154,11 @@ function ComponentDialog({ building, rpuId, propertyId, onClose }: DialogProps) 
           <Form.Item name="unitCost" label="Unit cost"><InputNumber<number> min={0} /></Form.Item>
           <Form.Item name="cost" label="Cost" extra="Or quantity × unit cost."><InputNumber<number> min={0} /></Form.Item>
         </Space>
+        {additional && (
+          <Typography.Paragraph type="secondary">
+            Under an SMV with construction costs, an additional item is priced from the SMV&apos;s cost for its type: enter its quantity.
+          </Typography.Paragraph>
+        )}
         {additional && building.usePortions.length > 0 && (
           <Form.Item name="buildingUsePortionId" label="Belongs to">
             <Select allowClear placeholder="All portions (spread by floor area)"

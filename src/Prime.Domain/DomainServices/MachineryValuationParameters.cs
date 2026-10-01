@@ -10,4 +10,4 @@ namespace Prime.Domain.DomainServices;
 /// (20%) of such original, replacement, or reproduction cost for so long as
 /// the machinery is useful and in operation". Percent, 0–100.
 /// </param>
-public sealed record MachineryValuationParameters(decimal MinimumRemainingValuePercent);
+public sealed record MachineryValuationParameters(decimal MinimumRemainingValuePercent, decimal? MaximumYearlyDepreciationPercent = null);

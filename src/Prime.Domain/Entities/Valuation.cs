@@ -31,6 +31,13 @@ public sealed class Valuation : AuditableEntity
     public decimal ComputedMarketValue { get; set; }
 
     /// <summary>
+    /// The transaction the unit was valued for, when given: it decides whether a building may take a
+    /// new depreciation (docs/analysis/valuation-foundation.md §4.5, Q10). An assessment of a
+    /// depreciated building is made under the same transaction.
+    /// </summary>
+    public Guid? TransactionTypeId { get; set; }
+
+    /// <summary>
     /// JSON snapshot of the calculator's input/intermediate values (area,
     /// rate, depreciation, etc.) — same <c>System.Text.Json</c> approach
     /// <c>AuditSaveChangesInterceptor</c> already uses for its snapshots.

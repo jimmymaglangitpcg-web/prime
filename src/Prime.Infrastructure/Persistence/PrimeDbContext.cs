@@ -73,6 +73,12 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
     public DbSet<LandImprovement> LandImprovements => Set<LandImprovement>();
     public DbSet<LandAdjustment> LandAdjustments => Set<LandAdjustment>();
     public DbSet<AdjustmentFactor> AdjustmentFactors => Set<AdjustmentFactor>();
+    public DbSet<SmvBuildingCost> SmvBuildingCosts => Set<SmvBuildingCost>();
+    public DbSet<SmvExtraItemCost> SmvExtraItemCosts => Set<SmvExtraItemCost>();
+    public DbSet<SmvDepreciationSchedule> SmvDepreciationSchedules => Set<SmvDepreciationSchedule>();
+    public DbSet<MachineryCostItem> MachineryCostItems => Set<MachineryCostItem>();
+    public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
+    public DbSet<PriceIndex> PriceIndices => Set<PriceIndex>();
     public DbSet<TaxRate> TaxRates => Set<TaxRate>();
     public DbSet<PaymentSchedule> PaymentSchedules => Set<PaymentSchedule>();
     public DbSet<DiscountRule> DiscountRules => Set<DiscountRule>();

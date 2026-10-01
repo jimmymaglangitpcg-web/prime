@@ -1,0 +1,10 @@
+[
+  {
+    "smv": "DEMO-CP-CERT-2099",
+    "structuralType": "DEMO-CP-ST-C",
+    "buildingType": "DEMO-CP-BT-RES",
+    "costPerSquareMetre": 9000,
+    "legalBasis": "DEMO — not an SMV provision",
+    "effectiveDate": "2099-01-01"
+  }
+]

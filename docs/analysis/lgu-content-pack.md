@@ -60,11 +60,16 @@ lgu-content/                         (gitignored)
     ├── forms/
     │   ├── forms.json               code, version, title, subject, authority, source, effective_date
     │   └── <CODE>.v<N>.liquid
-    ├── valuation/                   (step L1-3; factors in L1-4)
+    ├── valuation/                   (step L1-3; factors L1-4; building tables L1-5; rates and indices L1-6)
     │   ├── smv.json                 kind "smv": basis, ordinance or certification, stages, coverage (PSGC)
     │   ├── smv-schedules.csv        kind "smv-schedules": smv, classification, sub-classification?, actual-use?,
     │   │                            property-type, zone?, barangay?, improvement-kind?, unit, market-value, …
     │   ├── adjustment-factors.json  kind "adjustment-factors" (L1-4): smv, code, ruleKind, percent?, rows[]
+    │   ├── building-costs.json      kind "building-costs" (L1-5): smv, structuralType, buildingType?, classification?, costPerSquareMetre
+    │   ├── extra-item-costs.json    kind "extra-item-costs" (L1-5): smv, componentType, unit, unitCost
+    │   ├── depreciation-rates.json  kind "depreciation-rates" (L1-5): smv, structuralType, reading, minimumRemainingPercent, rows[]
+    │   ├── exchange-rates.csv       kind "exchange-rates" (L1-6): currency, rate-date, pesos-per-unit, source, remarks
+    │   ├── price-indices.csv        kind "price-indices" (L1-6): series, year, value, source, remarks
     │   └── assessment-levels.csv    kind "assessment-levels"
     └── gis/
         └── <layer>.geojson

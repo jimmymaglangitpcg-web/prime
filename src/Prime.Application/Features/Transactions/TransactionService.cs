@@ -123,6 +123,7 @@ public sealed class TransactionService(
             LegalBasis = request.LegalBasis, EffectiveDate = request.EffectiveDate, Remarks = request.Remarks,
             Code = request.Code.Trim(), Name = request.Name, Kind = request.Kind, Rank = request.Rank, Description = request.Description,
             EffectivityRule = request.EffectivityRule, EffectivityLegalBasis = request.EffectivityLegalBasis, CauseWindowDays = request.CauseWindowDays,
+            AllowsNewDepreciation = request.AllowsNewDepreciation,
             Requirements = request.Requirements.OrderBy(r => r.Sequence).Select(r => new TransactionTypeRequirement
             {
                 Sequence = r.Sequence, Code = r.Code, Label = r.Label, IsMandatory = r.IsMandatory, LegalBasis = r.LegalBasis,
@@ -723,5 +724,5 @@ public sealed class TransactionService(
         x.Id, x.Code, x.Name, x.Kind, x.Rank, x.Description,
         x.Requirements.OrderBy(r => r.Sequence).Select(r => new TransactionRequirementDto(r.Sequence, r.Code, r.Label, r.IsMandatory, r.LegalBasis)).ToList(),
         x.LegalBasis, x.EffectiveDate, x.EndDate, x.Status, x.CreatedBy, x.CreatedAt, x.ApprovedBy, x.ApprovedAt, x.Remarks,
-        x.EffectivityRule, x.EffectivityLegalBasis, x.CauseWindowDays);
+        x.EffectivityRule, x.EffectivityLegalBasis, x.CauseWindowDays, x.AllowsNewDepreciation);
 }
