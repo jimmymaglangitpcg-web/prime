@@ -495,6 +495,9 @@ export interface LandDto {
 export interface LandStripDto {
   id: string; sequence: number; classificationId: string; classificationName: string; subClassificationId: string | null;
   subClassificationName: string | null; actualUseId: string; actualUseName: string; zoneId: string | null; zoneName: string | null; area: number;
+  /** The class and sub-class that price the strip when they differ from its own (valuation-foundation.md §4.3). */
+  valuationClassificationId: string | null; valuationClassificationName: string | null;
+  valuationSubClassificationId: string | null; valuationSubClassificationName: string | null;
 }
 
 export interface LandImprovementDto {
@@ -506,6 +509,7 @@ export interface LandAdjustmentDto { id: string; factorCode: string; landStripId
 
 export interface AddLandStripRequest {
   classificationId: string; subClassificationId: string | null; actualUseId: string; zoneId: string | null; area: number;
+  valuationClassificationId?: string | null; valuationSubClassificationId?: string | null;
 }
 
 export interface AddLandImprovementRequest {
@@ -1218,7 +1222,19 @@ export interface TransactionTypeDto {
   approvedBy: string | null;
   approvedAt: string | null;
   remarks: string | null;
+  effectivityRule: EffectivityRule | null;
+  effectivityLegalBasis: string | null;
+  causeWindowDays: number | null;
 }
+
+/** How an assessment finds its effectivity date (docs/analysis/valuation-foundation.md §4.2). */
+export type EffectivityRule = 'NextJanuary' | 'NextQuarter' | 'Periods' | 'Fixed';
+export const effectivityRules: { value: EffectivityRule; label: string }[] = [
+  { value: 'NextJanuary', label: 'Next 1 January' },
+  { value: 'NextQuarter', label: 'Next quarter (reassessment)' },
+  { value: 'Periods', label: 'By period (back taxes)' },
+  { value: 'Fixed', label: 'Fixed by the process' },
+];
 
 export interface CreateTransactionTypeRequest {
   legalBasis: string;
@@ -1230,6 +1246,9 @@ export interface CreateTransactionTypeRequest {
   rank?: number;
   description?: string;
   requirements: { sequence: number; code: string; label: string; isMandatory: boolean; legalBasis?: string }[];
+  effectivityRule?: EffectivityRule | null;
+  effectivityLegalBasis?: string | null;
+  causeWindowDays?: number | null;
 }
 
 export interface NewPartyRequest {
@@ -1399,6 +1418,15 @@ export interface AssessmentSummaryDto {
   postedBy: string | null;
   /** Set by posting only: whether a draft Tax Declaration was prepared, and if not, why. */
   taxDeclarationNote?: string | null;
+  effectivityYear: number;
+  effectivityQuarter: number;
+  transactionCode: string | null;
+  effectivityRule: EffectivityRule | null;
+  causeDate: string | null;
+  causeWindowExceeded: boolean;
+  /** The date of final approval; null while a draft. */
+  madeOn: string | null;
+  effectivityOverrideReason: string | null;
 }
 
 // --- Appraisal record / FAAS aggregate (docs/FORMS-REVISION-PLAN.md A7) ---
@@ -1616,6 +1644,8 @@ export interface ValuationLineDto {
   classificationName: string | null; subClassificationName: string | null; actualUseName: string | null;
   quantity: number | null; unit: string | null; unitValue: number | null; smvScheduleId: string | null; marketValue: number;
   breakdown: ValuationBreakdownItemDto[];
+  /** Set when the row was priced by another class and sub-class than the ones that assess it. */
+  pricedClassificationName: string | null; pricedSubClassificationName: string | null;
 }
 
 export interface ValuationDto {
@@ -1625,33 +1655,56 @@ export interface ValuationDto {
 }
 
 export interface CreateAssessmentRequest {
-  valuationId: string; assessmentYear: number; effectiveDate: string; previousAssessmentId: string | null;
+  valuationId: string; assessmentYear: number | null; effectiveDate: string | null; previousAssessmentId: string | null;
   revisionReference: string | null; remarks: string | null;
+  transactionTypeId?: string | null; causeDate?: string | null; effectivityOverrideReason?: string | null;
+}
+
+/** The effectivity an assessment would take if made (finally approved) today. */
+export interface EffectivityDto {
+  effectiveDate: string; year: number; quarter: number; rule: EffectivityRule | null; derived: boolean; overridden: boolean;
+  transactionTypeId: string | null; transactionCode: string | null; legalBasis: string | null; madeOn: string;
+  causeDate: string | null; causeWindowDays: number | null; causeWindowExceeded: boolean;
 }
 
 export interface AssessmentPreviewDto {
   valuationId: string; rpuId: string; marketValue: number; assessedValue: number; lines: AssessmentLineDto[];
+  effectivity: EffectivityDto | null;
 }
 
+/** How an SMV came into force: by ordinance (before RA 12001) or certified by the Secretary of Finance. */
+export type SmvBasis = 'Ordinance' | 'Certified';
+
 export interface SmvDto {
-  id: string; ordinanceNumber: string; ordinanceDate: string; approvalDate: string | null; effectivityDate: string;
+  id: string; ordinanceNumber: string | null; ordinanceDate: string | null; approvalDate: string | null; effectivityDate: string;
   revisionYear: number; status: WorkflowStatus; description: string | null; createdAt: string;
+  basis: SmvBasis; reference: string;
+  proposedOn: string | null; publishedForCommentOn: string | null; consultationsHeldOn: string | null; submittedToBlgfOn: string | null;
+  certifiedOn: string | null; certificationReference: string | null; publishedOn: string | null; publicationReference: string | null;
+  /** Empty: the whole province. */
+  coverage: { municipalityId: string; municipalityName: string }[];
 }
 
 export interface CreateSmvRequest {
-  ordinanceNumber: string; ordinanceDate: string; approvalDate: string | null; effectivityDate: string; revisionYear: number; description: string | null;
+  ordinanceNumber: string | null; ordinanceDate: string | null; approvalDate: string | null; effectivityDate: string; revisionYear: number;
+  description: string | null; basis: SmvBasis;
+  proposedOn?: string | null; publishedForCommentOn?: string | null; consultationsHeldOn?: string | null; submittedToBlgfOn?: string | null;
+  certifiedOn?: string | null; certificationReference?: string | null; publishedOn?: string | null; publicationReference?: string | null;
+  municipalityIds?: string[];
 }
 
 export interface SmvScheduleDto {
-  id: string; smvId: string; classificationId: string; classificationName: string; actualUseId: string; actualUseName: string;
+  id: string; smvId: string; classificationId: string; classificationName: string; actualUseId: string | null; actualUseName: string | null;
   propertyTypeId: string; propertyTypeName: string; zoneId: string | null; zoneName: string | null;
   improvementKindId: string | null; improvementKindName: string | null; unit: string; marketValue: number;
   minimumValue: number | null; maximumValue: number | null; effectiveDate: string; endDate: string | null; status: WorkflowStatus; createdAt: string;
+  subClassificationId: string | null; subClassificationName: string | null; barangayId: string | null; barangayName: string | null;
 }
 
 export interface CreateSmvScheduleRequest {
-  classificationId: string; actualUseId: string; propertyTypeId: string; zoneId: string | null; unit: string; marketValue: number;
+  classificationId: string; actualUseId: string | null; propertyTypeId: string; zoneId: string | null; unit: string; marketValue: number;
   minimumValue: number | null; maximumValue: number | null; effectiveDate: string; improvementKindId: string | null;
+  subClassificationId: string | null; barangayId: string | null;
 }
 
 export interface AssessmentLevelDto {

@@ -47,6 +47,8 @@ public sealed class ValuationLineConfiguration : IEntityTypeConfiguration<Valuat
         builder.HasOne(x => x.SubClassification).WithMany().HasForeignKey(x => x.SubClassificationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ActualUse).WithMany().HasForeignKey(x => x.ActualUseId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.SmvSchedule).WithMany().HasForeignKey(x => x.SmvScheduleId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.PricedClassification).WithMany().HasForeignKey(x => x.PricedClassificationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.PricedSubClassification).WithMany().HasForeignKey(x => x.PricedSubClassificationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => new { x.ValuationId, x.Sequence }).IsUnique();
     }
 }

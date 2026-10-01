@@ -96,7 +96,7 @@ public class AssessmentFlowTests(WebApplicationFactory<Program> factory) : IClas
         await assessmentLevelService.ApproveAsync(assessmentLevel.Id);
 
         var valuationService = services.GetRequiredService<IValuationService>();
-        var valuationResult = await valuationService.ComputeForLandAsync(land.Id);
+        var valuationResult = await valuationService.ComputeForLandAsync(land.Id, asOf: new DateOnly(2026, 1, 1));
         valuationResult.IsSuccess.ShouldBeTrue(valuationResult.IsSuccess ? null : valuationResult.Message);
 
         var valuation = await db.Valuations.SingleAsync(x => x.Id == valuationResult.Value.Id);
@@ -170,11 +170,16 @@ public class AssessmentFlowTests(WebApplicationFactory<Program> factory) : IClas
 
         // Only a posted assessment of the same unit can be the previous one (docs/analysis/value-and-assess.md §2.4).
         (await assessmentService.CreateAsync(new CreateAssessmentRequest(
-            valuation.Id, 2026, new DateOnly(2026, 6, 1), first.Id, null, "Draft previous"))).Code.ShouldBe("PREVIOUS_ASSESSMENT_INVALID");
+            valuation.Id, 2026, new DateOnly(2026, 1, 1), first.Id, null, "Draft previous"))).Code.ShouldBe("PREVIOUS_ASSESSMENT_INVALID");
+        // A valuation made as of another date than the assessment's is refused (valuation-foundation.md §4.1, Q1).
+        (await assessmentService.CreateAsync(new CreateAssessmentRequest(
+            valuation.Id, 2026, new DateOnly(2026, 6, 1), null, null, "Wrong date"))).Code.ShouldBe("VALUATION_DATE_MISMATCH");
         await db.Assessments.Where(x => x.Id == first.Id).ExecuteUpdateAsync(x => x.SetProperty(a => a.Status, WorkflowStatus.Posted));
 
+        // A reassessment values the unit as of its own effective date (valuation-foundation.md §4.1).
+        var revalued = (await services.GetRequiredService<IValuationService>().ComputeForLandAsync(valuation.SourceId, asOf: new DateOnly(2026, 6, 1))).Value;
         var second = await assessmentService.CreateAsync(new CreateAssessmentRequest(
-            valuation.Id, 2026, new DateOnly(2026, 6, 1), first.Id, null, "Reassessment after correction"));
+            revalued.Id, 2026, new DateOnly(2026, 6, 1), first.Id, null, "Reassessment after correction"));
 
         second.IsSuccess.ShouldBeTrue(second.IsSuccess ? null : second.Message);
         second.Value.PreviousAssessmentId.ShouldBe(first.Id);

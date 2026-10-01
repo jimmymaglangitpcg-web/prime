@@ -29,6 +29,7 @@ public sealed class GeneralRevisionService(
         var job = new Domain.Entities.GeneralRevisionJob
         {
             RevisionYear = request.RevisionYear,
+            EffectiveDate = request.EffectiveDate,
             Status = JobExecutionStatus.Queued,
             TotalCount = request.RpuIds.Count,
             StartedBy = currentUser.AppUserId,
@@ -52,5 +53,5 @@ public sealed class GeneralRevisionService(
     }
 
     private static GeneralRevisionJobDto ToDto(Domain.Entities.GeneralRevisionJob x) => new(
-        x.Id, x.RevisionYear, x.Status, x.TotalCount, x.ProcessedCount, x.FailedCount, x.StartedBy, x.StartedAt, x.CompletedAt, x.Remarks);
+        x.Id, x.RevisionYear, x.EffectiveDate, x.Status, x.TotalCount, x.ProcessedCount, x.FailedCount, x.StartedBy, x.StartedAt, x.CompletedAt, x.Remarks);
 }

@@ -5,6 +5,10 @@ A sample LGU content pack for developing and testing the loader
 prefixed `DEMO`. Real packs (LAM, ordinance and LGU data) go in the gitignored
 `lgu-content/` folder and are never committed (CLAUDE.md §118).
 
+`catalogues/smv.json`, `valuation/smv-schedules.csv` and `valuation/assessment-levels.csv`
+hold a DEMO certified SMV for Town A (effective 2099), two invented unit values and one
+level. They import as drafts for a second user to approve.
+
 The map layer `gis/barangays.geojson` draws the two DEMO barangays of Town A
 as small squares in the open Philippine Sea, so they cannot be mistaken for a
 real boundary.

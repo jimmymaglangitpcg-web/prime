@@ -16,6 +16,12 @@ public class AssessmentsController(IAssessmentService assessmentService, IApprai
     public async Task<ActionResult<AssessmentPreviewDto>> Preview(CreateAssessmentRequest request, CancellationToken cancellationToken) =>
         HandleResult(await assessmentService.PreviewAsync(request, cancellationToken));
 
+    /// <summary>The effectivity an assessment would take if made today (docs/analysis/valuation-foundation.md §4.2).</summary>
+    [HttpGet("effectivity")]
+    public async Task<ActionResult<EffectivityDto>> Effectivity([FromQuery] Guid? transactionTypeId, [FromQuery] DateOnly? causeDate,
+        [FromQuery] DateOnly? effectiveDate, [FromQuery] string? overrideReason, CancellationToken cancellationToken) =>
+        HandleResult(await assessmentService.EffectivityAsync(transactionTypeId, causeDate, effectiveDate, overrideReason, cancellationToken));
+
     [HttpPost]
     public async Task<ActionResult<AssessmentDto>> Create(CreateAssessmentRequest request, CancellationToken cancellationToken) =>
         HandleCreated(await assessmentService.CreateAsync(request, cancellationToken), nameof(GetById), dto => new { id = dto.Id });

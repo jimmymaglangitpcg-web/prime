@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet, apiPost } from '../lib/apiClient';
 import type {
   AdjustmentFactorDto, AssessmentLevelDto, AssessmentPreviewDto, AssessmentSummaryDto, CreateAdjustmentFactorRequest,
-  CreateAssessmentLevelRequest, CreateAssessmentRequest, CreateSmvRequest, CreateSmvScheduleRequest, PagedResult, SmvDto, SmvScheduleDto, ValuationDto,
+  CreateAssessmentLevelRequest, CreateAssessmentRequest, EffectivityDto, CreateSmvRequest, CreateSmvScheduleRequest, PagedResult, SmvDto, SmvScheduleDto, ValuationDto,
 } from '../lib/types';
 
 // --- Value and assess a unit (docs/analysis/value-and-assess.md §3) ---
@@ -15,12 +15,24 @@ export function useRpuValuations(rpuId: string | undefined) {
   });
 }
 
-/** Values the whole unit; every run is saved as a valuation (history). */
+/**
+ * Values the whole unit as of a date (default today), under the rules in force then
+ * (docs/analysis/valuation-foundation.md §4.1); every run is saved as a valuation (history).
+ */
 export function useValueRpu(rpuId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => apiPost<ValuationDto>(`/api/rpus/${rpuId}/valuations`, {}),
+    mutationFn: (asOf?: string) => apiPost<ValuationDto>(`/api/rpus/${rpuId}/valuations${asOf ? `?asOf=${asOf}` : ''}`, {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rpus', rpuId, 'valuations'] }),
+  });
+}
+
+/** The effectivity an assessment under this transaction type would take if made today (valuation-foundation.md §4.2). */
+export function useEffectivity(transactionTypeId: string | undefined, causeDate: string | undefined, ready = true) {
+  return useQuery({
+    queryKey: ['assessments', 'effectivity', transactionTypeId, causeDate],
+    queryFn: () => apiGet<EffectivityDto>(`/api/assessments/effectivity?transactionTypeId=${transactionTypeId}${causeDate ? `&causeDate=${causeDate}` : ''}`),
+    enabled: !!transactionTypeId && ready,
   });
 }
 

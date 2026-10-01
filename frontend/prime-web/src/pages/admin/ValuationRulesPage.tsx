@@ -1,15 +1,17 @@
 import { useState } from 'react';
-import { Alert, Button, Card, Col, DatePicker, Form, Input, InputNumber, Modal, Row, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import {
   useAllAdjustmentFactors, useApproveAdjustmentFactor, useApproveAssessmentLevel, useApproveSmv, useApproveSmvSchedule, useAssessmentLevels,
   useCreateAdjustmentFactor, useCreateAssessmentLevel, useCreateSmv, useCreateSmvSchedule, useSmvSchedules, useSmvs,
 } from '../../api/valuation';
-import { useActualUses, useClassifications, useImprovementKinds, usePropertyTypes, useZones } from '../../api/referenceData';
+import {
+  useActualUses, useAllMunicipalities, useBarangays, useClassifications, useImprovementKinds, usePropertyTypes, useSubClassifications, useZones,
+} from '../../api/referenceData';
 import { ApiRequestError } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/format';
-import type { AdjustmentFactorDto, AssessmentLevelDto, LookupDto, SmvDto, SmvScheduleDto, WorkflowStatus } from '../../lib/types';
+import type { AdjustmentFactorDto, AssessmentLevelDto, LookupDto, SmvBasis, SmvDto, SmvScheduleDto, WorkflowStatus } from '../../lib/types';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error)?.message);
 const day = (d: Dayjs | null | undefined) => (d ? d.format('YYYY-MM-DD') : null);
@@ -30,7 +32,8 @@ function useToast() {
 
 /**
  * The rules valuation and assessment use (docs/analysis/value-and-assess.md §3):
- * SMVs with their schedules, adjustment factors and assessment levels. Rules
+ * SMVs (certified or by ordinance, with their coverage) and their unit values, adjustment
+ * factors and assessment levels (docs/analysis/valuation-foundation.md §4.3). Rules
  * are created and approved, never edited; a change is a new version from its
  * effective date. Every value comes from the LGU's ordinance.
  */
@@ -38,7 +41,7 @@ export function ValuationRulesPage() {
   return (
     <Space orientation="vertical" size="large" style={{ width: '100%' }}>
       <Typography.Title level={3} style={{ margin: 0 }}>Valuation Rules</Typography.Title>
-      <Alert type="warning" showIcon title="Enter only values from the LGU's approved ordinances"
+      <Alert type="warning" showIcon title="Enter only values from the certified SMV or the LGU's ordinances"
         description="PRIME invents no market values or assessment levels. Rules are never edited: a change is a new version that takes over from its effective date. Another user approves what you create." />
       <Tabs items={[
         { key: 'smv', label: 'Schedules of Market Values', children: <SmvTab /> },
@@ -51,6 +54,18 @@ export function ValuationRulesPage() {
 
 // ---------------- SMVs and schedules ----------------
 
+/** The stages a certified SMV goes through (docs/analysis/valuation-foundation.md §4.3); all optional records. */
+const stages: { name: keyof SmvDto & string; label: string }[] = [
+  { name: 'proposedOn', label: 'Proposed' },
+  { name: 'publishedForCommentOn', label: 'Published for comment' },
+  { name: 'consultationsHeldOn', label: 'Consultations held' },
+  { name: 'submittedToBlgfOn', label: 'Submitted to the BLGF' },
+  { name: 'certifiedOn', label: 'Certified' },
+  { name: 'publishedOn', label: 'Published' },
+];
+
+const coverageText = (s: SmvDto) => (s.coverage.length === 0 ? 'Whole province' : s.coverage.map((c) => c.municipalityName).join(', '));
+
 function SmvTab() {
   const { data, isLoading } = useSmvs();
   const approve = useApproveSmv();
@@ -60,18 +75,23 @@ function SmvTab() {
   return (
     <Card title="SMVs" extra={<Button icon={<PlusOutlined />} onClick={() => setCreating(true)}>New SMV</Button>}>
       {context}
+      <Typography.Paragraph type="secondary">
+        Approving an SMV here confirms it was entered correctly; it does not stand in for its certification or ordinance.
+        The engine uses the latest SMV in force that covers the property&apos;s municipality.
+      </Typography.Paragraph>
       <Table<SmvDto> rowKey="id" size="small" loading={isLoading} dataSource={data?.items ?? []} pagination={false} scroll={{ x: true }}
+        expandable={{ expandedRowRender: (s) => <SmvStages smv={s} /> }}
         columns={[
-          { title: 'Ordinance', dataIndex: 'ordinanceNumber' },
-          { title: 'Ordinance date', dataIndex: 'ordinanceDate' },
+          { title: 'Reference', dataIndex: 'reference' },
+          { title: 'Basis', dataIndex: 'basis', render: (b: SmvBasis) => <Tag color={b === 'Certified' ? 'blue' : 'default'}>{b}</Tag> },
           { title: 'Effective', dataIndex: 'effectivityDate' },
           { title: 'Revision year', dataIndex: 'revisionYear' },
-          { title: 'Description', dataIndex: 'description', render: (v: string | null) => v ?? '—' },
+          { title: 'Coverage', render: (_, s) => coverageText(s) },
           { title: 'Status', dataIndex: 'status', render: statusTag },
           {
             title: '', render: (_, s) => (
               <Space>
-                <Button size="small" onClick={() => setOpen(s)}>Schedules</Button>
+                <Button size="small" onClick={() => setOpen(s)}>Unit values</Button>
                 <ApproveButton status={s.status} pending={approve.isPending} onApprove={() => approve.mutate(s.id, { onError: fail })} />
               </Space>
             ),
@@ -83,24 +103,66 @@ function SmvTab() {
   );
 }
 
+function SmvStages({ smv: s }: { smv: SmvDto }) {
+  return (
+    <Descriptions size="small" column={{ xs: 1, md: 3 }}>
+      {s.basis === 'Ordinance' && <Descriptions.Item label="Ordinance">{s.ordinanceNumber} ({s.ordinanceDate}{s.approvalDate ? `, approved ${s.approvalDate}` : ''})</Descriptions.Item>}
+      {s.certificationReference && <Descriptions.Item label="Certification">{s.certificationReference}</Descriptions.Item>}
+      {stages.map((st) => <Descriptions.Item key={st.name} label={st.label}>{(s[st.name] as string | null) ?? '—'}</Descriptions.Item>)}
+      <Descriptions.Item label="Publication">{s.publicationReference ?? '—'}</Descriptions.Item>
+      <Descriptions.Item label="Description" span="filled">{s.description ?? '—'}</Descriptions.Item>
+    </Descriptions>
+  );
+}
+
 function CreateSmvModal({ onClose }: { onClose: () => void }) {
   const create = useCreateSmv();
   const [form] = Form.useForm();
+  const basis = (Form.useWatch('basis', form) as SmvBasis | undefined) ?? 'Certified';
+  const { data: municipalities = [] } = useAllMunicipalities();
   return (
-    <Modal open title="New SMV" okText="Create" onCancel={onClose} okButtonProps={{ loading: create.isPending }} onOk={() => form.submit()} destroyOnHidden>
+    <Modal open title="New SMV" okText="Create" onCancel={onClose} okButtonProps={{ loading: create.isPending }} onOk={() => form.submit()} width={760} destroyOnHidden>
       {create.isError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Not created" description={errorText(create.error)} />}
-      <Form form={form} layout="vertical" onFinish={(v) => create.mutate({
-        ordinanceNumber: v.ordinanceNumber, ordinanceDate: day(v.ordinanceDate)!, approvalDate: day(v.approvalDate),
+      <Form form={form} layout="vertical" initialValues={{ basis: 'Certified', municipalityIds: [] }} onFinish={(v) => create.mutate({
+        basis: v.basis,
+        ordinanceNumber: v.basis === 'Ordinance' ? v.ordinanceNumber : null, ordinanceDate: v.basis === 'Ordinance' ? day(v.ordinanceDate) : null,
+        approvalDate: v.basis === 'Ordinance' ? day(v.approvalDate) : null,
+        certificationReference: v.basis === 'Certified' ? v.certificationReference : null,
         effectivityDate: day(v.effectivityDate)!, revisionYear: v.revisionYear, description: v.description || null,
+        publicationReference: v.publicationReference || null, municipalityIds: v.municipalityIds ?? [],
+        ...Object.fromEntries(stages.map((st) => [st.name, day(v[st.name])])),
       }, { onSuccess: onClose })}>
-        <Form.Item name="ordinanceNumber" label="Ordinance No." rules={[{ required: true }]}><Input maxLength={100} /></Form.Item>
         <Row gutter={12}>
-          <Col span={8}><Form.Item name="ordinanceDate" label="Ordinance date" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
-          <Col span={8}><Form.Item name="approvalDate" label="Approval date"><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
-          <Col span={8}><Form.Item name="effectivityDate" label="Effective" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={24} md={8}>
+            <Form.Item name="basis" label="Basis" extra="RA 12001: certified by the Secretary of Finance. Earlier SMVs: by ordinance.">
+              <Select options={[{ value: 'Certified', label: 'Certified (RA 12001)' }, { value: 'Ordinance', label: 'Ordinance' }]} />
+            </Form.Item>
+          </Col>
+          {basis === 'Certified' ? (
+            <Col xs={24} md={16}>
+              <Form.Item name="certificationReference" label="Certification reference" rules={[{ required: true }, { max: 100 }]}><Input /></Form.Item>
+            </Col>
+          ) : (
+            <>
+              <Col xs={24} md={6}><Form.Item name="ordinanceNumber" label="Ordinance No." rules={[{ required: true }, { max: 50 }]}><Input /></Form.Item></Col>
+              <Col xs={12} md={5}><Form.Item name="ordinanceDate" label="Ordinance date" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
+              <Col xs={12} md={5}><Form.Item name="approvalDate" label="Approved"><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
+            </>
+          )}
+          <Col xs={12} md={8}><Form.Item name="effectivityDate" label="Effective" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={12} md={8}><Form.Item name="revisionYear" label="Revision year" rules={[{ required: true }]}><InputNumber min={1900} max={2200} precision={0} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="publicationReference" label="Published in"><Input maxLength={200} placeholder="Official Gazette, newspaper" /></Form.Item></Col>
+          {stages.map((st) => (
+            <Col key={st.name} xs={12} md={8}><Form.Item name={st.name} label={st.label}><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
+          ))}
+          <Col span={24}>
+            <Form.Item name="municipalityIds" label="Coverage" extra="Leave empty for the whole province. A change of coverage is a new SMV.">
+              <Select mode="multiple" allowClear showSearch optionFilterProp="label" placeholder="Whole province"
+                options={municipalities.map((m) => ({ value: m.id, label: m.name }))} />
+            </Form.Item>
+          </Col>
+          <Col span={24}><Form.Item name="description" label="Description"><Input maxLength={1000} /></Form.Item></Col>
         </Row>
-        <Form.Item name="revisionYear" label="Revision year" rules={[{ required: true }]}><InputNumber min={1900} max={2200} precision={0} /></Form.Item>
-        <Form.Item name="description" label="Description"><Input maxLength={500} /></Form.Item>
       </Form>
     </Modal>
   );
@@ -112,15 +174,21 @@ function SchedulesModal({ smv, onClose }: { smv: SmvDto; onClose: () => void }) 
   const { context, fail } = useToast();
   const [creating, setCreating] = useState(false);
   return (
-    <Modal open title={`Schedules of SMV ${smv.ordinanceNumber}`} onCancel={onClose} footer={null} width={1100} destroyOnHidden>
+    <Modal open title={`Unit values of SMV ${smv.reference}`} onCancel={onClose} footer={null} width={1100} destroyOnHidden>
       {context}
-      <Button icon={<PlusOutlined />} style={{ marginBottom: 12 }} onClick={() => setCreating(true)}>New schedule</Button>
+      <Typography.Paragraph type="secondary">
+        A land&apos;s unit value is found in this order: sub-class + zone, sub-class + barangay, sub-class, zone, barangay, neither.
+        At each step a value naming the land&apos;s actual use comes before one that does not. Coverage: {coverageText(smv)}.
+      </Typography.Paragraph>
+      <Button icon={<PlusOutlined />} style={{ marginBottom: 12 }} onClick={() => setCreating(true)}>New unit value</Button>
       <Table<SmvScheduleDto> rowKey="id" size="small" loading={isLoading} dataSource={data} pagination={false} scroll={{ x: true }}
         columns={[
           { title: 'Classification', dataIndex: 'classificationName' },
-          { title: 'Actual use', dataIndex: 'actualUseName' },
+          { title: 'Sub-class', dataIndex: 'subClassificationName', render: (v: string | null) => v ?? 'any' },
+          { title: 'Actual use', dataIndex: 'actualUseName', render: (v: string | null) => v ?? 'any' },
           { title: 'Type', dataIndex: 'propertyTypeName' },
           { title: 'Zone', dataIndex: 'zoneName', render: (v: string | null) => v ?? 'any' },
+          { title: 'Barangay', dataIndex: 'barangayName', render: (v: string | null) => v ?? 'any' },
           { title: 'Improvement', dataIndex: 'improvementKindName', render: (v: string | null) => v ?? '—' },
           { title: 'Market value', align: 'right', render: (_, s) => `${formatMoney(s.marketValue)} / ${s.unit}` },
           { title: 'Period', render: (_, s) => period(s.effectiveDate, s.endDate) },
@@ -136,29 +204,44 @@ function CreateScheduleModal({ smv, onClose }: { smv: SmvDto; onClose: () => voi
   const create = useCreateSmvSchedule(smv.id);
   const [form] = Form.useForm();
   const { data: classifications = [] } = useClassifications();
+  const { data: subClasses = [] } = useSubClassifications();
   const { data: actualUses = [] } = useActualUses();
   const { data: propertyTypes = [] } = usePropertyTypes();
   const { data: zones = [] } = useZones();
   const { data: kinds = [] } = useImprovementKinds();
+  const { data: allMunicipalities = [] } = useAllMunicipalities();
+  // A barangay value is for a barangay the SMV covers.
+  const towns = smv.coverage.length > 0 ? smv.coverage.map((c) => ({ id: c.municipalityId, name: c.municipalityName })) : allMunicipalities;
+  const town = Form.useWatch('municipalityId', form) as string | undefined;
+  const { data: barangays = [] } = useBarangays(town);
   return (
-    <Modal open title="New schedule" okText="Create" onCancel={onClose} okButtonProps={{ loading: create.isPending }} onOk={() => form.submit()} width={720} destroyOnHidden>
+    <Modal open title="New unit value" okText="Create" onCancel={onClose} okButtonProps={{ loading: create.isPending }} onOk={() => form.submit()} width={760} destroyOnHidden>
       {create.isError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Not created" description={errorText(create.error)} />}
-      <Form form={form} layout="vertical" onFinish={(v) => create.mutate({
-        classificationId: v.classificationId, actualUseId: v.actualUseId, propertyTypeId: v.propertyTypeId, zoneId: v.zoneId ?? null,
+      <Form form={form} layout="vertical" initialValues={{ unit: 'per sqm' }} onFinish={(v) => create.mutate({
+        classificationId: v.classificationId, subClassificationId: v.subClassificationId ?? null, actualUseId: v.actualUseId ?? null,
+        propertyTypeId: v.propertyTypeId, zoneId: v.zoneId ?? null, barangayId: v.barangayId ?? null,
         unit: v.unit, marketValue: v.marketValue, minimumValue: v.minimumValue ?? null, maximumValue: v.maximumValue ?? null,
         effectiveDate: day(v.effectiveDate)!, improvementKindId: v.improvementKindId ?? null,
       }, { onSuccess: onClose })}>
         <Row gutter={12}>
-          <Col span={8}><Form.Item name="classificationId" label="Classification" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={lookup(classifications)} /></Form.Item></Col>
-          <Col span={8}><Form.Item name="actualUseId" label="Actual use" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={lookup(actualUses)} /></Form.Item></Col>
-          <Col span={8}><Form.Item name="propertyTypeId" label="Property type" rules={[{ required: true }]}><Select options={lookup(propertyTypes)} /></Form.Item></Col>
-          <Col span={12}><Form.Item name="zoneId" label="Zone" extra="Blank: any zone"><Select allowClear showSearch optionFilterProp="label" options={lookup(zones)} /></Form.Item></Col>
-          <Col span={12}><Form.Item name="improvementKindId" label="Improvement kind" extra="For trees and plants"><Select allowClear showSearch optionFilterProp="label" options={lookup(kinds)} /></Form.Item></Col>
-          <Col span={6}><Form.Item name="unit" label="Unit" rules={[{ required: true }]}><Input maxLength={30} placeholder="per sqm" /></Form.Item></Col>
-          <Col span={6}><Form.Item name="marketValue" label="Market value" rules={[{ required: true }]}><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
-          <Col span={6}><Form.Item name="minimumValue" label="Minimum"><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
-          <Col span={6}><Form.Item name="maximumValue" label="Maximum"><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
-          <Col span={8}><Form.Item name="effectiveDate" label="Effective" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="classificationId" label="Classification" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={lookup(classifications)} /></Form.Item></Col>
+          <Col xs={12} md={8}><Form.Item name="subClassificationId" label="Sub-class" extra="Blank: any"><Select allowClear showSearch optionFilterProp="label" options={lookup(subClasses)} /></Form.Item></Col>
+          <Col xs={12} md={8}><Form.Item name="propertyTypeId" label="Property type" rules={[{ required: true }]}><Select options={lookup(propertyTypes)} /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="actualUseId" label="Actual use" extra="Blank: any. The actual use decides the level."><Select allowClear showSearch optionFilterProp="label" options={lookup(actualUses)} /></Form.Item></Col>
+          <Col xs={12} md={8}><Form.Item name="zoneId" label="Zone" extra="Blank: any"><Select allowClear showSearch optionFilterProp="label" options={lookup(zones)} /></Form.Item></Col>
+          <Col xs={12} md={8}><Form.Item name="improvementKindId" label="Improvement kind" extra="For trees and plants"><Select allowClear showSearch optionFilterProp="label" options={lookup(kinds)} /></Form.Item></Col>
+          <Col xs={12} md={8}>
+            <Form.Item name="municipalityId" label="Municipality (for a barangay value)">
+              <Select allowClear showSearch optionFilterProp="label" options={towns.map((m) => ({ value: m.id, label: m.name }))}
+                onChange={() => form.setFieldValue('barangayId', undefined)} />
+            </Form.Item>
+          </Col>
+          <Col xs={12} md={8}><Form.Item name="barangayId" label="Barangay" extra="Blank: any"><Select allowClear showSearch optionFilterProp="label" disabled={!town} options={barangays.map((b) => ({ value: b.id, label: b.name }))} /></Form.Item></Col>
+          <Col xs={12} md={8}><Form.Item name="effectiveDate" label="Effective" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={12} md={6}><Form.Item name="unit" label="Unit" rules={[{ required: true }]}><Input maxLength={20} /></Form.Item></Col>
+          <Col xs={12} md={6}><Form.Item name="marketValue" label="Unit value" rules={[{ required: true }]}><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={12} md={6}><Form.Item name="minimumValue" label="Minimum"><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={12} md={6}><Form.Item name="maximumValue" label="Maximum"><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
         </Row>
       </Form>
     </Modal>
@@ -206,7 +289,7 @@ function CreateFactorModal({ onClose }: { onClose: () => void }) {
       }, { onSuccess: onClose })}>
         <Row gutter={12}>
           <Col span={12}><Form.Item name="smvId" label="SMV" rules={[{ required: true }]}>
-            <Select options={(smvs?.items ?? []).map((s) => ({ value: s.id, label: `${s.ordinanceNumber} (${s.revisionYear})` }))} />
+            <Select options={(smvs?.items ?? []).map((s) => ({ value: s.id, label: `${s.reference} (${s.revisionYear})` }))} />
           </Form.Item></Col>
           <Col span={12}><Form.Item name="classificationId" label="Classification" extra="Blank: all"><Select allowClear showSearch optionFilterProp="label" options={lookup(classifications)} /></Form.Item></Col>
           <Col span={6}><Form.Item name="code" label="Code" rules={[{ required: true }]}><Input maxLength={30} /></Form.Item></Col>

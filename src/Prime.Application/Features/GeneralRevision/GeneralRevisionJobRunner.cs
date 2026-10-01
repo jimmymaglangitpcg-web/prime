@@ -67,7 +67,9 @@ public sealed class GeneralRevisionJobRunner(
             return;
         }
 
-        var valuationResult = await valuationService.ComputeForRpuAsync(rpu.Id, cancellationToken);
+        // Valued and assessed as of the revision's effectivity, under the SMV in force then (valuation-foundation.md §4.1).
+        var effectiveDate = job.EffectiveDate ?? clock.Today;
+        var valuationResult = await valuationService.ComputeForRpuAsync(rpu.Id, cancellationToken, effectiveDate);
         if (valuationResult.IsFailure)
         {
             job.FailedCount++;
@@ -83,7 +85,7 @@ public sealed class GeneralRevisionJobRunner(
             new CreateAssessmentRequest(
                 valuationResult.Value.Id,
                 revisionYear,
-                clock.Today,
+                effectiveDate,
                 previousAssessment?.Id,
                 job.Id,
                 $"General Revision {revisionYear}"),

@@ -88,7 +88,7 @@ public sealed class AdjustmentFactorService(IApplicationDbContext db, ICurrentUs
     private async Task<AdjustmentFactorDto> MapAsync(Guid id, CancellationToken ct) => ToDto(await Query().SingleAsync(x => x.Id == id, ct));
 
     private static AdjustmentFactorDto ToDto(AdjustmentFactor x) => new(
-        x.Id, x.SmvId, x.Smv!.OrdinanceNumber, x.Code, x.Name, x.Percent, x.ClassificationId, x.Classification?.Name, x.Description,
+        x.Id, x.SmvId, x.Smv!.Reference, x.Code, x.Name, x.Percent, x.ClassificationId, x.Classification?.Name, x.Description,
         x.LegalBasis, x.EffectiveDate, x.EndDate, x.Status, x.CreatedBy, x.CreatedAt, x.ApprovedBy, x.ApprovedAt, x.Remarks);
 
     private static Result<AdjustmentFactorDto> Fail(string code, string message) => Result.Failure<AdjustmentFactorDto>(code, message);

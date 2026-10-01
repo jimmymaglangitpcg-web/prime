@@ -7,6 +7,7 @@ using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Approvals;
 using Prime.Application.Features.Numbering;
 using Prime.Application.Features.TaxDeclarations;
+using Prime.Domain.DomainServices;
 using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.Assessments;
@@ -38,7 +39,7 @@ public sealed class AssessmentService(
         {
             return Result.Failure<AssessmentDto>(calculated.Code!, calculated.Message!);
         }
-        var (valuation, assessmentLines) = calculated.Value;
+        var (valuation, assessmentLines, effectivity) = calculated.Value;
         var single = assessmentLines.Count == 1 ? assessmentLines[0] : null;
 
         var assessment = new Domain.Entities.Assessment
@@ -46,13 +47,20 @@ public sealed class AssessmentService(
             RpuId = valuation.RpuId,
             PropertyId = valuation.PropertyId,
             ValuationId = valuation.Id,
-            AssessmentYear = request.AssessmentYear,
+            AssessmentYear = request.AssessmentYear ?? effectivity.Year,
             MarketValue = assessmentLines.Sum(l => l.MarketValue),
             AssessmentLevelId = single?.AssessmentLevelId,
             AssessmentPercentage = single?.AssessmentPercentage,
             AssessedValue = assessmentLines.Sum(l => l.AssessedValue),
             Status = WorkflowStatus.Draft,
-            EffectiveDate = request.EffectiveDate,
+            EffectiveDate = effectivity.EffectiveDate,
+            TransactionTypeId = effectivity.TransactionTypeId,
+            TransactionCode = effectivity.TransactionCode,
+            EffectivityRule = effectivity.Rule,
+            CauseDate = effectivity.CauseDate,
+            CauseWindowDays = effectivity.CauseWindowDays,
+            CauseWindowExceeded = effectivity.CauseWindowExceeded,
+            EffectivityOverrideReason = effectivity.Overridden ? request.EffectivityOverrideReason!.Trim() : null,
             PreviousAssessmentId = request.PreviousAssessmentId,
             RevisionReference = request.RevisionReference,
             Remarks = request.Remarks,
@@ -73,17 +81,96 @@ public sealed class AssessmentService(
         {
             return Result.Failure<AssessmentPreviewDto>(calculated.Code!, calculated.Message!);
         }
-        var (valuation, lines) = calculated.Value;
+        var (valuation, lines, effectivity) = calculated.Value;
         var classificationIds = lines.Select(l => l.ClassificationId).Distinct().ToList();
         var actualUseIds = lines.Select(l => l.ActualUseId).Distinct().ToList();
         var classifications = await db.Classifications.Where(x => classificationIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
         var actualUses = await db.ActualUses.Where(x => actualUseIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
         return Result.Success(new AssessmentPreviewDto(valuation.Id, valuation.RpuId, lines.Sum(l => l.MarketValue), lines.Sum(l => l.AssessedValue),
             lines.Select(l => new AssessmentLineDto(Guid.Empty, l.Sequence, l.ClassificationId, classifications.GetValueOrDefault(l.ClassificationId, ""),
-                l.ActualUseId, actualUses.GetValueOrDefault(l.ActualUseId, ""), l.MarketValue, l.AssessmentLevelId, l.AssessmentPercentage, l.AssessedValue)).ToList()));
+                l.ActualUseId, actualUses.GetValueOrDefault(l.ActualUseId, ""), l.MarketValue, l.AssessmentLevelId, l.AssessmentPercentage, l.AssessedValue)).ToList(),
+            effectivity));
     }
 
-    private sealed record Calculated(Domain.Entities.Valuation Valuation, List<Domain.Entities.AssessmentLine> Lines);
+    public Task<Result<EffectivityDto>> EffectivityAsync(Guid? transactionTypeId, DateOnly? causeDate, DateOnly? effectiveDate, string? overrideReason,
+        CancellationToken cancellationToken = default) =>
+        ResolveEffectivityAsync(transactionTypeId, causeDate, effectiveDate, overrideReason, revision: false, clock.Today, cancellationToken);
+
+    /// <summary>
+    /// The effectivity of an assessment made on <paramref name="madeOn"/> (docs/analysis/valuation-foundation.md
+    /// §4.2): derived by the transaction type's rule, or given by the caller where no rule derives it. A general
+    /// revision's date is fixed by the revision, under the configured general-revision code.
+    /// </summary>
+    private async Task<Result<EffectivityDto>> ResolveEffectivityAsync(Guid? transactionTypeId, DateOnly? causeDate, DateOnly? effectiveDate,
+        string? overrideReason, bool revision, DateOnly madeOn, CancellationToken ct)
+    {
+        Domain.Entities.Transactions.TransactionType? type = null;
+        string? code = null;
+        if (transactionTypeId is { } typeId)
+        {
+            type = await db.TransactionTypes.AsNoTracking().InForce(madeOn).FirstOrDefaultAsync(x => x.Id == typeId, ct);
+            if (type is null)
+            {
+                return Result.Failure<EffectivityDto>("TRANSACTION_TYPE_NOT_IN_FORCE", "The transaction type is not one in force today.");
+            }
+            code = type.Code;
+        }
+        else if (revision && faas.Value.GeneralRevisionTransactionCode?.Trim() is { Length: > 0 } revisionCode)
+        {
+            code = revisionCode;
+            type = await db.TransactionTypes.AsNoTracking().InForce(madeOn).FirstOrDefaultAsync(x => x.Code == revisionCode, ct);
+        }
+
+        var rule = revision ? EffectivityRule.Fixed : type?.EffectivityRule;
+        if (rule is { } needsCause && EffectivityRules.NeedsCauseDate(needsCause))
+        {
+            if (causeDate is null)
+            {
+                return Result.Failure<EffectivityDto>("CAUSE_DATE_REQUIRED",
+                    $"A {code} reassessment takes effect from the quarter after it is made; enter the date of its cause.");
+            }
+            if (causeDate > madeOn)
+            {
+                return Result.Failure<EffectivityDto>("CAUSE_DATE_IN_FUTURE", "The cause of a reassessment cannot be after the date it is made.");
+            }
+        }
+
+        var derived = rule is { } r ? EffectivityRules.Derive(r, madeOn) : null;
+        DateOnly date;
+        var overridden = false;
+        if (derived is null)
+        {
+            if (effectiveDate is null)
+            {
+                return Result.Failure<EffectivityDto>("EFFECTIVE_DATE_REQUIRED",
+                    rule is null ? "Enter the effective date, or choose a transaction type whose rule gives it."
+                        : $"The {rule} rule does not derive the effective date; enter it.");
+            }
+            date = effectiveDate.Value;
+        }
+        else if (effectiveDate is { } given && given != derived)
+        {
+            // A manual override, only with its reason (audited with the record).
+            if (string.IsNullOrWhiteSpace(overrideReason))
+            {
+                return Result.Failure<EffectivityDto>("EFFECTIVITY_OVERRIDE_REASON_REQUIRED",
+                    $"Made today, a {code} assessment takes effect on {derived:yyyy-MM-dd} ({rule}). Give a reason to use {given:yyyy-MM-dd} instead.");
+            }
+            date = given;
+            overridden = true;
+        }
+        else
+        {
+            date = derived.Value;
+        }
+
+        var window = rule == EffectivityRule.NextQuarter ? type?.CauseWindowDays : null;
+        var late = rule == EffectivityRule.NextQuarter && causeDate is { } cause && EffectivityRules.CauseWindowExceeded(cause, madeOn, window);
+        return Result.Success(new EffectivityDto(date, date.Year, EffectivityRules.Quarter(date), rule, derived is not null, overridden,
+            type?.Id, code, type?.EffectivityLegalBasis, madeOn, causeDate, window, late));
+    }
+
+    private sealed record Calculated(Domain.Entities.Valuation Valuation, List<Domain.Entities.AssessmentLine> Lines, EffectivityDto Effectivity);
 
     /// <summary>
     /// The single assessment calculation (CLAUDE.md Rule 9), shared by create and
@@ -102,6 +189,21 @@ public sealed class AssessmentService(
         if (valuation is null)
         {
             return Result.Failure<Calculated>("VALUATION_NOT_FOUND", "No Valuation was found with the given id.");
+        }
+        var resolved = await ResolveEffectivityAsync(request.TransactionTypeId, request.CauseDate, request.EffectiveDate,
+            request.EffectivityOverrideReason, request.RevisionReference is not null, clock.Today, cancellationToken);
+        if (resolved.IsFailure)
+        {
+            return Result.Failure<Calculated>(resolved.Code!, resolved.Message!);
+        }
+        var effectivity = resolved.Value;
+        var effectiveDate = effectivity.EffectiveDate;
+        // A period is assessed on the value under the rules in force then (docs/analysis/valuation-foundation.md §4.1, Q1).
+        if (valuation.EffectiveDate != effectiveDate)
+        {
+            return Result.Failure<Calculated>("VALUATION_DATE_MISMATCH",
+                $"The valuation was made as of {valuation.EffectiveDate:yyyy-MM-dd}, but the assessment takes effect on {effectiveDate:yyyy-MM-dd}. "
+                + "Value the unit as of the assessment's effective date, then assess that valuation.");
         }
 
         if (request.PreviousAssessmentId is { } previousId)
@@ -159,7 +261,7 @@ public sealed class AssessmentService(
         {
             var marketValue = group.Sum(l => l.MarketValue);
             var bracketValue = options.Value.LevelBracketBasis == LevelBracketBasis.Unit ? unitMarketValue : marketValue;
-            var level = await ResolveAssessmentLevelAsync(group.Key.Classification, group.Key.ActualUse, propertyType.Id, bracketValue, request.EffectiveDate, cancellationToken);
+            var level = await ResolveAssessmentLevelAsync(group.Key.Classification, group.Key.ActualUse, propertyType.Id, bracketValue, effectiveDate, cancellationToken);
             if (level is null)
             {
                 var names = await db.Classifications.Where(x => x.Id == group.Key.Classification).Select(x => x.Name).FirstOrDefaultAsync(cancellationToken)
@@ -179,7 +281,7 @@ public sealed class AssessmentService(
                 AssessedValue = Math.Round(marketValue * level.AssessmentPercentage / 100m, 2, MidpointRounding.AwayFromZero),
             });
         }
-        return Result.Success(new Calculated(valuation, assessmentLines));
+        return Result.Success(new Calculated(valuation, assessmentLines, effectivity));
     }
 
     public async Task<Result<AssessmentDto>> SubmitForReviewAsync(Guid assessmentId, CancellationToken cancellationToken = default)
@@ -211,6 +313,16 @@ public sealed class AssessmentService(
         {
             return Result.Failure<AssessmentDto>("ASSESSMENT_NOT_PENDING_REVIEW", "Only an assessment pending review can be approved.");
         }
+        // An assessment is made when it is finally approved (Q3). If approving it today would give its rule another
+        // effectivity (a December draft approved in January), it must be valued and assessed again as of that date.
+        var today = clock.Today;
+        if (assessment.EffectivityRule is { } rule && assessment.EffectivityOverrideReason is null
+            && EffectivityRules.Derive(rule, today) is { } derivedToday && derivedToday != assessment.EffectiveDate)
+        {
+            return Result.Failure<AssessmentDto>("EFFECTIVITY_CHANGED",
+                $"Approved today, this assessment would take effect on {derivedToday:yyyy-MM-dd}, not {assessment.EffectiveDate:yyyy-MM-dd}. "
+                + $"Reject it, then value and assess the unit again as of {derivedToday:yyyy-MM-dd}.");
+        }
         // A configured approval chain (docs/FORMS-REVISION-PLAN.md §4.5): each call signs the
         // next step; the assessment is Approved when the last step is signed.
         var step = await approvals.SignNextStepAsync(ApprovalSubjectType.Assessment, assessment.Id, assessment.CreatedBy,
@@ -232,6 +344,11 @@ public sealed class AssessmentService(
             assessment.Status = WorkflowStatus.Approved;
             assessment.ApprovedBy = currentUser.AppUserId;
             assessment.ApprovedAt = DateTimeOffset.UtcNow;
+            assessment.MadeOn = today;
+            if (assessment.CauseDate is { } cause && assessment.EffectivityRule == EffectivityRule.NextQuarter)
+            {
+                assessment.CauseWindowExceeded = EffectivityRules.CauseWindowExceeded(cause, today, assessment.CauseWindowDays);
+            }
             // With FAAS numbers of their own, number the appraisal record once approved, if a FAAS
             // scheme is in force. By default the FAAS number is the TD's (docs/analysis/mrpaao-forms-model.md §6.1).
             if (faas.Value.NumberSource == FaasNumberSource.Own)
@@ -346,7 +463,8 @@ public sealed class AssessmentService(
                 && x.PropertyTypeId == propertyTypeId
                 && x.Status == WorkflowStatus.Approved
                 && x.EffectiveDate <= asOf
-                && (x.EndDate == null || x.EndDate > asOf)
+                // EndDate is inclusive: superseding a level ends it the day before its successor (AssessmentLevelService).
+                && (x.EndDate == null || x.EndDate >= asOf)
                 // "Over the lower, not over the upper" (LGC §218 table form); a lower value of 0 includes 0.
                 // DOMAIN VERIFICATION REQUIRED against the LGU's ordinance (docs/analysis/value-and-assess.md §2.6).
                 && (x.LowerValue == 0 || x.LowerValue < marketValue)
@@ -383,5 +501,16 @@ public sealed class AssessmentService(
         x.Lines.OrderBy(l => l.Sequence).Select(l => new AssessmentLineDto(l.Id, l.Sequence, l.ClassificationId, l.Classification!.Name,
             l.ActualUseId, l.ActualUse!.Name, l.MarketValue, l.AssessmentLevelId, l.AssessmentPercentage, l.AssessedValue)).ToList(),
         x.PostedAt,
-        x.PostedBy);
+        x.PostedBy,
+        null,
+        x.EffectivityYear,
+        x.EffectivityQuarter,
+        x.TransactionTypeId,
+        x.TransactionCode,
+        x.EffectivityRule,
+        x.CauseDate,
+        x.CauseWindowDays,
+        x.CauseWindowExceeded,
+        x.MadeOn,
+        x.EffectivityOverrideReason);
 }

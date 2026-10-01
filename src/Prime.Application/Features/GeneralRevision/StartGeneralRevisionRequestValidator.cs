@@ -8,5 +8,6 @@ public sealed class StartGeneralRevisionRequestValidator : AbstractValidator<Sta
     {
         RuleFor(x => x.RpuIds).NotEmpty();
         RuleFor(x => x.RevisionYear).InclusiveBetween(1900, 2200);
+        RuleFor(x => x.EffectiveDate).NotEqual(default(DateOnly)).WithMessage("effectiveDate (the revision's effectivity) is required.");
     }
 }

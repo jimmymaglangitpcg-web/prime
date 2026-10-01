@@ -47,6 +47,32 @@ public sealed class Assessment : AuditableEntity
 
     public WorkflowStatus Status { get; set; } = WorkflowStatus.Draft;
     public DateOnly EffectiveDate { get; set; }
+    /// <summary>Of <see cref="EffectiveDate"/>; a stored column computed by the database, never typed.</summary>
+    public int EffectivityYear { get; private set; }
+    /// <summary>1–4, of <see cref="EffectiveDate"/>; computed by the database.</summary>
+    public int EffectivityQuarter { get; private set; }
+
+    /// <summary>
+    /// The transaction type the assessment was made under, and its code and
+    /// effectivity rule frozen from that version (docs/analysis/valuation-foundation.md §4.2).
+    /// Null for assessments made before step L1-2 or without a type.
+    /// </summary>
+    public Guid? TransactionTypeId { get; set; }
+    public string? TransactionCode { get; set; }
+    public EffectivityRule? EffectivityRule { get; set; }
+    /// <summary>The event a reassessment answers (destruction, change of use, …), where the rule needs one.</summary>
+    public DateOnly? CauseDate { get; set; }
+    /// <summary>The reassessment window in force when it was made, frozen with <see cref="CauseWindowExceeded"/>.</summary>
+    public int? CauseWindowDays { get; set; }
+    /// <summary>Made later than the window after the cause: a warning on the record, not a refusal (Q4).</summary>
+    public bool CauseWindowExceeded { get; set; }
+    /// <summary>
+    /// The date the assessment was made, i.e. finally approved (Q3). Null while
+    /// it is a draft, and for assessments approved before step L1-2.
+    /// </summary>
+    public DateOnly? MadeOn { get; set; }
+    /// <summary>Why the effectivity differs from the one its rule gives. Set only with an override.</summary>
+    public string? EffectivityOverrideReason { get; set; }
 
     public Guid? PreviousAssessmentId { get; set; }
     public Assessment? PreviousAssessment { get; set; }

@@ -101,7 +101,7 @@ public class LandAppraisalTests(WebApplicationFactory<Program> factory) : IClass
         var withAdjustment = await c.Lands.AddAdjustmentAsync(c.LandId, new AddLandAdjustmentRequest(code, land.Strips[0].Id, "DEMO"));
         withAdjustment.IsSuccess.ShouldBeTrue(withAdjustment.IsSuccess ? null : withAdjustment.Message);
 
-        var valuation = await c.Services.GetRequiredService<IValuationService>().ComputeForRpuAsync(c.Seed.RpuId);
+        var valuation = await c.Services.GetRequiredService<IValuationService>().ComputeForRpuAsync(c.Seed.RpuId, asOf: new DateOnly(2026, 1, 1));
 
         valuation.IsSuccess.ShouldBeTrue(valuation.IsSuccess ? null : valuation.Message);
         valuation.Value.ComputedMarketValue.ShouldBe(690_000m);
@@ -145,7 +145,7 @@ public class LandAppraisalTests(WebApplicationFactory<Program> factory) : IClass
         await ApprovedFactorAsync(c, otherSmv.Id, code, 5m);
         (await c.Lands.AddAdjustmentAsync(c.LandId, new AddLandAdjustmentRequest(code, null, null))).IsSuccess.ShouldBeTrue();
 
-        var valuation = await c.Services.GetRequiredService<IValuationService>().ComputeForRpuAsync(c.Seed.RpuId);
+        var valuation = await c.Services.GetRequiredService<IValuationService>().ComputeForRpuAsync(c.Seed.RpuId, asOf: new DateOnly(2026, 1, 1));
 
         valuation.Code.ShouldBe("ADJUSTMENT_FACTOR_NOT_FOUND");
         valuation.Message.ShouldNotBeNull().ShouldContain(code);

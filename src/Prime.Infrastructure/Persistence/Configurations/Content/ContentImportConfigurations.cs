@@ -30,7 +30,7 @@ public sealed class ContentImportItemConfiguration : IEntityTypeConfiguration<Co
         builder.ToTable("ContentImportItems");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.EntityType).HasMaxLength(60).IsRequired();
-        builder.Property(x => x.Key).HasMaxLength(60).IsRequired();
+        builder.Property(x => x.Key).HasMaxLength(200).IsRequired(); // a unit value's natural key is long (SMV, class, sub-class, place, date)
         builder.Property(x => x.Action).HasConversion<string>().HasMaxLength(20);
         builder.Property(x => x.ChangesJson).HasColumnType("jsonb").IsRequired();
         builder.Property(x => x.Source).HasMaxLength(500).IsRequired();

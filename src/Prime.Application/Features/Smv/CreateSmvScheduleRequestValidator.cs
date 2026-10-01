@@ -7,7 +7,7 @@ public sealed class CreateSmvScheduleRequestValidator : AbstractValidator<Create
     public CreateSmvScheduleRequestValidator()
     {
         RuleFor(x => x.ClassificationId).NotEmpty();
-        RuleFor(x => x.ActualUseId).NotEmpty();
+        RuleFor(x => x.ActualUseId).NotEqual(Guid.Empty).When(x => x.ActualUseId is not null);
         RuleFor(x => x.PropertyTypeId).NotEmpty();
         RuleFor(x => x.Unit).NotEmpty().MaximumLength(20);
         RuleFor(x => x.MarketValue).GreaterThanOrEqualTo(0);

@@ -140,7 +140,7 @@ public class EndToEndFlowTests(WebApplicationFactory<Program> factory) : IClassF
         As(maker);
 
         // 5. VALUATE
-        var valuation = Ok(await sp.GetRequiredService<IValuationService>().ComputeForRpuAsync(rpu.Id), "valuate");
+        var valuation = Ok(await sp.GetRequiredService<IValuationService>().ComputeForRpuAsync(rpu.Id, asOf: new DateOnly(2026, 1, 1)), "valuate");
         valuation.ComputedMarketValue.ShouldBe(500_000m);
 
         // 6. ASSESS: draft → submitted → approved (by another user) → posted

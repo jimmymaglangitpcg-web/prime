@@ -103,7 +103,7 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         }
         if (assessmentId is { } declared)
         {
-            codes.Add(await TransactionCodes.FromRevisionAsync(db, faas.Value,
+            codes.Add(await TransactionCodes.FromAssessmentAsync(db, faas.Value,
                 await db.Assessments.FirstOrDefaultAsync(x => x.Id == declared, cancellationToken), clock.Today, cancellationToken));
         }
         var (transactionCode, transactionRank) = TransactionCodes.Highest(codes);

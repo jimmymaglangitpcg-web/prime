@@ -27,6 +27,18 @@
     },
     {
       "kind": "lookup",
+      "lookup": "sub-classifications",
+      "path": "lookups/sub-classifications.csv",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "lookup",
+      "lookup": "actual-uses",
+      "path": "lookups/actual-uses.csv",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "lookup",
       "lookup": "structural-parts",
       "path": "lookups/structural-parts.csv",
       "source": "DEMO data"
@@ -60,6 +72,21 @@
     {
       "kind": "offices",
       "path": "catalogues/offices.json",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "smv",
+      "path": "catalogues/smv.json",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "smv-schedules",
+      "path": "valuation/smv-schedules.csv",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "assessment-levels",
+      "path": "valuation/assessment-levels.csv",
       "source": "DEMO data"
     },
     {

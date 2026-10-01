@@ -108,7 +108,7 @@ public class BillingFlowTests(WebApplicationFactory<Program> factory) : IClassFi
             0m, 1_000_000m, 20m, new DateOnly(2026, 1, 1)))).Value;
         await levels.ApproveAsync(level.Id);
 
-        var valuation = await services.GetRequiredService<IValuationService>().ComputeForLandAsync(land.Id);
+        var valuation = await services.GetRequiredService<IValuationService>().ComputeForLandAsync(land.Id, asOf: new DateOnly(2026, 1, 1));
         valuation.IsSuccess.ShouldBeTrue(valuation.IsSuccess ? null : valuation.Message);
         var created = await services.GetRequiredService<IAssessmentService>().CreateAsync(new CreateAssessmentRequest(
             valuation.Value.Id, 2026, new DateOnly(2026, 1, 1), null, null, "DEMO"));

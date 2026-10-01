@@ -20,12 +20,23 @@ public sealed class SmvSchedule : AuditableEntity
 
     public Guid ClassificationId { get; set; }
     public Classification? Classification { get; set; }
-    public Guid ActualUseId { get; set; }
+    /// <summary>
+    /// Optional: under the LAM a land's unit value follows its class and sub-class
+    /// (by location), while its actual use decides the level (docs/analysis/valuation-foundation.md
+    /// §4.3). A row naming an actual use beats one that does not.
+    /// </summary>
+    public Guid? ActualUseId { get; set; }
     public ActualUse? ActualUse { get; set; }
     public Guid PropertyTypeId { get; set; }
     public PropertyType? PropertyType { get; set; }
+    /// <summary>The sub-class the unit value is for (e.g. R-1, A-2); null: any.</summary>
+    public Guid? SubClassificationId { get; set; }
+    public SubClassification? SubClassification { get; set; }
     public Guid? ZoneId { get; set; }
     public Zone? Zone { get; set; }
+    /// <summary>A unit value given for one barangay; null: any.</summary>
+    public Guid? BarangayId { get; set; }
+    public Barangay? Barangay { get; set; }
 
     /// <summary>
     /// Set for a land improvement's rate (trees, plants — unit such as "per

@@ -72,6 +72,15 @@ public sealed class ValuationLine : Entity
     public Guid? ActualUseId { get; set; }
     public ActualUse? ActualUse { get; set; }
 
+    /// <summary>
+    /// The class and sub-class the row was priced by, when they differ from the ones above,
+    /// which assess it (docs/analysis/valuation-foundation.md §4.3). Null: the same.
+    /// </summary>
+    public Guid? PricedClassificationId { get; set; }
+    public Classification? PricedClassification { get; set; }
+    public Guid? PricedSubClassificationId { get; set; }
+    public SubClassification? PricedSubClassification { get; set; }
+
     /// <summary>Area, floor area or count; with <see cref="Unit"/> and <see cref="UnitValue"/> when the row is rate-based.</summary>
     public decimal? Quantity { get; set; }
     public string? Unit { get; set; }

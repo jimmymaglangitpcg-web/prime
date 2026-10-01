@@ -50,7 +50,8 @@ public sealed record AppraisalMachineryDto(
     decimal? ReplacementCost, int? EconomicLifeYears, int? RemainingLifeYears,
     int? YearInstalled = null, int? YearOfInitialOperation = null, decimal? ConversionFactor = null);
 
-public sealed record AppraisalSmvDto(Guid Id, string OrdinanceNumber, DateOnly OrdinanceDate, DateOnly EffectivityDate, int RevisionYear, string? Description);
+public sealed record AppraisalSmvDto(Guid Id, string OrdinanceNumber, DateOnly? OrdinanceDate, DateOnly EffectivityDate, int RevisionYear, string? Description,
+    Prime.Domain.Enums.SmvBasis Basis = Prime.Domain.Enums.SmvBasis.Ordinance, string? CertificationReference = null, DateOnly? CertifiedOn = null);
 
 public sealed record AppraisalBreakdownLineDto(string Key, decimal Value);
 
@@ -232,7 +233,7 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
             land, building, machinery, machineryUnits,
             new AppraisalValuationDto(valuation.Id, valuation.ValuationMethod, valuation.ComputedMarketValue, valuation.EffectiveDate,
                 valuation.ComputedAt,
-                valuation.Smv is { } smv ? new AppraisalSmvDto(smv.Id, smv.OrdinanceNumber, smv.OrdinanceDate, smv.EffectivityDate, smv.RevisionYear, smv.Description) : null,
+                valuation.Smv is { } smv ? new AppraisalSmvDto(smv.Id, smv.Reference, smv.OrdinanceDate, smv.EffectivityDate, smv.RevisionYear, smv.Description, smv.Basis, smv.CertificationReference, smv.CertifiedOn) : null,
                 valuation.SmvSchedule?.Unit, valuation.SmvSchedule?.MarketValue,
                 Breakdown(valuation.BreakdownJson),
                 valuation.Lines.OrderBy(l => l.Sequence).Select(l => new AppraisalValuationLineDto(l.Sequence, l.Source, l.Description,

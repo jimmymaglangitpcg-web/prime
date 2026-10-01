@@ -86,14 +86,14 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
 
         result.Applied.ShouldBeTrue();
         var record = result.Import.ShouldNotBeNull();
-        // 1 province, 2 towns, 4 barangays, 2 classifications, 2 parts, 2 materials, 4 draft versions,
-        // 1 office with 2 draft jurisdictions, 2 barangay boundaries
-        record.CreatedCount.ShouldBe(22);
+        // 1 province, 2 towns, 4 barangays, 2 classifications, 1 sub-class, 1 actual use, 2 parts, 2 materials,
+        // 4 draft versions, 1 office with 2 draft jurisdictions, a draft SMV with 2 unit values and 1 level, 2 barangay boundaries
+        record.CreatedCount.ShouldBe(28);
         record.ChangedCount.ShouldBe(0);
         record.ImportedBy.ShouldBe(c.Importer.Id);
         record.ImportedByName.ShouldBe("DEMO Importer");
         record.Fingerprint.ShouldBe(preview.Fingerprint);
-        record.Files.Count.ShouldBe(12);
+        record.Files.Count.ShouldBe(17);
 
         var province = await c.Db.Provinces.SingleAsync(x => x.PsgcCode == "9900000000");
         province.PinIndexNumber.ShouldBe("998");
@@ -106,8 +106,19 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
         var classification = await c.Db.Classifications.SingleAsync(x => x.Code == "DEMO-CP-R");
         (classification.SortOrder, classification.IsActive, classification.Description).ShouldBe((10, true, "DEMO classification"));
 
+        // Step L1-3: the DEMO SMV, its unit values and level arrive as drafts for a second user to approve.
+        var smv = await c.Db.Smvs.Include(x => x.Coverage).ThenInclude(v => v.Municipality).SingleAsync(x => x.CertificationReference == "DEMO-CP-CERT-2099");
+        (smv.Basis, smv.Status, smv.EffectivityDate, smv.Coverage.Single().Municipality!.PsgcCode)
+            .ShouldBe((SmvBasis.Certified, WorkflowStatus.Draft, new DateOnly(2099, 1, 1), "9900100000"));
+        var rates = await c.Db.SmvSchedules.Include(x => x.SubClassification).Include(x => x.Barangay).Where(x => x.SmvId == smv.Id)
+            .OrderBy(x => x.MarketValue).ToListAsync();
+        rates.Select(r => (r.MarketValue, r.ActualUseId, r.SubClassification?.Code, r.Barangay?.PsgcCode, r.Status)).ShouldBe(
+            [(1000m, (Guid?)null, (string?)null, (string?)null, WorkflowStatus.Draft), (1200m, null, "DEMO-CP-R1", "9900100001", WorkflowStatus.Draft)]);
+        (await c.Db.AssessmentLevels.Include(x => x.ActualUse).SingleAsync(x => x.OrdinanceNumber == "DEMO-CP-ORD"))
+            .ShouldSatisfyAllConditions(l => l.ActualUse!.Code.ShouldBe("DEMO-CP-RU"), l => l.AssessmentPercentage.ShouldBe(20m), l => l.Status.ShouldBe(WorkflowStatus.Draft));
+
         var items = (await c.Service.ListImportItemsAsync(record.Id, new PagedRequest { PageSize = 100 })).Value;
-        items.TotalCount.ShouldBe(22);
+        items.TotalCount.ShouldBe(28);
         items.Items.ShouldAllBe(i => i.Action == ContentImportAction.Created && i.Source.Length > 0 && i.Line >= 1);
         items.Items.Single(i => i.Key == "9900200001").Source.ShouldBe("DEMO data (row-level source)");
         items.Items.Single(i => i.Key == "9900200001").EntityId.ShouldBe((await c.Db.Barangays.SingleAsync(x => x.PsgcCode == "9900200001")).Id);

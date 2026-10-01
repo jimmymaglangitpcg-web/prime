@@ -80,7 +80,7 @@ public class MachineryAppraisalTests(WebApplicationFactory<Program> factory) : I
         (await c.Machinery.ListByRpuAsync(c.RpuId)).Value.Count.ShouldBe(2);
 
         // Valuing either machine values the whole unit.
-        var valuation = await c.Services.GetRequiredService<IValuationService>().ComputeForMachineryAsync(second.Value.Id);
+        var valuation = await c.Services.GetRequiredService<IValuationService>().ComputeForMachineryAsync(second.Value.Id, asOf: new DateOnly(2026, 1, 1));
 
         valuation.IsSuccess.ShouldBeTrue(valuation.IsSuccess ? null : valuation.Message);
         valuation.Value.ComputedMarketValue.ShouldBe(160_000m);
@@ -105,7 +105,7 @@ public class MachineryAppraisalTests(WebApplicationFactory<Program> factory) : I
         (await c.Machinery.CreateAsync(new CreateMachineryRequest(c.RpuId, c.TypeId, "DEMO", "DEMO_Old", "M2", "SN-OLD", null, null,
             new DateOnly(2010, 1, 1), 80_000m, null, null, null, null))).IsSuccess.ShouldBeTrue();
 
-        var valuation = await c.Services.GetRequiredService<IValuationService>().ComputeForMachineryAsync(first.Id);
+        var valuation = await c.Services.GetRequiredService<IValuationService>().ComputeForMachineryAsync(first.Id, asOf: new DateOnly(2026, 1, 1));
 
         valuation.Code.ShouldBe("MACHINERY_VALUATION_INPUTS_MISSING");
         valuation.Message.ShouldNotBeNull().ShouldContain("DEMO_Old");

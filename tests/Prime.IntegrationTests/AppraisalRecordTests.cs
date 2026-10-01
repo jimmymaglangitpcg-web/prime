@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Appraisal;
 using Prime.Application.Features.Assessments;
+using Prime.Application.Features.Valuation;
 using Prime.Application.Features.Forms;
 using Prime.Application.Features.Numbering;
 using Prime.Application.Features.Taxpayers;
@@ -115,7 +116,8 @@ public class AppraisalRecordTests(WebApplicationFactory<Program> factory) : ICla
         await using var _ = tx;
         var first = await c.Db.Assessments.SingleAsync(x => x.Id == c.Seed.AssessmentId);
         var created = (await c.Services.GetRequiredService<IAssessmentService>().CreateAsync(
-            new CreateAssessmentRequest(first.ValuationId, 2027, new DateOnly(2027, 1, 1), first.Id, null, "DEMO reassessment"))).Value;
+            new CreateAssessmentRequest((await c.Services.GetRequiredService<IValuationService>().ComputeForRpuAsync(c.Seed.RpuId, asOf: new DateOnly(2027, 1, 1))).Value.Id,
+                2027, new DateOnly(2027, 1, 1), first.Id, null, "DEMO reassessment"))).Value;
         var second = await c.Db.Assessments.SingleAsync(x => x.Id == created.Id);
         second.AssessedValue = 120_000m; // stands in for a new valuation
         await c.Db.SaveChangesAsync();

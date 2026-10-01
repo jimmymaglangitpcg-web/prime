@@ -6,7 +6,9 @@ using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.Lands;
 
-public sealed record AddLandStripRequest(Guid ClassificationId, Guid? SubClassificationId, Guid ActualUseId, Guid? ZoneId, decimal Area);
+/// <param name="ValuationClassificationId">Prices the strip when it differs from its own classification (valuation-foundation.md §4.3); null: its own.</param>
+public sealed record AddLandStripRequest(Guid ClassificationId, Guid? SubClassificationId, Guid ActualUseId, Guid? ZoneId, decimal Area,
+    Guid? ValuationClassificationId = null, Guid? ValuationSubClassificationId = null);
 
 public sealed record AddLandImprovementRequest(
     Guid ImprovementKindId, decimal Quantity, bool? IsProductive, Guid? ClassificationId, Guid? ActualUseId, string? Description);
@@ -15,7 +17,9 @@ public sealed record AddLandAdjustmentRequest(string FactorCode, Guid? LandStrip
 
 public sealed record LandStripDto(
     Guid Id, int Sequence, Guid ClassificationId, string ClassificationName, Guid? SubClassificationId, string? SubClassificationName,
-    Guid ActualUseId, string ActualUseName, Guid? ZoneId, string? ZoneName, decimal Area);
+    Guid ActualUseId, string ActualUseName, Guid? ZoneId, string? ZoneName, decimal Area,
+    Guid? ValuationClassificationId = null, string? ValuationClassificationName = null,
+    Guid? ValuationSubClassificationId = null, string? ValuationSubClassificationName = null);
 
 public sealed record LandImprovementDto(
     Guid Id, int Sequence, Guid ImprovementKindId, string ImprovementKindName, decimal Quantity, bool? IsProductive,
@@ -66,11 +70,20 @@ internal static class LandParts
         {
             return "The specified zone does not exist.";
         }
+        if (r.ValuationClassificationId is { } priced && !await db.Classifications.AnyAsync(x => x.Id == priced, ct))
+        {
+            return "The specified valuation classification does not exist.";
+        }
+        if (r.ValuationSubClassificationId is { } pricedSub && !await db.SubClassifications.AnyAsync(x => x.Id == pricedSub, ct))
+        {
+            return "The specified valuation sub-classification does not exist.";
+        }
         return null;
     }
 
     public static LandStripDto ToDto(LandStrip x) => new(x.Id, x.Sequence, x.ClassificationId, x.Classification!.Name, x.SubClassificationId,
-        x.SubClassification?.Name, x.ActualUseId, x.ActualUse!.Name, x.ZoneId, x.Zone?.Name, x.Area);
+        x.SubClassification?.Name, x.ActualUseId, x.ActualUse!.Name, x.ZoneId, x.Zone?.Name, x.Area,
+        x.ValuationClassificationId, x.ValuationClassification?.Name, x.ValuationSubClassificationId, x.ValuationSubClassification?.Name);
 
     public static LandImprovementDto ToDto(LandImprovement x) => new(x.Id, x.Sequence, x.ImprovementKindId, x.ImprovementKind!.Name, x.Quantity,
         x.IsProductive, x.ClassificationId, x.Classification?.Name, x.ActualUseId, x.ActualUse?.Name, x.Description);

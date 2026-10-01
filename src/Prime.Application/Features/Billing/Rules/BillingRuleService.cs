@@ -255,7 +255,7 @@ public sealed class BillingRuleService(
         ToDto(await db.TaxIncreaseCapRules.Include(x => x.Smv).Include(x => x.TaxType).SingleAsync(x => x.Id == id, ct));
 
     private static TaxIncreaseCapRuleDto ToDto(TaxIncreaseCapRule x) =>
-        new(Header(x), new SmvRefDto(x.Smv!.Id, x.Smv.OrdinanceNumber, x.Smv.EffectivityDate, x.Smv.RevisionYear),
+        new(Header(x), new SmvRefDto(x.Smv!.Id, x.Smv.Reference, x.Smv.EffectivityDate, x.Smv.RevisionYear),
             TaxTypeRef(x.TaxType), x.Basis, x.Baseline, x.MaxIncreasePercent);
 
     // ------------------------------------------------------- shared lifecycle

@@ -114,7 +114,7 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
               { "kind": "lookup", "lookup": "classifications", "path": "classes.csv", "source": "DEMO" },
               { "kind": "lookup", "lookup": "no-such-lookup", "path": "x.csv", "source": "DEMO" },
               { "kind": "lookup", "lookup": "structural-materials", "path": "materials.csv", "source": "DEMO" },
-              { "kind": "smv", "path": "valuation/smv.json", "source": "DEMO" },
+              { "kind": "adjustment-factors", "path": "valuation/factors.csv", "source": "DEMO" },
               { "kind": "provinces", "path": "../escape.csv", "source": "DEMO" },
               { "kind": "wizardry", "path": "w.csv", "source": "DEMO" },
               { "kind": "lookup", "lookup": "zones", "path": "missing.csv", "source": "DEMO" }
@@ -128,7 +128,7 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
             ["barangays.csv"] = "psgc_code,municipality_psgc,name,index_number\n9700100201,9700100002,DEMO B,001\n9700100202,9700100002,DEMO C,0001\n",
             ["classes.csv"] = "code,name,sort_order\nDEMO-X,DEMO X,first\nDEMO-Y,,1\nDEMO-Z,DEMO Z,2\nDEMO-Z,DEMO Z twice,3\n",
             ["materials.csv"] = "code,name,part_code\nDEMO-M1,DEMO M1,DEMO-NO-PART\n",
-            ["valuation/smv.json"] = "{}",
+            ["valuation/factors.csv"] = "code\n",
         });
         var (service, _, scope) = await BeginAsync(root);
         await using var _ = scope;
@@ -149,9 +149,9 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
         codes.ShouldContain("PIN_INDEX_DUPLICATE");  // two municipalities numbered 05
         codes.ShouldContain("NUMBER_INVALID");       // sort_order "first"
         codes.ShouldContain("REQUIRED");             // DEMO-Y has no name
-        codes.ShouldContain("NOT_YET_SUPPORTED");    // SMV files (L1-3)
+        codes.ShouldContain("NOT_YET_SUPPORTED");    // adjustment factors (L1-4)
         codes.ShouldContain("FILE_UNREADABLE");      // missing.csv
-        preview.Files.Single(f => f.Kind == "smv").Supported.ShouldBeFalse();
+        preview.Files.Single(f => f.Kind == "adjustment-factors").Supported.ShouldBeFalse();
         preview.Issues.ShouldContain(i => i.Code == "MANIFEST_PATH" && i.Field == "files[7]");
 
         (await service.PreviewAsync("../broken")).Code.ShouldBe("VALIDATION_FAILED");
@@ -217,6 +217,49 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
         preview.CanImport.ShouldBeFalse();
 
         (await db.Provinces.AsNoTracking().SingleAsync(x => x.Id == province.Id)).Name.ShouldBe("DEMO Province");
+        Directory.Delete(root, recursive: true);
+    }
+
+    /// <summary>Step L1-3: SMV, unit-value and level files are checked before anything is imported (DEMO content).</summary>
+    [Fact]
+    public async Task SmvFiles_ReportEditedSmvs_UnknownReferences_AndBadRows()
+    {
+        var tag = Guid.NewGuid().ToString("N")[..8];
+        var manifest = """
+            { "schemaVersion": 1, "pack": "smv-bad", "version": "T1", "files": [
+              { "kind": "smv", "path": "smv.json", "source": "DEMO" },
+              { "kind": "smv-schedules", "path": "rates.csv", "source": "DEMO" },
+              { "kind": "assessment-levels", "path": "levels.csv", "source": "DEMO" }
+            ] }
+            """;
+        var root = TempPack("smv-bad", new Dictionary<string, string>
+        {
+            ["manifest.json"] = manifest,
+            ["smv.json"] = $$"""
+                [
+                  { "basis": "Ordinance", "ordinanceNumber": "DEMO-ORD-{{tag}}", "ordinanceDate": "2025-01-01", "effectivityDate": "2026-01-01", "revisionYear": 2030 },
+                  { "basis": "Certified", "effectivityDate": "2027-01-01", "revisionYear": 2027 },
+                  { "basis": "Certified", "certificationReference": "DEMO-NEW-{{tag}}", "effectivityDate": "2027-01-01", "revisionYear": 2027, "municipalities": ["0000000000"] }
+                ]
+                """,
+            ["rates.csv"] = $"smv,classification,property-type,market-value,effective-date\nDEMO-NONE-{tag},X,LAND,1,2027-01-01\nDEMO-ORD-{tag},DEMO-NO-CLASS,LAND,1,2027-01-01\nDEMO-ORD-{tag},DEMO-NO-CLASS,LAND,many,2027-01-01\n",
+            ["levels.csv"] = "classification,colour\nX,blue\n",
+        });
+        var (service, db, scope) = await BeginAsync(root);
+        await using var _ = scope;
+        db.Smvs.Add(new Smv { OrdinanceNumber = $"DEMO-ORD-{tag}", OrdinanceDate = new DateOnly(2025, 1, 1), EffectivityDate = new DateOnly(2026, 1, 1), RevisionYear = 2026 });
+        await db.SaveChangesAsync();
+
+        var preview = (await service.PreviewAsync("smv-bad")).Value;
+        var codes = Codes(preview).ToList();
+        preview.CanImport.ShouldBeFalse();
+        codes.ShouldContain("SMV_EXISTS");            // same ordinance number, another revision year: an SMV is never edited
+        codes.ShouldContain("VALIDATION_FAILED");     // a certified SMV without its certification
+        codes.ShouldContain("MUNICIPALITY_UNKNOWN");  // coverage names a town not in PRIME
+        codes.ShouldContain("SMV_UNKNOWN");           // a rate of an SMV neither in PRIME nor in the pack
+        codes.ShouldContain("CODE_UNKNOWN");          // classification DEMO-NO-CLASS
+        codes.ShouldContain("CSV_COLUMNS");           // levels.csv: unknown and missing columns
+        preview.Files.Single(f => f.Kind == "smv-schedules").Issues.ShouldContain(i => i.Code == "SMV_UNKNOWN" && i.Line == 2);
         Directory.Delete(root, recursive: true);
     }
 }

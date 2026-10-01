@@ -121,6 +121,7 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
             Sequence = land.Strips.Max(x => x.Sequence) + 1,
             ClassificationId = request.ClassificationId, SubClassificationId = request.SubClassificationId,
             ActualUseId = request.ActualUseId, ZoneId = request.ZoneId, Area = request.Area,
+            ValuationClassificationId = request.ValuationClassificationId, ValuationSubClassificationId = request.ValuationSubClassificationId,
         });
         LandParts.MirrorPrincipal(land);
         await db.SaveChangesAsync(cancellationToken);
@@ -223,6 +224,8 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
         .Include(x => x.Strips).ThenInclude(s => s.SubClassification)
         .Include(x => x.Strips).ThenInclude(s => s.ActualUse)
         .Include(x => x.Strips).ThenInclude(s => s.Zone)
+        .Include(x => x.Strips).ThenInclude(s => s.ValuationClassification)
+        .Include(x => x.Strips).ThenInclude(s => s.ValuationSubClassification)
         .Include(x => x.Improvements).ThenInclude(i => i.ImprovementKind)
         .Include(x => x.Improvements).ThenInclude(i => i.Classification)
         .Include(x => x.Improvements).ThenInclude(i => i.ActualUse)

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Button, Descriptions, Drawer, Empty, Input, Modal, Popconfirm, Space, Spin, Table, Tag, Typography, message } from 'antd';
+import { Alert, Button, Descriptions, Drawer, Empty, Input, Modal, Popconfirm, Space, Spin, Table, Tag, Tooltip, Typography, message } from 'antd';
 import { useAppraisalRecord, useRpuAssessments } from '../../../api/assessments';
 import { useAssessmentAction, type AssessmentAction } from '../../../api/valuation';
 import { useTaxDeclarationsByRpu } from '../../../api/taxDeclarations';
@@ -36,7 +36,18 @@ export function AssessmentsForRpu({ rpuId }: { rpuId: string }) {
         columns={[
           { title: 'FAAS No.', dataIndex: 'faasNumber', render: (v: string | null) => v ?? '—' },
           { title: 'Year', dataIndex: 'assessmentYear' },
-          { title: 'Effective', dataIndex: 'effectiveDate' },
+          {
+            // The effectivity, its quarter, the transaction it was made under and when it was made (L1-2).
+            title: 'Effective', render: (_, a) => (
+              <Space size={4} wrap>
+                <span>{a.effectiveDate} (Q{a.effectivityQuarter})</span>
+                {a.transactionCode && <Tag>{a.transactionCode}</Tag>}
+                {a.effectivityOverrideReason && <Tooltip title={a.effectivityOverrideReason}><Tag color="purple">overridden</Tag></Tooltip>}
+                {a.causeWindowExceeded && <Tooltip title={`Cause on ${a.causeDate}`}><Tag color="orange">late reassessment</Tag></Tooltip>}
+              </Space>
+            ),
+          },
+          { title: 'Made', dataIndex: 'madeOn', render: (v: string | null) => v ?? '—' },
           { title: 'Market value', dataIndex: 'marketValue', align: 'right', render: formatMoney },
           {
             title: 'Level', dataIndex: 'assessmentPercentage', align: 'right',

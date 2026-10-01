@@ -66,6 +66,17 @@ public sealed class LandStrip : AuditableEntity
     public Zone? Zone { get; set; }
     /// <summary>In the land's area unit.</summary>
     public decimal Area { get; set; }
+
+    /// <summary>
+    /// The class and sub-class that <b>price</b> the strip, when they differ from the ones
+    /// that assess it (above) — e.g. agricultural land in a predominantly commercial area
+    /// priced at the commercial unit value but assessed at the agricultural level (LAM Bk III
+    /// p.62; docs/analysis/valuation-foundation.md §4.3). Null: the strip's own.
+    /// </summary>
+    public Guid? ValuationClassificationId { get; set; }
+    public Classification? ValuationClassification { get; set; }
+    public Guid? ValuationSubClassificationId { get; set; }
+    public SubClassification? ValuationSubClassification { get; set; }
 }
 
 /// <summary>

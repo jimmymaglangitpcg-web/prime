@@ -53,6 +53,8 @@ public sealed class LandStripConfiguration : IEntityTypeConfiguration<LandStrip>
         builder.HasOne(x => x.SubClassification).WithMany().HasForeignKey(x => x.SubClassificationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ActualUse).WithMany().HasForeignKey(x => x.ActualUseId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Zone).WithMany().HasForeignKey(x => x.ZoneId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ValuationClassification).WithMany().HasForeignKey(x => x.ValuationClassificationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ValuationSubClassification).WithMany().HasForeignKey(x => x.ValuationSubClassificationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => new { x.LandId, x.Sequence }).IsUnique();
     }
 }

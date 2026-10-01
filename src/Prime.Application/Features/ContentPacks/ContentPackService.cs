@@ -218,12 +218,20 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         CheckRequiredPropertyTypes(files, await db.PropertyTypes.AsNoTracking().Select(x => x.Code).ToListAsync(cancellationToken));
         var newMunicipalities = files.Where(f => f.Entry.Kind == ContentFileKinds.Municipalities)
             .SelectMany(f => f.Plan.Where(p => p.IsNew).Select(p => p.Key)).ToHashSet(StringComparer.Ordinal);
-        // In manifest (= import) order: an approval chain may name an office an earlier offices file adds.
+        // In manifest (= import) order: an approval chain may name an office an earlier offices file adds,
+        // and unit values an SMV an earlier smv file adds (step L1-3).
         var newOffices = new HashSet<string>(StringComparer.Ordinal);
+        var newSmvs = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new PackPending(
+            files.Where(f => f.Entry.Kind == ContentFileKinds.Barangays).SelectMany(f => f.Plan.Where(p => p.IsNew).Select(p => p.Key)).ToHashSet(StringComparer.Ordinal),
+            files.Where(f => f.Entry.Kind == ContentFileKinds.Lookup && f.Entry.Lookup is not null).GroupBy(f => f.Entry.Lookup!)
+                .ToDictionary(g => g.Key, g => (IReadOnlySet<string>)g.SelectMany(f => f.Plan.Where(p => p.IsNew).Select(p => p.Key)).ToHashSet(StringComparer.Ordinal)),
+            newSmvs);
         foreach (var work in files.Where(f => f.Bytes is not null))
         {
-            await PreviewVersionedAsync(pack, work, newMunicipalities, newOffices, cancellationToken);
+            await PreviewVersionedAsync(pack, work, newMunicipalities, newOffices, pending, cancellationToken);
             newOffices.UnionWith(work.Versions.Select(v => v.Request).OfType<Prime.Application.Features.Offices.CreateOfficeRequest>().Select(r => r.Code));
+            newSmvs.UnionWith(work.Versions.Where(v => v.Request is PackSmv).Select(v => v.Key));
         }
         // Map layers last: they may refer to barangays, zones and road types the pack adds.
         foreach (var work in files.Where(f => f.Geo is not null))
@@ -660,10 +668,10 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
     /// (<see cref="ContentPackVersionedContent"/>).
     /// </summary>
     private async Task PreviewVersionedAsync(string pack, FileWork work, IReadOnlySet<string> newMunicipalities, IReadOnlySet<string> newOffices,
-        CancellationToken ct)
+        PackPending pending, CancellationToken ct)
     {
         var r = await versioned.PreviewAsync(work.Entry.Kind, work.Entry.Path, work.Bytes!, work.Entry.Source, p => source.ReadAsync(pack, p, ct), ct,
-            newMunicipalities, newOffices);
+            newMunicipalities, newOffices, pending);
         work.Issues.AddRange(r.Issues);
         work.Versions.AddRange(r.Versions);
         work.Referenced.AddRange(r.Referenced);

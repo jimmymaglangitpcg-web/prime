@@ -69,7 +69,7 @@ public class ValueAndAssessTests(WebApplicationFactory<Program> factory) : IClas
     {
         await c.Db.Lands.Where(x => x.RpuId == c.Seed.RpuId).ExecuteUpdateAsync(x => x.SetProperty(l => l.Area, area));
         c.Db.ChangeTracker.Clear(); // ExecuteUpdate bypasses tracked entities
-        var valuation = (await c.Valuations.ComputeForRpuAsync(c.Seed.RpuId)).Value;
+        var valuation = (await c.Valuations.ComputeForRpuAsync(c.Seed.RpuId, asOf: new DateOnly(2027, 1, 1))).Value;
         var preview = await c.Assessments.PreviewAsync(Request(valuation.Id));
         preview.IsSuccess.ShouldBeTrue(preview.IsSuccess ? null : preview.Message);
         return preview.Value.Lines.Single().AssessmentPercentage;
@@ -81,7 +81,7 @@ public class ValueAndAssessTests(WebApplicationFactory<Program> factory) : IClas
         var (c, tx) = await BeginAsync();
         await using var _ = tx;
 
-        var valuation = await c.Valuations.ComputeForRpuAsync(c.Seed.RpuId);
+        var valuation = await c.Valuations.ComputeForRpuAsync(c.Seed.RpuId, asOf: new DateOnly(2027, 1, 1));
 
         valuation.IsSuccess.ShouldBeTrue(valuation.IsSuccess ? null : valuation.Message);
         valuation.Value.ComputedMarketValue.ShouldBe(500_000m);
@@ -99,7 +99,7 @@ public class ValueAndAssessTests(WebApplicationFactory<Program> factory) : IClas
     {
         var (c, tx) = await BeginAsync();
         await using var _ = tx;
-        var valuation = (await c.Valuations.ComputeForRpuAsync(c.Seed.RpuId)).Value;
+        var valuation = (await c.Valuations.ComputeForRpuAsync(c.Seed.RpuId, asOf: new DateOnly(2027, 1, 1))).Value;
         var before = await c.Db.Assessments.CountAsync(x => x.RpuId == c.Seed.RpuId);
 
         var preview = await c.Assessments.PreviewAsync(Request(valuation.Id, c.Seed.AssessmentId));
@@ -122,7 +122,7 @@ public class ValueAndAssessTests(WebApplicationFactory<Program> factory) : IClas
     {
         var (c, tx) = await BeginAsync();
         await using var _ = tx;
-        var valuation = (await c.Valuations.ComputeForRpuAsync(c.Seed.RpuId)).Value;
+        var valuation = (await c.Valuations.ComputeForRpuAsync(c.Seed.RpuId, asOf: new DateOnly(2027, 1, 1))).Value;
         var draft = (await c.Assessments.CreateAsync(Request(valuation.Id, c.Seed.AssessmentId))).Value;
         await c.Assessments.SubmitForReviewAsync(draft.Id);
         (await c.Assessments.ApproveAsync(draft.Id)).IsSuccess.ShouldBeTrue();
@@ -141,7 +141,7 @@ public class ValueAndAssessTests(WebApplicationFactory<Program> factory) : IClas
     {
         var (c, tx) = await BeginAsync();
         await using var _ = tx;
-        var valuation = (await c.Valuations.ComputeForRpuAsync(c.Seed.RpuId)).Value;
+        var valuation = (await c.Valuations.ComputeForRpuAsync(c.Seed.RpuId, asOf: new DateOnly(2027, 1, 1))).Value;
         var draft = (await c.Assessments.CreateAsync(Request(valuation.Id))).Value;
         var other = await BillingFlowTests.SeedPostedAssessmentAsync(c.Services, c.Db, new DateOnly(2026, 1, 1));
 

@@ -1,0 +1,13 @@
+[
+  {
+    "basis": "Certified",
+    "certificationReference": "DEMO-CP-CERT-2099",
+    "certifiedOn": "2098-11-02",
+    "publishedOn": "2098-11-20",
+    "publicationReference": "DEMO gazette, not a real publication",
+    "effectivityDate": "2099-01-01",
+    "revisionYear": 2099,
+    "description": "DEMO SMV for DEMO Town A; invented unit values, not a certified SMV.",
+    "municipalities": ["9900100000"]
+  }
+]

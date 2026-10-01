@@ -16,6 +16,13 @@ namespace Prime.Domain.Entities;
 public sealed class GeneralRevisionJob : AuditableEntity
 {
     public int RevisionYear { get; set; }
+
+    /// <summary>
+    /// The revision's effectivity: every RPU is valued and assessed as of this date, under the
+    /// SMV in force then (docs/analysis/valuation-foundation.md §4.1). Null on jobs run before L1-1,
+    /// which valued as of their run date.
+    /// </summary>
+    public DateOnly? EffectiveDate { get; set; }
     public JobExecutionStatus Status { get; set; } = JobExecutionStatus.Queued;
 
     public int TotalCount { get; set; }

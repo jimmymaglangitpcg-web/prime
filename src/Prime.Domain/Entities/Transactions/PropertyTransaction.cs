@@ -20,6 +20,20 @@ public sealed class TransactionType : EffectiveDatedConfiguration
     public int? Rank { get; set; }
     public string? Description { get; set; }
     public List<TransactionTypeRequirement> Requirements { get; set; } = [];
+
+    /// <summary>
+    /// How an assessment of this kind finds its effectivity date
+    /// (docs/analysis/valuation-foundation.md §4.2). Null: the date is entered.
+    /// </summary>
+    public EffectivityRule? EffectivityRule { get; set; }
+    /// <summary>The law or issuance the rule follows (e.g. LGC §221). Required with a rule.</summary>
+    public string? EffectivityLegalBasis { get; set; }
+    /// <summary>
+    /// <see cref="Enums.EffectivityRule.NextQuarter"/> only: the number of days after
+    /// the cause within which the reassessment is to be made (LAM Bk III p.85: 90).
+    /// A later one is flagged, not refused.
+    /// </summary>
+    public int? CauseWindowDays { get; set; }
 }
 
 /// <summary>One prerequisite of a transaction type, e.g. proof of transfer-tax payment (LGC §135(b)).</summary>

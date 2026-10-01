@@ -16,6 +16,8 @@ public sealed class TransactionTypeConfiguration : IEntityTypeConfiguration<Tran
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Kind).HasConversion<string>().HasMaxLength(40);
         builder.Property(x => x.Description).HasMaxLength(1000);
+        builder.Property(x => x.EffectivityRule).HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.EffectivityLegalBasis).HasMaxLength(500);
         builder.HasMany(x => x.Requirements).WithOne().HasForeignKey(x => x.TransactionTypeId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => x.Code).IsUnique().HasFilter(ConfigurationMapping.OpenApprovedFilter).HasDatabaseName("UX_TransactionTypes_OpenApproved");
     }

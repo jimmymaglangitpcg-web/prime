@@ -140,6 +140,15 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<int>("AssessmentYear")
                         .HasColumnType("integer");
 
+                    b.Property<DateOnly?>("CauseDate")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("CauseWindowDays")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("CauseWindowExceeded")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -149,9 +158,30 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly>("EffectiveDate")
                         .HasColumnType("date");
 
+                    b.Property<string>("EffectivityOverrideReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("EffectivityQuarter")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("integer")
+                        .HasComputedColumnSql("(EXTRACT(QUARTER FROM \"EffectiveDate\"))::integer", true);
+
+                    b.Property<string>("EffectivityRule")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("EffectivityYear")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("integer")
+                        .HasComputedColumnSql("(EXTRACT(YEAR FROM \"EffectiveDate\"))::integer", true);
+
                     b.Property<string>("FaasNumber")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<DateOnly?>("MadeOn")
+                        .HasColumnType("date");
 
                     b.Property<decimal>("MarketValue")
                         .HasPrecision(18, 2)
@@ -184,6 +214,13 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<string>("TransactionCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("TransactionTypeId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -207,6 +244,8 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("PropertyId");
 
                     b.HasIndex("RevisionReference");
+
+                    b.HasIndex("TransactionTypeId");
 
                     b.HasIndex("ValuationId");
 
@@ -2332,8 +2371,8 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Key")
                         .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<int>("Line")
                         .HasColumnType("integer");
@@ -2745,6 +2784,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("EffectiveDate")
+                        .HasColumnType("date");
 
                     b.Property<int>("FailedCount")
                         .HasColumnType("integer");
@@ -3461,6 +3503,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ValuationClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ValuationSubClassificationId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ZoneId")
                         .HasColumnType("uuid");
 
@@ -3471,6 +3519,10 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("ClassificationId");
 
                     b.HasIndex("SubClassificationId");
+
+                    b.HasIndex("ValuationClassificationId");
+
+                    b.HasIndex("ValuationSubClassificationId");
 
                     b.HasIndex("ZoneId");
 
@@ -6017,6 +6069,21 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ApprovedBy")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("CertificationReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateOnly?>("CertifiedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("ConsultationsHeldOn")
+                        .HasColumnType("date");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -6030,13 +6097,25 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly>("EffectivityDate")
                         .HasColumnType("date");
 
-                    b.Property<DateOnly>("OrdinanceDate")
+                    b.Property<DateOnly?>("OrdinanceDate")
                         .HasColumnType("date");
 
                     b.Property<string>("OrdinanceNumber")
-                        .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<DateOnly?>("ProposedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("PublicationReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly?>("PublishedForCommentOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("PublishedOn")
+                        .HasColumnType("date");
 
                     b.Property<int>("RevisionYear")
                         .HasColumnType("integer");
@@ -6046,6 +6125,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<DateOnly?>("SubmittedToBlgfOn")
+                        .HasColumnType("date");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -6054,12 +6136,42 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CertificationReference")
+                        .IsUnique();
+
                     b.HasIndex("EffectivityDate");
 
                     b.HasIndex("OrdinanceNumber")
                         .IsUnique();
 
-                    b.ToTable("Smvs");
+                    b.ToTable("Smvs", t =>
+                        {
+                            t.HasCheckConstraint("CK_Smvs_CertifiedBasis", "\"Basis\" <> 'Certified' OR \"CertificationReference\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_Smvs_OrdinanceBasis", "\"Basis\" <> 'Ordinance' OR (\"OrdinanceNumber\" IS NOT NULL AND \"OrdinanceDate\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvCoverage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MunicipalityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SmvId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MunicipalityId");
+
+                    b.HasIndex("SmvId", "MunicipalityId")
+                        .IsUnique();
+
+                    b.ToTable("SmvCoverages", (string)null);
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.SmvSchedule", b =>
@@ -6068,13 +6180,16 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("ActualUseId")
+                    b.Property<Guid?>("ActualUseId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset?>("ApprovedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BarangayId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("ClassificationId")
@@ -6118,6 +6233,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<Guid?>("SubClassificationId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Unit")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -6136,11 +6254,15 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ActualUseId");
 
+                    b.HasIndex("BarangayId");
+
                     b.HasIndex("ImprovementKindId");
 
                     b.HasIndex("PropertyTypeId");
 
                     b.HasIndex("SmvId");
+
+                    b.HasIndex("SubClassificationId");
 
                     b.HasIndex("ZoneId");
 
@@ -7018,6 +7140,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ApprovedBy")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("CauseWindowDays")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -7035,6 +7160,14 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<DateOnly>("EffectiveDate")
                         .HasColumnType("date");
+
+                    b.Property<string>("EffectivityLegalBasis")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("EffectivityRule")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<DateOnly?>("EndDate")
                         .HasColumnType("date");
@@ -7310,6 +7443,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<Guid?>("PricedClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PricedSubClassificationId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal?>("Quantity")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)");
@@ -7347,6 +7486,10 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("ActualUseId");
 
                     b.HasIndex("ClassificationId");
+
+                    b.HasIndex("PricedClassificationId");
+
+                    b.HasIndex("PricedSubClassificationId");
 
                     b.HasIndex("SmvScheduleId");
 
@@ -7609,6 +7752,11 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasForeignKey("RpuId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Transactions.TransactionType", null)
+                        .WithMany()
+                        .HasForeignKey("TransactionTypeId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Prime.Domain.Entities.Valuation", "Valuation")
                         .WithMany()
@@ -8413,6 +8561,16 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SubClassificationId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Prime.Domain.Entities.Reference.Classification", "ValuationClassification")
+                        .WithMany()
+                        .HasForeignKey("ValuationClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Reference.SubClassification", "ValuationSubClassification")
+                        .WithMany()
+                        .HasForeignKey("ValuationSubClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Prime.Domain.Entities.Reference.Zone", "Zone")
                         .WithMany()
                         .HasForeignKey("ZoneId")
@@ -8423,6 +8581,10 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Classification");
 
                     b.Navigation("SubClassification");
+
+                    b.Navigation("ValuationClassification");
+
+                    b.Navigation("ValuationSubClassification");
 
                     b.Navigation("Zone");
                 });
@@ -8941,13 +9103,34 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Taxpayer");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.SmvCoverage", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.Municipality", "Municipality")
+                        .WithMany()
+                        .HasForeignKey("MunicipalityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Smv", null)
+                        .WithMany("Coverage")
+                        .HasForeignKey("SmvId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Municipality");
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.SmvSchedule", b =>
                 {
                     b.HasOne("Prime.Domain.Entities.Reference.ActualUse", "ActualUse")
                         .WithMany()
                         .HasForeignKey("ActualUseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Barangay", "Barangay")
+                        .WithMany()
+                        .HasForeignKey("BarangayId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Prime.Domain.Entities.Reference.Classification", "Classification")
                         .WithMany()
@@ -8972,12 +9155,19 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Prime.Domain.Entities.Reference.SubClassification", "SubClassification")
+                        .WithMany()
+                        .HasForeignKey("SubClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Prime.Domain.Entities.Reference.Zone", "Zone")
                         .WithMany()
                         .HasForeignKey("ZoneId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("ActualUse");
+
+                    b.Navigation("Barangay");
 
                     b.Navigation("Classification");
 
@@ -8986,6 +9176,8 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("PropertyType");
 
                     b.Navigation("Smv");
+
+                    b.Navigation("SubClassification");
 
                     b.Navigation("Zone");
                 });
@@ -9322,6 +9514,16 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ClassificationId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Prime.Domain.Entities.Reference.Classification", "PricedClassification")
+                        .WithMany()
+                        .HasForeignKey("PricedClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Reference.SubClassification", "PricedSubClassification")
+                        .WithMany()
+                        .HasForeignKey("PricedSubClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Prime.Domain.Entities.SmvSchedule", "SmvSchedule")
                         .WithMany()
                         .HasForeignKey("SmvScheduleId")
@@ -9341,6 +9543,10 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("ActualUse");
 
                     b.Navigation("Classification");
+
+                    b.Navigation("PricedClassification");
+
+                    b.Navigation("PricedSubClassification");
 
                     b.Navigation("SmvSchedule");
 
@@ -9475,6 +9681,11 @@ namespace Prime.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Prime.Domain.Entities.Registers.AssessmentRollSubmission", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Smv", b =>
+                {
+                    b.Navigation("Coverage");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.SwornStatements.SwornStatement", b =>

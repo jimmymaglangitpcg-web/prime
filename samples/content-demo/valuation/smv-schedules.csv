@@ -1,0 +1,3 @@
+smv,classification,sub-classification,actual-use,property-type,zone,barangay,improvement-kind,unit,market-value,minimum-value,maximum-value,effective-date,source
+DEMO-CP-CERT-2099,DEMO-CP-R,,,LAND,,,,per sqm,1000.00,,,2099-01-01,
+DEMO-CP-CERT-2099,DEMO-CP-R,DEMO-CP-R1,,LAND,,9900100001,,per sqm,1200.00,,,2099-01-01,DEMO data (row-level source)

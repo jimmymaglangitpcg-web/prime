@@ -59,10 +59,17 @@ public static class TransactionCodes
     public static async Task<int?> RankAsync(IApplicationDbContext db, string code, DateOnly asOf, CancellationToken ct) =>
         await db.TransactionTypes.InForce(asOf).Where(x => x.Code == code).Select(x => x.Rank).FirstOrDefaultAsync(ct);
 
-    /// <summary>The general revision code and rank for an assessment made by a general revision, else none.</summary>
-    public static async Task<(string? Code, int? Rank)> FromRevisionAsync(IApplicationDbContext db, FaasOptions options, Assessment? assessment,
+    /// <summary>
+    /// The code and rank of the transaction an assessment was made under (step L1-2); for an older
+    /// assessment made by a general revision, the general revision code; else none.
+    /// </summary>
+    public static async Task<(string? Code, int? Rank)> FromAssessmentAsync(IApplicationDbContext db, FaasOptions options, Assessment? assessment,
         DateOnly asOf, CancellationToken ct)
     {
+        if (assessment?.TransactionCode is { Length: > 0 } own)
+        {
+            return (own, await RankAsync(db, own, asOf, ct));
+        }
         var code = options.GeneralRevisionTransactionCode?.Trim();
         if (assessment?.RevisionReference is null || string.IsNullOrEmpty(code))
         {
@@ -137,7 +144,7 @@ internal static class FaasTaxDeclarations
         {
             return "No Tax Declaration numbering scheme is in force.";
         }
-        var (code, rank) = await TransactionCodes.FromRevisionAsync(db, options, assessment, today, ct);
+        var (code, rank) = await TransactionCodes.FromAssessmentAsync(db, options, assessment, today, ct);
         db.TaxDeclarations.Add(new TaxDeclaration
         {
             TransactionCode = code,

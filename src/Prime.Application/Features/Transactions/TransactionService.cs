@@ -35,6 +35,17 @@ public sealed class CreateTransactionTypeRequestValidator : AbstractValidator<Cr
             .Must(list => list.Select(s => s.Sequence).OrderBy(s => s).SequenceEqual(Enumerable.Range(1, list.Count)))
             .When(x => x.Requirements is { Count: > 0 })
             .WithMessage("Requirement sequences must be 1..n with no gaps or duplicates.");
+        // An effectivity rule names its legal basis; the reassessment window belongs to NextQuarter only
+        // (docs/analysis/valuation-foundation.md §4.2).
+        RuleFor(x => x.EffectivityRule).IsInEnum();
+        RuleFor(x => x.EffectivityLegalBasis).NotEmpty().When(x => x.EffectivityRule is not null)
+            .WithMessage("effectivityLegalBasis is required with an effectivity rule.");
+        RuleFor(x => x.EffectivityLegalBasis).Empty().When(x => x.EffectivityRule is null)
+            .WithMessage("effectivityLegalBasis is given only with an effectivity rule.");
+        RuleFor(x => x.EffectivityLegalBasis).MaximumLength(500);
+        RuleFor(x => x.CauseWindowDays).Null().When(x => x.EffectivityRule != EffectivityRule.NextQuarter)
+            .WithMessage("causeWindowDays applies to the NextQuarter rule only.");
+        RuleFor(x => x.CauseWindowDays).InclusiveBetween(1, 3660);
     }
 }
 
@@ -111,6 +122,7 @@ public sealed class TransactionService(
         {
             LegalBasis = request.LegalBasis, EffectiveDate = request.EffectiveDate, Remarks = request.Remarks,
             Code = request.Code.Trim(), Name = request.Name, Kind = request.Kind, Rank = request.Rank, Description = request.Description,
+            EffectivityRule = request.EffectivityRule, EffectivityLegalBasis = request.EffectivityLegalBasis, CauseWindowDays = request.CauseWindowDays,
             Requirements = request.Requirements.OrderBy(r => r.Sequence).Select(r => new TransactionTypeRequirement
             {
                 Sequence = r.Sequence, Code = r.Code, Label = r.Label, IsMandatory = r.IsMandatory, LegalBasis = r.LegalBasis,
@@ -710,5 +722,6 @@ public sealed class TransactionService(
     private static TransactionTypeDto ToDto(TransactionType x) => new(
         x.Id, x.Code, x.Name, x.Kind, x.Rank, x.Description,
         x.Requirements.OrderBy(r => r.Sequence).Select(r => new TransactionRequirementDto(r.Sequence, r.Code, r.Label, r.IsMandatory, r.LegalBasis)).ToList(),
-        x.LegalBasis, x.EffectiveDate, x.EndDate, x.Status, x.CreatedBy, x.CreatedAt, x.ApprovedBy, x.ApprovedAt, x.Remarks);
+        x.LegalBasis, x.EffectiveDate, x.EndDate, x.Status, x.CreatedBy, x.CreatedAt, x.ApprovedBy, x.ApprovedAt, x.Remarks,
+        x.EffectivityRule, x.EffectivityLegalBasis, x.CauseWindowDays);
 }

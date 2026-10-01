@@ -48,7 +48,7 @@ public sealed record VersionedPreview(List<ContentIssueDto> Issues, List<Planned
 /// second user approves it (CLAUDE.md §46) and it takes effect only then.
 /// Treasury kinds are refused (CLAUDE.md §0: frozen).
 /// </summary>
-public sealed class ContentPackVersionedContent(
+public sealed partial class ContentPackVersionedContent(
     IApplicationDbContext db,
     IValidator<CreateTransactionTypeRequest> typeValidator,
     IValidator<CreateNumberingSchemeRequest> schemeValidator,
@@ -59,7 +59,12 @@ public sealed class ContentPackVersionedContent(
     INumberingService numbering,
     IApprovalChainService chains,
     IFormService forms,
-    IOfficeService offices)
+    IOfficeService offices,
+    IValidator<Smv.CreateSmvRequest> smvValidator,
+    IValidator<Smv.CreateSmvScheduleRequest> scheduleValidator,
+    IValidator<AssessmentLevels.CreateAssessmentLevelRequest> levelValidator,
+    Smv.ISmvService smvs,
+    AssessmentLevels.IAssessmentLevelService levels)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
 
@@ -74,7 +79,8 @@ public sealed class ContentPackVersionedContent(
     // --- Catalogue item shapes (camelCase JSON; unknown members are errors) ---
 
     private sealed record TypeItem(string? Code, string? Name, string? Kind, int? Rank, string? Description, string? LegalBasis, string? EffectiveDate,
-        string? Remarks, List<RequirementItem>? Requirements, string? Source);
+        string? Remarks, List<RequirementItem>? Requirements, string? Source, string? EffectivityRule = null, string? EffectivityLegalBasis = null,
+        int? CauseWindowDays = null);
 
     private sealed record RequirementItem(string? Code, string? Label, bool? Mandatory, string? LegalBasis);
 
@@ -97,7 +103,7 @@ public sealed class ContentPackVersionedContent(
     /// <param name="pendingOffices">Codes of offices an earlier file of the same pack adds; approval chains may name them.</param>
     public async Task<VersionedPreview> PreviewAsync(string kind, string path, byte[] bytes, string? fileSource,
         Func<string, Task<Result<ContentFileRead>>> readFile, CancellationToken ct, IReadOnlySet<string>? pendingMunicipalities = null,
-        IReadOnlySet<string>? pendingOffices = null)
+        IReadOnlySet<string>? pendingOffices = null, PackPending? pending = null)
     {
         var result = new VersionedPreview([], [], [], 0, 0);
         try
@@ -109,6 +115,9 @@ public sealed class ContentPackVersionedContent(
                 ContentFileKinds.ApprovalChains => await ChainsAsync(Parse<ChainItem>(bytes), fileSource, pendingOffices ?? new HashSet<string>(), result, ct),
                 ContentFileKinds.Forms => await FormsAsync(Parse<FormItem>(bytes), fileSource, readFile, result, ct),
                 ContentFileKinds.Offices => await OfficesAsync(Parse<OfficeItem>(bytes), fileSource, pendingMunicipalities ?? new HashSet<string>(), result, ct),
+                ContentFileKinds.Smv => await SmvsAsync(Parse<SmvItem>(bytes), fileSource, pendingMunicipalities ?? new HashSet<string>(), result, ct),
+                ContentFileKinds.SmvSchedules => await SchedulesAsync(bytes, fileSource, pending ?? PackPending.None, result, ct),
+                ContentFileKinds.AssessmentLevels => await LevelsAsync(bytes, fileSource, pending ?? PackPending.None, result, ct),
                 _ => throw new InvalidOperationException($"Not a versioned kind: {kind}"),
             };
         }
@@ -130,6 +139,9 @@ public sealed class ContentPackVersionedContent(
         CreateOfficeRequest r => Map("Office", await offices.CreateAsync(r, ct), x => x.Id),
         PackOfficeUpdate r => Map("Office", await offices.UpdateAsync(r.OfficeId, r.Request, ct), x => x.Id),
         PackOfficeJurisdiction r => await CreateJurisdictionAsync(r, ct),
+        PackSmv r => await CreateSmvAsync(r, ct),
+        PackSmvSchedule r => await CreateScheduleAsync(r, ct),
+        PackAssessmentLevel r => await CreateLevelAsync(r, ct),
         _ => throw new InvalidOperationException("Unknown planned version."),
     };
 
@@ -174,10 +186,19 @@ public sealed class ContentPackVersionedContent(
             {
                 continue;
             }
+            EffectivityRule? rule = null;
+            if (!string.IsNullOrWhiteSpace(x.EffectivityRule))
+            {
+                if (!TryEnum<EffectivityRule>(result, n, "effectivityRule", x.EffectivityRule, out var ruleValue))
+                {
+                    continue;
+                }
+                rule = ruleValue;
+            }
             var requirements = (x.Requirements ?? []).Select((r, j) => new TransactionRequirementRequest(j + 1, Trim(r.Code) ?? "", Trim(r.Label) ?? "",
                 r.Mandatory ?? true, Trim(r.LegalBasis))).ToList();
             var request = new CreateTransactionTypeRequest(Trim(x.LegalBasis) ?? "", effective, Trim(x.Remarks), Trim(x.Code) ?? "", Trim(x.Name) ?? "",
-                kindValue, x.Rank, Trim(x.Description), requirements);
+                kindValue, x.Rank, Trim(x.Description), requirements, rule, Trim(x.EffectivityLegalBasis), x.CauseWindowDays);
             if (!await ValidAsync(typeValidator, request, result, n, ct) || !Unique(result, seen, request.Code, n, "code"))
             {
                 continue;
@@ -190,10 +211,15 @@ public sealed class ContentPackVersionedContent(
             Diff(changes, "rank", current?.Rank?.ToString(CultureInfo.InvariantCulture), request.Rank?.ToString(CultureInfo.InvariantCulture));
             Diff(changes, "description", current?.Description, request.Description);
             Diff(changes, "legalBasis", current?.LegalBasis, request.LegalBasis);
+            Diff(changes, "effectivityRule", current?.EffectivityRule?.ToString(), request.EffectivityRule?.ToString());
+            Diff(changes, "effectivityLegalBasis", current?.EffectivityLegalBasis, request.EffectivityLegalBasis);
+            Diff(changes, "causeWindowDays", current?.CauseWindowDays?.ToString(CultureInfo.InvariantCulture), request.CauseWindowDays?.ToString(CultureInfo.InvariantCulture));
             Diff(changes, "requirements", current is null ? null : Requirements(current.Requirements.OrderBy(r => r.Sequence)
                 .Select(r => (r.Code, r.Label, r.IsMandatory, r.LegalBasis))), Requirements(requirements.Select(r => (r.Code, r.Label, r.IsMandatory, r.LegalBasis))));
             if (Same(scope, s => Equal(s.Name, request.Name) && s.Kind == request.Kind && s.Rank == request.Rank && Equal(s.Description, request.Description)
                     && Equal(s.LegalBasis, request.LegalBasis)
+                    && s.EffectivityRule == request.EffectivityRule && Equal(s.EffectivityLegalBasis, request.EffectivityLegalBasis)
+                    && s.CauseWindowDays == request.CauseWindowDays
                     && Requirements(s.Requirements.OrderBy(r => r.Sequence).Select(r => (r.Code, r.Label, r.IsMandatory, r.LegalBasis)))
                         == Requirements(requirements.Select(r => (r.Code, r.Label, r.IsMandatory, r.LegalBasis)))))
             {

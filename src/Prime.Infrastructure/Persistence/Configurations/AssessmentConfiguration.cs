@@ -23,6 +23,13 @@ public sealed class AssessmentConfiguration : IEntityTypeConfiguration<Assessmen
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(x => x.Remarks).HasMaxLength(2000);
         builder.Property(x => x.FaasNumber).HasMaxLength(100);
+        // Year and quarter of the effectivity: derived, never typed (docs/analysis/valuation-foundation.md §4.2).
+        builder.Property(x => x.EffectivityYear).HasComputedColumnSql("(EXTRACT(YEAR FROM \"EffectiveDate\"))::integer", stored: true);
+        builder.Property(x => x.EffectivityQuarter).HasComputedColumnSql("(EXTRACT(QUARTER FROM \"EffectiveDate\"))::integer", stored: true);
+        builder.Property(x => x.TransactionCode).HasMaxLength(20);
+        builder.Property(x => x.EffectivityRule).HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.EffectivityOverrideReason).HasMaxLength(1000);
+        builder.HasOne<Prime.Domain.Entities.Transactions.TransactionType>().WithMany().HasForeignKey(x => x.TransactionTypeId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(x => x.Rpu).WithMany().HasForeignKey(x => x.RpuId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Property).WithMany().HasForeignKey(x => x.PropertyId).OnDelete(DeleteBehavior.Restrict);

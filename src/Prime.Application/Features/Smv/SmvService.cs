@@ -20,26 +20,48 @@ public sealed class SmvService(
             return Result.Failure<SmvDto>("VALIDATION_FAILED", string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)));
         }
 
-        if (await db.Smvs.AnyAsync(x => x.OrdinanceNumber == request.OrdinanceNumber, cancellationToken))
+        var ordinanceNumber = string.IsNullOrWhiteSpace(request.OrdinanceNumber) ? null : request.OrdinanceNumber.Trim();
+        var certification = string.IsNullOrWhiteSpace(request.CertificationReference) ? null : request.CertificationReference.Trim();
+        if (ordinanceNumber is not null && await db.Smvs.AnyAsync(x => x.OrdinanceNumber == ordinanceNumber, cancellationToken))
         {
-            return Result.Failure<SmvDto>("SMV_ORDINANCE_NUMBER_DUPLICATE", $"An SMV with ordinance number '{request.OrdinanceNumber}' already exists.");
+            return Result.Failure<SmvDto>("SMV_ORDINANCE_NUMBER_DUPLICATE", $"An SMV with ordinance number '{ordinanceNumber}' already exists.");
+        }
+        if (certification is not null && await db.Smvs.AnyAsync(x => x.CertificationReference == certification, cancellationToken))
+        {
+            return Result.Failure<SmvDto>("SMV_CERTIFICATION_DUPLICATE", $"An SMV with certification '{certification}' already exists.");
+        }
+        var municipalityIds = request.MunicipalityIds ?? [];
+        if (municipalityIds.Count > 0
+            && await db.Municipalities.CountAsync(x => municipalityIds.Contains(x.Id), cancellationToken) != municipalityIds.Count)
+        {
+            return Result.Failure<SmvDto>("MUNICIPALITY_NOT_FOUND", "A municipality in the coverage of the SMV does not exist.");
         }
 
         var smv = new Domain.Entities.Smv
         {
-            OrdinanceNumber = request.OrdinanceNumber,
+            Basis = request.Basis,
+            OrdinanceNumber = ordinanceNumber,
             OrdinanceDate = request.OrdinanceDate,
             ApprovalDate = request.ApprovalDate,
+            ProposedOn = request.ProposedOn,
+            PublishedForCommentOn = request.PublishedForCommentOn,
+            ConsultationsHeldOn = request.ConsultationsHeldOn,
+            SubmittedToBlgfOn = request.SubmittedToBlgfOn,
+            CertifiedOn = request.CertifiedOn,
+            CertificationReference = certification,
+            PublishedOn = request.PublishedOn,
+            PublicationReference = string.IsNullOrWhiteSpace(request.PublicationReference) ? null : request.PublicationReference.Trim(),
             EffectivityDate = request.EffectivityDate,
             RevisionYear = request.RevisionYear,
             Description = request.Description,
             Status = WorkflowStatus.Draft,
+            Coverage = municipalityIds.Select(id => new Domain.Entities.SmvCoverage { MunicipalityId = id }).ToList(),
         };
 
         db.Smvs.Add(smv);
         await db.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(ToDto(smv));
+        return Result.Success(await MapSmvAsync(smv.Id, cancellationToken));
     }
 
     public async Task<Result<SmvDto>> ApproveSmvAsync(Guid smvId, CancellationToken cancellationToken = default)
@@ -64,20 +86,22 @@ public sealed class SmvService(
         smv.ApprovedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(ToDto(smv));
+        return Result.Success(await MapSmvAsync(smv.Id, cancellationToken));
     }
 
     public async Task<Result<SmvDto>> GetByIdAsync(Guid smvId, CancellationToken cancellationToken = default)
     {
-        var smv = await db.Smvs.FirstOrDefaultAsync(x => x.Id == smvId, cancellationToken);
-        return smv is null
-            ? Result.Failure<SmvDto>("SMV_NOT_FOUND", "No SMV was found with the given id.")
-            : Result.Success(ToDto(smv));
+        return await db.Smvs.AnyAsync(x => x.Id == smvId, cancellationToken)
+            ? Result.Success(await MapSmvAsync(smvId, cancellationToken))
+            : Result.Failure<SmvDto>("SMV_NOT_FOUND", "No SMV was found with the given id.");
     }
+
+    private async Task<SmvDto> MapSmvAsync(Guid id, CancellationToken ct) =>
+        ToDto(await db.Smvs.AsNoTracking().Include(x => x.Coverage).ThenInclude(c => c.Municipality).SingleAsync(x => x.Id == id, ct));
 
     public async Task<Result<PagedResult<SmvDto>>> ListAsync(PagedRequest request, CancellationToken cancellationToken = default)
     {
-        var query = db.Smvs.AsNoTracking();
+        var query = db.Smvs.AsNoTracking().Include(x => x.Coverage).ThenInclude(c => c.Municipality);
         var total = await query.CountAsync(cancellationToken);
         var rows = await query.OrderByDescending(x => x.EffectivityDate).ThenByDescending(x => x.CreatedAt)
             .Skip((request.Page - 1) * request.PageSize).Take(request.PageSize).ToListAsync(cancellationToken);
@@ -92,7 +116,9 @@ public sealed class SmvService(
             return Result.Failure<SmvScheduleDto>("VALIDATION_FAILED", string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)));
         }
 
-        if (!await db.Smvs.AnyAsync(x => x.Id == smvId, cancellationToken))
+        var smvCoverage = await db.Smvs.Where(x => x.Id == smvId).Select(x => new { Municipalities = x.Coverage.Select(c => c.MunicipalityId).ToList() })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (smvCoverage is null)
         {
             return Result.Failure<SmvScheduleDto>("SMV_NOT_FOUND", "No SMV was found with the given id.");
         }
@@ -100,7 +126,7 @@ public sealed class SmvService(
         {
             return Result.Failure<SmvScheduleDto>("CLASSIFICATION_NOT_FOUND", "The specified classification does not exist.");
         }
-        if (!await db.ActualUses.AnyAsync(x => x.Id == request.ActualUseId, cancellationToken))
+        if (request.ActualUseId is { } actualUseId && !await db.ActualUses.AnyAsync(x => x.Id == actualUseId, cancellationToken))
         {
             return Result.Failure<SmvScheduleDto>("ACTUAL_USE_NOT_FOUND", "The specified actual use does not exist.");
         }
@@ -117,14 +143,34 @@ public sealed class SmvService(
             return Result.Failure<SmvScheduleDto>("IMPROVEMENT_KIND_NOT_FOUND", "The specified improvement kind does not exist.");
         }
 
-        // Never overwrite (CLAUDE.md §28): close any currently-open schedule for
-        // the same classification/actual use/property type/zone key instead of
-        // editing it in place.
+        if (request.SubClassificationId is { } subId && !await db.SubClassifications.AnyAsync(x => x.Id == subId, cancellationToken))
+        {
+            return Result.Failure<SmvScheduleDto>("SUB_CLASSIFICATION_NOT_FOUND", "The specified sub-classification does not exist.");
+        }
+        if (request.BarangayId is { } barangayId)
+        {
+            var municipalityId = await db.Barangays.Where(x => x.Id == barangayId).Select(x => (Guid?)x.MunicipalityId).FirstOrDefaultAsync(cancellationToken);
+            if (municipalityId is null)
+            {
+                return Result.Failure<SmvScheduleDto>("BARANGAY_NOT_FOUND", "The specified barangay does not exist.");
+            }
+            if (smvCoverage.Municipalities.Count > 0 && !smvCoverage.Municipalities.Contains(municipalityId.Value))
+            {
+                return Result.Failure<SmvScheduleDto>("BARANGAY_OUTSIDE_SMV_COVERAGE", "The barangay is in a municipality the SMV does not cover.");
+            }
+        }
+
+        // Never overwrite (CLAUDE.md §28): close the currently-open rate of this SMV for the
+        // same key instead of editing it in place. Rates of other SMVs are not touched: the
+        // engine chooses between SMVs by their effectivity and coverage (valuation-foundation.md §4.3).
         var currentlyOpen = await db.SmvSchedules.FirstOrDefaultAsync(
-            x => x.ClassificationId == request.ClassificationId
+            x => x.SmvId == smvId
+                && x.ClassificationId == request.ClassificationId
                 && x.ActualUseId == request.ActualUseId
                 && x.PropertyTypeId == request.PropertyTypeId
+                && x.SubClassificationId == request.SubClassificationId
                 && x.ZoneId == request.ZoneId
+                && x.BarangayId == request.BarangayId
                 && x.ImprovementKindId == request.ImprovementKindId
                 && x.EndDate == null,
             cancellationToken);
@@ -148,6 +194,8 @@ public sealed class SmvService(
             PropertyTypeId = request.PropertyTypeId,
             ZoneId = request.ZoneId,
             ImprovementKindId = request.ImprovementKindId,
+            SubClassificationId = request.SubClassificationId,
+            BarangayId = request.BarangayId,
             Unit = request.Unit,
             MarketValue = request.MarketValue,
             MinimumValue = request.MinimumValue,
@@ -210,7 +258,9 @@ public sealed class SmvService(
         .Include(x => x.ActualUse)
         .Include(x => x.PropertyType)
         .Include(x => x.Zone)
-        .Include(x => x.ImprovementKind);
+        .Include(x => x.ImprovementKind)
+        .Include(x => x.SubClassification)
+        .Include(x => x.Barangay);
 
     private static SmvDto ToDto(Domain.Entities.Smv smv) => new(
         smv.Id,
@@ -221,7 +271,18 @@ public sealed class SmvService(
         smv.RevisionYear,
         smv.Status,
         smv.Description,
-        smv.CreatedAt);
+        smv.CreatedAt,
+        smv.Basis,
+        smv.Reference,
+        smv.ProposedOn,
+        smv.PublishedForCommentOn,
+        smv.ConsultationsHeldOn,
+        smv.SubmittedToBlgfOn,
+        smv.CertifiedOn,
+        smv.CertificationReference,
+        smv.PublishedOn,
+        smv.PublicationReference,
+        smv.Coverage.Select(c => new SmvCoverageDto(c.MunicipalityId, c.Municipality?.Name ?? "")).OrderBy(c => c.MunicipalityName).ToList());
 
     private static SmvScheduleDto ProjectScheduleToDto(Domain.Entities.SmvSchedule x) => new(
         x.Id,
@@ -229,7 +290,7 @@ public sealed class SmvService(
         x.ClassificationId,
         x.Classification!.Name,
         x.ActualUseId,
-        x.ActualUse!.Name,
+        x.ActualUse?.Name,
         x.PropertyTypeId,
         x.PropertyType!.Name,
         x.ZoneId,
@@ -243,5 +304,9 @@ public sealed class SmvService(
         x.EffectiveDate,
         x.EndDate,
         x.Status,
-        x.CreatedAt);
+        x.CreatedAt,
+        x.SubClassificationId,
+        x.SubClassification?.Name,
+        x.BarangayId,
+        x.Barangay?.Name);
 }

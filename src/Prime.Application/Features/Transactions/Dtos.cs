@@ -9,7 +9,8 @@ public sealed record TransactionRequirementRequest(int Sequence, string Code, st
 public sealed record CreateTransactionTypeRequest(
     string LegalBasis, DateOnly EffectiveDate, string? Remarks,
     string Code, string Name, PropertyTransactionKind Kind, int? Rank, string? Description,
-    IReadOnlyList<TransactionRequirementRequest> Requirements);
+    IReadOnlyList<TransactionRequirementRequest> Requirements,
+    EffectivityRule? EffectivityRule = null, string? EffectivityLegalBasis = null, int? CauseWindowDays = null);
 
 public sealed record TransactionRequirementDto(int Sequence, string Code, string Label, bool IsMandatory, string? LegalBasis);
 
@@ -17,7 +18,8 @@ public sealed record TransactionTypeDto(
     Guid Id, string Code, string Name, PropertyTransactionKind Kind, int? Rank, string? Description,
     IReadOnlyList<TransactionRequirementDto> Requirements,
     string LegalBasis, DateOnly EffectiveDate, DateOnly? EndDate, WorkflowStatus Status,
-    Guid? CreatedBy, DateTimeOffset CreatedAt, Guid? ApprovedBy, DateTimeOffset? ApprovedAt, string? Remarks);
+    Guid? CreatedBy, DateTimeOffset CreatedAt, Guid? ApprovedBy, DateTimeOffset? ApprovedAt, string? Remarks,
+    EffectivityRule? EffectivityRule = null, string? EffectivityLegalBasis = null, int? CauseWindowDays = null);
 
 // --- Transactions ---
 

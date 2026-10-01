@@ -95,7 +95,7 @@ public class BuildingAppraisalTests(WebApplicationFactory<Program> factory) : IC
         garage.IsSuccess.ShouldBeTrue(garage.IsSuccess ? null : garage.Message);
         garage.Value.Components.Single(x => x.Description == "DEMO garage").Cost.ShouldBe(5_000m); // quantity × unit cost
 
-        var valuation = await c.Services.GetRequiredService<IValuationService>().ComputeForRpuAsync(c.RpuId);
+        var valuation = await c.Services.GetRequiredService<IValuationService>().ComputeForRpuAsync(c.RpuId, asOf: new DateOnly(2026, 1, 1));
 
         valuation.IsSuccess.ShouldBeTrue(valuation.IsSuccess ? null : valuation.Message);
         var lines = await c.Db.ValuationLines.Where(x => x.ValuationId == valuation.Value.Id).OrderBy(x => x.Sequence).ToListAsync();
@@ -119,7 +119,7 @@ public class BuildingAppraisalTests(WebApplicationFactory<Program> factory) : IC
         await using var _ = tx;
         (await c.Buildings.AddUsePortionAsync(c.BuildingId, new AddBuildingUsePortionRequest(c.ClassificationId, c.FirstUseId, 60m))).IsSuccess.ShouldBeTrue();
 
-        (await c.Services.GetRequiredService<IValuationService>().ComputeForRpuAsync(c.RpuId)).Code.ShouldBe("BUILDING_USE_PORTIONS_INCOMPLETE");
+        (await c.Services.GetRequiredService<IValuationService>().ComputeForRpuAsync(c.RpuId, asOf: new DateOnly(2026, 1, 1))).Code.ShouldBe("BUILDING_USE_PORTIONS_INCOMPLETE");
         (await c.Buildings.AddUsePortionAsync(c.BuildingId, new AddBuildingUsePortionRequest(c.ClassificationId, c.SecondUseId, 41m)))
             .Code.ShouldBe("BUILDING_USE_PORTIONS_EXCEED_FLOOR_AREA");
     }

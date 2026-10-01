@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-09-28 |
-| Status | **Approved 2026-09-28: all recommendations Q1–Q9 accepted.** C1–C5 done (§8); L0-2 complete. Valuation files follow in L1-3 |
+| Status | **Approved 2026-09-28: all recommendations Q1–Q9 accepted.** C1–C5 done (§8); L0-2 complete. SMV, unit-value and level files added in L1-3 (docs/analysis/valuation-foundation.md §9); adjustment factors in L1-4 |
 | Rules | CLAUDE.md §7 (configurability), §60 (import workflow), §81 (seed data), §104 and §118 (no LAM or ordinance content in git) |
 | Commit status | This document contains no LAM content and may be committed |
 
@@ -60,11 +60,12 @@ lgu-content/                         (gitignored)
     ├── forms/
     │   ├── forms.json               code, version, title, subject, authority, source, effective_date
     │   └── <CODE>.v<N>.liquid
-    ├── valuation/                   (after L1 reshapes the SMV model)
-    │   ├── smv.json                 header, certification/ordinance references
-    │   ├── schedules.csv
-    │   ├── adjustment-factors.csv
-    │   └── assessment-levels.csv
+    ├── valuation/                   (step L1-3; factors in L1-4)
+    │   ├── smv.json                 kind "smv": basis, ordinance or certification, stages, coverage (PSGC)
+    │   ├── smv-schedules.csv        kind "smv-schedules": smv, classification, sub-classification?, actual-use?,
+    │   │                            property-type, zone?, barangay?, improvement-kind?, unit, market-value, …
+    │   ├── adjustment-factors.csv   (L1-4)
+    │   └── assessment-levels.csv    kind "assessment-levels"
     └── gis/
         └── <layer>.geojson
 ```

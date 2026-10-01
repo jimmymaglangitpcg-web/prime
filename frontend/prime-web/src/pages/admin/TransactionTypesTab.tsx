@@ -4,7 +4,7 @@ import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useApproveTransactionType, useCreateTransactionType, useTransactionTypes } from '../../api/transactions';
 import { ApiRequestError } from '../../lib/apiClient';
-import { transactionKinds, type TransactionTypeDto, type WorkflowStatus } from '../../lib/types';
+import { effectivityRules, transactionKinds, type EffectivityRule, type TransactionTypeDto, type WorkflowStatus } from '../../lib/types';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
 const statusColor: Partial<Record<WorkflowStatus, string>> = { Draft: 'default', Approved: 'green', Cancelled: 'red' };
@@ -20,6 +20,7 @@ export function TransactionTypesTab() {
   const approve = useApproveTransactionType();
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm();
+  const rule = Form.useWatch('effectivityRule', form) as EffectivityRule | undefined;
   const [toast, ctx] = message.useMessage();
 
   return (
@@ -36,6 +37,15 @@ export function TransactionTypesTab() {
           { title: 'Name', dataIndex: 'name' },
           { title: 'Kind', dataIndex: 'kind' },
           { title: 'Rank', dataIndex: 'rank', render: (v: number | null) => v ?? '—' },
+          {
+            title: 'Effectivity', render: (_, t) => !t.effectivityRule ? <Typography.Text type="secondary">entered</Typography.Text> : (
+              <span>
+                {effectivityRules.find((r) => r.value === t.effectivityRule)?.label}
+                {t.causeWindowDays ? `, within ${t.causeWindowDays} days of the cause` : ''}
+                <br /><Typography.Text type="secondary">{t.effectivityLegalBasis}</Typography.Text>
+              </span>
+            ),
+          },
           {
             title: 'Requirements', render: (_, t) => t.requirements.length === 0 ? '—' : (
               <ol style={{ margin: 0, paddingLeft: 18 }}>
@@ -59,6 +69,9 @@ export function TransactionTypesTab() {
           onFinish={(v) => create.mutate({
             ...v,
             effectiveDate: v.effectiveDate.format('YYYY-MM-DD'),
+            effectivityRule: v.effectivityRule ?? null,
+            effectivityLegalBasis: v.effectivityRule ? v.effectivityLegalBasis : null,
+            causeWindowDays: v.effectivityRule === 'NextQuarter' ? v.causeWindowDays ?? null : null,
             requirements: (v.requirements ?? []).map((r: { code: string; label: string; isMandatory?: boolean; legalBasis?: string }, i: number) =>
               ({ ...r, isMandatory: r.isMandatory ?? true, sequence: i + 1 })),
           }, { onSuccess: () => { form.resetFields(); setOpen(false); } })}>
@@ -71,6 +84,21 @@ export function TransactionTypesTab() {
             <Form.Item name="rank" label="Rank"><InputNumber style={{ width: 90 }} /></Form.Item>
           </Space>
           <Form.Item name="description" label="Description"><Input /></Form.Item>
+          <Space wrap align="start">
+            <Form.Item name="effectivityRule" label="Effectivity rule" extra="Empty: the effective date is entered for each assessment.">
+              <Select allowClear style={{ width: 240 }} options={effectivityRules} placeholder="None" />
+            </Form.Item>
+            {rule && (
+              <Form.Item name="effectivityLegalBasis" label="Legal basis of the rule" rules={[{ required: true }, { max: 500 }]}>
+                <Input style={{ width: 260 }} placeholder="e.g. LGC §221 — or 'DEMO'" />
+              </Form.Item>
+            )}
+            {rule === 'NextQuarter' && (
+              <Form.Item name="causeWindowDays" label="Days after the cause" extra="A later reassessment is flagged, not refused.">
+                <InputNumber min={1} max={3660} precision={0} style={{ width: 120 }} />
+              </Form.Item>
+            )}
+          </Space>
           <Typography.Text strong>Prerequisites (checklist)</Typography.Text>
           <Form.List name="requirements">
             {(fields, { add, remove }) => (

@@ -26,7 +26,9 @@ public sealed record ValuationLineDto(
     int Sequence, ValuationLineSource Source, Guid? SourceId, string? Description,
     string? ClassificationName, string? SubClassificationName, string? ActualUseName,
     decimal? Quantity, string? Unit, decimal? UnitValue, Guid? SmvScheduleId, decimal MarketValue,
-    IReadOnlyList<ValuationBreakdownItemDto> Breakdown);
+    IReadOnlyList<ValuationBreakdownItemDto> Breakdown,
+    /// <summary>Set when the row was priced by another class and sub-class than the ones that assess it (valuation-foundation.md §4.3).</summary>
+    string? PricedClassificationName = null, string? PricedSubClassificationName = null);
 
 public sealed record ValuationBreakdownItemDto(string Key, decimal Value);
 

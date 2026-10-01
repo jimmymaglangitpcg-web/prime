@@ -39,6 +39,9 @@ public static class ContentFileKinds
     public const string Forms = "forms";
     public const string GisLayer = "gis-layer";
     public const string Offices = "offices";
+    public const string Smv = "smv";
+    public const string SmvSchedules = "smv-schedules";
+    public const string AssessmentLevels = "assessment-levels";
 
     /// <summary>CSV tables (step C1–C2).</summary>
     public static readonly IReadOnlySet<string> Csv = new HashSet<string> { Provinces, Municipalities, Barangays, Lookup };
@@ -47,7 +50,9 @@ public static class ContentFileKinds
     /// JSON catalogues of versioned configuration, imported as Draft versions (step C3); offices from step LP-1
     /// (office records apply on import, their jurisdictions arrive as drafts).
     /// </summary>
-    public static readonly IReadOnlySet<string> Versioned = new HashSet<string> { TransactionTypes, NumberingSchemes, ApprovalChains, Forms, Offices };
+    /// From step L1-3: SMVs (JSON), their unit values and assessment levels (CSV), as Draft records.
+    public static readonly IReadOnlySet<string> Versioned = new HashSet<string>
+        { TransactionTypes, NumberingSchemes, ApprovalChains, Forms, Offices, Smv, SmvSchedules, AssessmentLevels };
 
     /// <summary>Kinds PRIME reads and imports; GeoJSON map layers from step C5.</summary>
     public static readonly IReadOnlySet<string> Supported = Csv.Union(Versioned).Append(GisLayer).ToHashSet();
@@ -55,10 +60,8 @@ public static class ContentFileKinds
     /// <summary>Recognised, hashed and listed, but not yet read: the step that adds each.</summary>
     public static readonly IReadOnlyDictionary<string, string> Later = new Dictionary<string, string>
     {
-        ["smv"] = "L1-3",
-        ["smv-schedules"] = "L1-3",
-        ["adjustment-factors"] = "L1-3",
-        ["assessment-levels"] = "L1-3",
+        // Factor rule kinds (road type, distance, corner, depth) change this file's shape in step L1-4.
+        ["adjustment-factors"] = "L1-4",
     };
 }
 

@@ -108,7 +108,7 @@ public class ContentPackVersionedTests(WebApplicationFactory<Program> factory) :
         // Same content again: the approved form and the pending drafts match, so nothing new.
         c.User.AppUserId = c.Importer.Id;
         var again = (await c.Packs.PreviewAsync("content-demo")).Value;
-        again.Files.Where(f => ContentFileKinds.Versioned.Contains(f.Kind)).ShouldAllBe(f => f.New == 0 && f.Unchanged == 1);
+        again.Files.Where(f => ContentFileKinds.Versioned.Contains(f.Kind)).ShouldAllBe(f => f.New == 0 && f.Changed == 0 && f.Unchanged == f.Rows);
         (await c.Packs.ImportAsync("content-demo", new(again.Fingerprint))).Value.Applied.ShouldBeFalse();
     }
 

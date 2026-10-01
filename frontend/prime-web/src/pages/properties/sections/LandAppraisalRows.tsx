@@ -36,6 +36,12 @@ export function LandAppraisalRows({ land, rpuId, propertyId }: { land: LandDto; 
           { title: '#', dataIndex: 'sequence', width: 40 },
           { title: 'Classification', render: (_, s) => [s.classificationName, s.subClassificationName].filter(Boolean).join(' / ') },
           { title: 'Actual use', dataIndex: 'actualUseName' },
+          {
+            // The class that prices the strip when it differs from the one that assesses it (valuation-foundation.md §4.3).
+            title: 'Priced as', render: (_, s) => (s.valuationClassificationName || s.valuationSubClassificationName
+              ? [s.valuationClassificationName ?? s.classificationName, s.valuationSubClassificationName].filter(Boolean).join(' / ')
+              : <Typography.Text type="secondary">its own</Typography.Text>),
+          },
           { title: 'Zone', dataIndex: 'zoneName', render: (v: string | null) => v ?? '(land’s)' },
           { title: 'Area', align: 'right', render: (_, s) => `${plain.format(s.area)} ${land.areaUnit}` },
         ]} />
@@ -82,7 +88,10 @@ function StripDialog({ land, rpuId, propertyId, onClose }: DialogProps) {
         <Alert type="info" showIcon style={{ marginBottom: 12 }} title={`The registered ${plain.format(land.area)} ${land.areaUnit} becomes strip 1.`} />
       )}
       <Form layout="vertical" onFinish={(v) => add.mutate(
-        { classificationId: v.classificationId, subClassificationId: v.subClassificationId ?? null, actualUseId: v.actualUseId, zoneId: v.zoneId ?? null, area: v.area },
+        {
+          classificationId: v.classificationId, subClassificationId: v.subClassificationId ?? null, actualUseId: v.actualUseId, zoneId: v.zoneId ?? null, area: v.area,
+          valuationClassificationId: v.valuationClassificationId ?? null, valuationSubClassificationId: v.valuationSubClassificationId ?? null,
+        },
         { onSuccess: onClose })}>
         <Form.Item name="classificationId" label="Classification" rules={[{ required: true }]}>
           <Select options={classifications.map((x) => ({ value: x.id, label: x.name }))} />
@@ -98,6 +107,16 @@ function StripDialog({ land, rpuId, propertyId, onClose }: DialogProps) {
         </Form.Item>
         <Form.Item name="area" label={`Area (${land.areaUnit})`} rules={[{ required: true }]}>
           <InputNumber<number> min={0.0001} style={{ width: '100%' }} />
+        </Form.Item>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+          Priced by another class (optional): e.g. agricultural land in a predominantly commercial area, valued at the commercial unit value
+          but assessed at the level of its own class and actual use.
+        </Typography.Paragraph>
+        <Form.Item name="valuationClassificationId" label="Priced as classification" extra="Leave empty to price the strip by its own classification.">
+          <Select allowClear options={classifications.map((x) => ({ value: x.id, label: x.name }))} />
+        </Form.Item>
+        <Form.Item name="valuationSubClassificationId" label="Priced as sub-classification">
+          <Select allowClear options={subs.map((x) => ({ value: x.id, label: x.name }))} />
         </Form.Item>
         <Button type="primary" htmlType="submit" loading={add.isPending}>Add strip</Button>
       </Form>

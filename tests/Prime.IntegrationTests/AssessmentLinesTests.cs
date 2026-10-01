@@ -38,8 +38,8 @@ public class AssessmentLinesTests(WebApplicationFactory<Program> factory) : ICla
         db.Add(secondUse);
         await db.SaveChangesAsync();
         var landType = await TestSeed.LandPropertyTypeAsync(db);
-        // Inserted directly: the level service keeps one open level per classification/use/type,
-        // so it cannot hold two brackets side by side (a known gap, docs/analysis/mrpaao-forms-model.md §9).
+        // Inserted directly for brevity; the level service also accepts side-by-side brackets
+        // (docs/analysis/value-and-assess.md §2.5, covered by ValueAndAssessTests).
         foreach (var (lower, upper, percent) in new (decimal, decimal?, decimal)[] { (0m, 250_000m, 5m), (250_000.01m, null, 15m) })
         {
             db.AssessmentLevels.Add(new AssessmentLevel
