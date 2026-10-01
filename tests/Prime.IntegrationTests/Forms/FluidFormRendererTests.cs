@@ -77,6 +77,10 @@ public class FluidFormRendererTests
     [InlineData("FAAS_LAND.v1.liquid")]
     [InlineData("FAAS_BUILDING.v1.liquid")]
     [InlineData("FAAS_MACHINERY.v1.liquid")]
+    [InlineData("TAX_DECLARATION.v4.liquid")]
+    [InlineData("FAAS_LAND.v2.liquid")]
+    [InlineData("FAAS_BUILDING.v2.liquid")]
+    [InlineData("FAAS_MACHINERY.v2.liquid")]
     [InlineData("NOTICE_OF_ASSESSMENT.v2.liquid")]
     [InlineData("TMCR.v1.liquid")]
     [InlineData("AR_TAXABLE.v1.liquid")]
@@ -86,6 +90,35 @@ public class FluidFormRendererTests
     [InlineData("SWORN_STATEMENT.v1.liquid")]
     public void ProvisionalTemplates_AreEmbeddedAndParse(string file) =>
         renderer.Validate(ProvisionalFormSeeder.ReadTemplate(file)).ShouldBeNull();
+
+    [Theory]
+    [InlineData("TAX_DECLARATION.v4.liquid", "signatories")]
+    [InlineData("FAAS_LAND.v2.liquid", "a")]
+    [InlineData("FAAS_BUILDING.v2.liquid", "a")]
+    [InlineData("FAAS_MACHINERY.v2.liquid", "a")]
+    public void DelegatedSignatures_PrintTheDelegation(string file, string where)
+    {
+        // A signature given under a delegation (docs/analysis/province-wide-operation.md §3.4); the rest of the data may be empty.
+        var signature = new JsonObject
+        {
+            ["label"] = "DEMO Approved", ["name"] = "DEMO Municipal Assessor", ["position"] = "DEMO Municipal Assessor",
+            ["signedAt"] = "2026-09-29T02:00:00+00:00", ["underDelegation"] = "DEMO Office Order 1 dated 2026-01-02 of DEMO Provincial Assessor",
+        };
+        var data = new JsonObject { ["form"] = new JsonObject { ["title"] = "DEMO" } };
+        if (where == "signatories")
+        {
+            data["signatories"] = new JsonArray(signature);
+        }
+        else
+        {
+            data["appraisal"] = new JsonObject { ["signatures"] = new JsonArray(signature) }; // the FAAS templates read it as "a"
+        }
+
+        var html = renderer.Render(ProvisionalFormSeeder.ReadTemplate(file), data, provisional: false);
+
+        html.ShouldContain("DEMO Office Order 1 dated 2026-01-02 of DEMO Provincial Assessor");
+        html.ShouldContain("nder delegation"); // "Under delegation" (FAAS) or "under delegation" (TD)
+    }
 
     [Theory]
     [InlineData("100000", "ONE HUNDRED THOUSAND PESOS ONLY")]

@@ -14,6 +14,7 @@ public sealed class OfficeConfiguration : IEntityTypeConfiguration<Office>
         builder.HasIndex(x => x.Code).IsUnique();
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.LguName).HasMaxLength(200);
         builder.Property(x => x.HeadPosition).HasMaxLength(200);
         builder.Property(x => x.Address).HasMaxLength(500);
         builder.Property(x => x.Contact).HasMaxLength(200);

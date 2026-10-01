@@ -71,6 +71,7 @@ function OfficesTab() {
         columns={[
           { title: 'Code', dataIndex: 'code' },
           { title: 'Name', dataIndex: 'name' },
+          { title: 'Letterhead LGU', dataIndex: 'lguName', render: (v: string | null) => v ?? '—' },
           { title: 'Kind', dataIndex: 'kind', render: (k: OfficeKind) => <Tag color={k === 'Provincial' ? 'blue' : 'default'}>{k}</Tag> },
           { title: 'Head', dataIndex: 'headPosition', render: (v: string | null) => v ?? '—' },
           { title: 'Status', dataIndex: 'status', render: (s: string) => <Tag color={s === 'Active' ? 'green' : 'default'}>{s}</Tag> },
@@ -87,8 +88,12 @@ function OfficesTab() {
           <Form.Item name="kind" label="Kind" rules={[{ required: true }]}>
             <Select disabled={editing !== 'new'} options={[{ value: 'Provincial' }, { value: 'Municipal' }]} />
           </Form.Item>
+          <Form.Item name="lguName" label="Local government on the letterhead"
+            extra="Printed above the office name on its forms, e.g. the province or municipality. Blank prints none.">
+            <Input />
+          </Form.Item>
           <Form.Item name="headPosition" label="Head's position (as printed)"><Input /></Form.Item>
-          <Form.Item name="address" label="Address"><Input /></Form.Item>
+          <Form.Item name="address" label="Address" extra="Printed on the office's forms."><Input /></Form.Item>
           <Form.Item name="contact" label="Contact"><Input /></Form.Item>
           {editing !== 'new' && (
             <Form.Item name="status" label="Status"><Select options={[{ value: 'Active' }, { value: 'Inactive' }]} /></Form.Item>

@@ -9,12 +9,16 @@ namespace Prime.Application.Features.Offices;
 
 // --- Requests and DTOs (docs/analysis/province-wide-operation.md §3.1–§3.2) ---
 
-public sealed record CreateOfficeRequest(string Code, string Name, OfficeKind Kind, string? HeadPosition, string? Address, string? Contact);
+/// <param name="LguName">The local government printed above the office on its letterhead (§3.6).</param>
+public sealed record CreateOfficeRequest(string Code, string Name, OfficeKind Kind, string? HeadPosition, string? Address, string? Contact,
+    string? LguName = null);
 
 /// <summary>The code and kind never change; everything else may.</summary>
-public sealed record UpdateOfficeRequest(string Name, string? HeadPosition, string? Address, string? Contact, RecordStatus Status);
+public sealed record UpdateOfficeRequest(string Name, string? HeadPosition, string? Address, string? Contact, RecordStatus Status,
+    string? LguName = null);
 
-public sealed record OfficeDto(Guid Id, string Code, string Name, OfficeKind Kind, string? HeadPosition, string? Address, string? Contact, RecordStatus Status);
+public sealed record OfficeDto(Guid Id, string Code, string Name, OfficeKind Kind, string? HeadPosition, string? Address, string? Contact, RecordStatus Status,
+    string? LguName);
 
 public sealed record CreateOfficeJurisdictionRequest(Guid OfficeId, Guid MunicipalityId, DateOnly EffectiveDate, string LegalBasis, string? Remarks);
 
@@ -51,6 +55,7 @@ public sealed class CreateOfficeRequestValidator : AbstractValidator<CreateOffic
             .WithMessage("code is upper-case letters, digits, '-' or '_'.");
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Kind).IsInEnum();
+        RuleFor(x => x.LguName).MaximumLength(200);
         RuleFor(x => x.HeadPosition).MaximumLength(200);
         RuleFor(x => x.Address).MaximumLength(500);
         RuleFor(x => x.Contact).MaximumLength(200);
@@ -62,6 +67,7 @@ public sealed class UpdateOfficeRequestValidator : AbstractValidator<UpdateOffic
     public UpdateOfficeRequestValidator()
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.LguName).MaximumLength(200);
         RuleFor(x => x.HeadPosition).MaximumLength(200);
         RuleFor(x => x.Address).MaximumLength(500);
         RuleFor(x => x.Contact).MaximumLength(200);
@@ -159,6 +165,7 @@ public sealed class OfficeService(
         {
             Code = request.Code, Name = request.Name.Trim(), Kind = request.Kind,
             HeadPosition = Clean(request.HeadPosition), Address = Clean(request.Address), Contact = Clean(request.Contact),
+            LguName = Clean(request.LguName),
         };
         db.Offices.Add(office);
         await db.SaveChangesAsync(cancellationToken);
@@ -190,6 +197,7 @@ public sealed class OfficeService(
         office.HeadPosition = Clean(request.HeadPosition);
         office.Address = Clean(request.Address);
         office.Contact = Clean(request.Contact);
+        office.LguName = Clean(request.LguName);
         office.Status = request.Status;
         await db.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(office));
@@ -409,7 +417,7 @@ public sealed class OfficeService(
     private static IReadOnlyList<string> RoleCodesOf(OfficeAssignment? a) =>
         a?.Roles.Select(r => r.Role!.Code).Order(StringComparer.Ordinal).ToList() ?? [];
 
-    private static OfficeDto ToDto(Office x) => new(x.Id, x.Code, x.Name, x.Kind, x.HeadPosition, x.Address, x.Contact, x.Status);
+    private static OfficeDto ToDto(Office x) => new(x.Id, x.Code, x.Name, x.Kind, x.HeadPosition, x.Address, x.Contact, x.Status, x.LguName);
 
     private static OfficeJurisdictionDto ToDto(OfficeJurisdiction x) => new(
         x.Id, x.OfficeId, x.Office!.Code, x.MunicipalityId, x.Municipality!.Name, x.Municipality.PsgcCode,

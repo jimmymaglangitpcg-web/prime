@@ -39,14 +39,15 @@ public sealed class ProvisionalFormSeeder(IServiceScopeFactory scopes, ILogger<P
     private static readonly (string Code, int Version, string Title, FormSubjectType Subject, FormAuthority Authority, string Source)[] Forms =
     [
         ("TAX_BILL", 1, "Real Property Tax Bill", FormSubjectType.TaxBill, FormAuthority.PrimeProvisional, "PRIME provisional template"),
-        ("TAX_DECLARATION", 3, "Tax Declaration of Real Property", FormSubjectType.TaxDeclaration, FormAuthority.Mrpaao, "MRPAAO Attachment 4 (p.236)"),
+        // v4 (and FAAS v2): signatures show the delegation they were given under (docs/analysis/province-wide-operation.md §3.4).
+        ("TAX_DECLARATION", 4, "Tax Declaration of Real Property", FormSubjectType.TaxDeclaration, FormAuthority.Mrpaao, "MRPAAO Attachment 4 (p.236)"),
         ("NOTICE_OF_ASSESSMENT", 2, "Notice of Assessment", FormSubjectType.NoticeOfAssessment, FormAuthority.Mrpaao, "MRPAAO Attachment 10 (p.242)"),
         ("FAAS", 1, "Field Appraisal and Assessment Sheet", FormSubjectType.Assessment, FormAuthority.PrimeProvisional, "PRIME provisional template"),
         ("STATEMENT_OF_ACCOUNT", 2, "Statement of Account — Real Property Tax", FormSubjectType.StatementOfAccount, FormAuthority.PrimeProvisional, "PRIME provisional template"),
         ("OFFICIAL_RECEIPT", 1, "Official Receipt — Real Property Tax", FormSubjectType.Payment, FormAuthority.PrimeProvisional, "PRIME provisional template; eOR minimum content per DOF DO 054-2024 §7.1"),
-        ("FAAS_LAND", 1, "Real Property Field Appraisal & Assessment Sheet — Land / Other Improvements", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 1 (p.230–231)"),
-        ("FAAS_BUILDING", 1, "Real Property Field Appraisal & Assessment Sheet — Building & Other Improvements", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 2 (p.232–233)"),
-        ("FAAS_MACHINERY", 1, "Real Property Field Appraisal & Assessment Sheet — Machinery", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 3 (p.234–235)"),
+        ("FAAS_LAND", 2, "Real Property Field Appraisal & Assessment Sheet — Land / Other Improvements", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 1 (p.230–231)"),
+        ("FAAS_BUILDING", 2, "Real Property Field Appraisal & Assessment Sheet — Building & Other Improvements", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 2 (p.232–233)"),
+        ("FAAS_MACHINERY", 2, "Real Property Field Appraisal & Assessment Sheet — Machinery", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 3 (p.234–235)"),
         ("TMCR", 2, "Tax Map Control Roll", FormSubjectType.Register, FormAuthority.Mrpaao, "MRPAAO Attachment 5 (p.158–159); Ch. II Figure 10 (p.70)"),
         ("PRE_TMCR", 2, "Pre-Tax Map Control Roll", FormSubjectType.Register, FormAuthority.Mrpaao, "MRPAAO Ch. II Figure 3 (p.54)"),
         ("AR_TAXABLE", 1, "Assessment Roll — Taxable Properties", FormSubjectType.Register, FormAuthority.Mrpaao, "MRPAAO Attachment 6 (p.160–161)"),

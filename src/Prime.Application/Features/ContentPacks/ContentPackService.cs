@@ -218,9 +218,12 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         CheckRequiredPropertyTypes(files, await db.PropertyTypes.AsNoTracking().Select(x => x.Code).ToListAsync(cancellationToken));
         var newMunicipalities = files.Where(f => f.Entry.Kind == ContentFileKinds.Municipalities)
             .SelectMany(f => f.Plan.Where(p => p.IsNew).Select(p => p.Key)).ToHashSet(StringComparer.Ordinal);
+        // In manifest (= import) order: an approval chain may name an office an earlier offices file adds.
+        var newOffices = new HashSet<string>(StringComparer.Ordinal);
         foreach (var work in files.Where(f => f.Bytes is not null))
         {
-            await PreviewVersionedAsync(pack, work, newMunicipalities, cancellationToken);
+            await PreviewVersionedAsync(pack, work, newMunicipalities, newOffices, cancellationToken);
+            newOffices.UnionWith(work.Versions.Select(v => v.Request).OfType<Prime.Application.Features.Offices.CreateOfficeRequest>().Select(r => r.Code));
         }
         // Map layers last: they may refer to barangays, zones and road types the pack adds.
         foreach (var work in files.Where(f => f.Geo is not null))
@@ -656,10 +659,11 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
     /// Step C3: transaction types, numbering schemes, approval chains and forms; step LP-1: offices
     /// (<see cref="ContentPackVersionedContent"/>).
     /// </summary>
-    private async Task PreviewVersionedAsync(string pack, FileWork work, IReadOnlySet<string> newMunicipalities, CancellationToken ct)
+    private async Task PreviewVersionedAsync(string pack, FileWork work, IReadOnlySet<string> newMunicipalities, IReadOnlySet<string> newOffices,
+        CancellationToken ct)
     {
         var r = await versioned.PreviewAsync(work.Entry.Kind, work.Entry.Path, work.Bytes!, work.Entry.Source, p => source.ReadAsync(pack, p, ct), ct,
-            newMunicipalities);
+            newMunicipalities, newOffices);
         work.Issues.AddRange(r.Issues);
         work.Versions.AddRange(r.Versions);
         work.Referenced.AddRange(r.Referenced);

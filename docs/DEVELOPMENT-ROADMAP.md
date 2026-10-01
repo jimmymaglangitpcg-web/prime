@@ -933,7 +933,7 @@ is **LAM alignment** (CLAUDE.md §97):
 ```text
 10a  Real Property Identification System (MRPAAO)   done (d70a501)
 L0   Governance & groundwork                          done (L0-4 questions sent; answers pending)
-LP   Province-wide operation (CLAUDE.md §117)         in progress (LP-1 to LP-3 done)
+LP   Province-wide operation (CLAUDE.md §117)         in progress (LP-1 to LP-5 done)
 L1   Valuation foundation
 L2   Identification & numbering (LAM deltas)
 L3   Assessment, listing, exemptions
@@ -1085,9 +1085,18 @@ office, Offices page; migration `Offices` on the local database only).
 uniqueness checks, taxpayer visibility, issued-form subject check; no
 migration). **LP-3 done** (dated delegation records with maker-checker,
 renewal, revocation and an in-force lookup; migration `ApprovalDelegations`
-on the local database only). **Next:** LP-4, office-aware approval chains
-with provincial or delegated final approval. The paragraphs below are the
-earlier history.
+on the local database only). LP-1 to LP-3 committed as `174dbeb`.
+**LP-4 done** (approval chains per office, signer office and role per step,
+delegated final approval recorded on the signature and printed on TD v4 /
+FAAS v2, "Awaiting my approval" queue, chain editor, content-pack chain
+offices; migration `OfficeApprovalRouting` on the local database only).
+**LP-5 done** (letterhead of the office covering the record, else the
+issuing user's or the provincial office; `Office.LguName`; the `lgu` form
+key keeps its shape and a new `office` key is added; treasury forms
+unchanged; migration `OfficeLetterhead` on the local database only).
+**Next:** LP-6, approved FAAS/TD list per municipality and the monthly
+assessment roll submission (§3.7 as revised). The paragraphs below are the earlier
+history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so
 PRIME is the assessor's office system following the MRPAAO (CLAUDE.md §0).

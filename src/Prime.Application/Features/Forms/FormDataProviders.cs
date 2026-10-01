@@ -166,7 +166,10 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
             var records = await db.ApprovalRecords.AsNoTracking()
                 .Where(x => x.SubjectType == ApprovalSubjectType.Assessment && x.SubjectId == assessment.Id)
                 .OrderBy(x => x.StepSequence).ToListAsync(cancellationToken);
-            signatories.AddRange(records.Select(r => (object)new { label = r.Label, name = r.SignatoryName, position = r.SignatoryPosition, signedAt = r.SignedAt }));
+            signatories.AddRange(records.Select(r => (object)new
+            {
+                label = r.Label, name = r.SignatoryName, position = r.SignatoryPosition, signedAt = r.SignedAt, underDelegation = r.UnderDelegation,
+            }));
             if (records.Count == 0 && assessment.ApprovedBy is { } approver)
             {
                 var name = await db.AppUsers.Where(u => u.Id == approver).Select(u => u.DisplayName).FirstOrDefaultAsync(cancellationToken);

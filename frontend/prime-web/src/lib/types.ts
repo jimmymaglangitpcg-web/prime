@@ -1120,17 +1120,26 @@ export interface CreateFormDefinitionRequest {
   templateBody: string;
 }
 
+/** Whose staff signs a step (docs/analysis/province-wide-operation.md §3.4). */
+export type ApprovalSigner = 'Any' | 'PreparingOffice' | 'ProvincialOffice';
+
 export interface ApprovalStepDto {
   sequence: number;
   stepCode: string;
   label: string;
   signatoryPosition: string | null;
+  signerOffice: ApprovalSigner;
+  requiredRole: string | null;
+  isFinalApproval: boolean;
 }
 
 export interface ApprovalChainDto extends ConfigurationHeader {
   subjectType: ApprovalSubjectType;
   name: string;
   steps: ApprovalStepDto[];
+  /** Null for the provincial default. */
+  officeId: string | null;
+  officeCode: string | null;
 }
 
 export interface CreateApprovalChainRequest {
@@ -1139,7 +1148,11 @@ export interface CreateApprovalChainRequest {
   remarks?: string;
   subjectType: ApprovalSubjectType;
   name: string;
-  steps: { sequence: number; stepCode: string; label: string; signatoryPosition?: string }[];
+  officeId?: string | null;
+  steps: {
+    sequence: number; stepCode: string; label: string; signatoryPosition?: string;
+    signerOffice?: ApprovalSigner; requiredRole?: string | null; isFinalApproval?: boolean;
+  }[];
 }
 
 export interface FormPreviewDto {

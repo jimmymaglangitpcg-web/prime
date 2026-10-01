@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Prime.Domain.Common;
 using Prime.Domain.Entities.Forms;
 using Prime.Domain.Entities.Workflow;
+using Prime.Domain.Enums;
 
 namespace Prime.Infrastructure.Persistence.Configurations.Forms;
 
@@ -110,7 +111,9 @@ public sealed class ApprovalChainConfiguration : IEntityTypeConfiguration<Approv
         builder.Property(x => x.SubjectType).HasConversion<string>().HasMaxLength(40);
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.HasMany(x => x.Steps).WithOne().HasForeignKey(x => x.ApprovalChainId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasIndex(x => x.SubjectType).IsUnique().HasFilter(ConfigurationMapping.OpenApprovedFilter)
+        builder.HasOne(x => x.Office).WithMany().HasForeignKey(x => x.OfficeId).OnDelete(DeleteBehavior.Restrict);
+        // One open approved chain per subject and office; the provincial default (no office) counts as one scope.
+        builder.HasIndex(x => new { x.SubjectType, x.OfficeId }).IsUnique().AreNullsDistinct(false).HasFilter(ConfigurationMapping.OpenApprovedFilter)
             .HasDatabaseName("UX_ApprovalChains_OpenApproved");
     }
 }
@@ -124,6 +127,8 @@ public sealed class ApprovalChainStepConfiguration : IEntityTypeConfiguration<Ap
         builder.Property(x => x.StepCode).HasMaxLength(50).IsRequired();
         builder.Property(x => x.Label).HasMaxLength(200).IsRequired();
         builder.Property(x => x.SignatoryPosition).HasMaxLength(200);
+        builder.Property(x => x.SignerOffice).HasConversion<string>().HasMaxLength(20).HasDefaultValue(ApprovalSigner.Any);
+        builder.Property(x => x.RequiredRole).HasMaxLength(50);
         builder.HasIndex(x => new { x.ApprovalChainId, x.Sequence }).IsUnique();
     }
 }
@@ -140,6 +145,8 @@ public sealed class ApprovalRecordConfiguration : IEntityTypeConfiguration<Appro
         builder.Property(x => x.SignatoryPosition).HasMaxLength(200);
         builder.Property(x => x.SignatoryName).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Remarks).HasMaxLength(1000);
+        builder.Property(x => x.UnderDelegation).HasMaxLength(600);
+        builder.HasOne<Prime.Domain.Entities.Offices.ApprovalDelegation>().WithMany().HasForeignKey(x => x.DelegationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ApprovalChain>().WithMany().HasForeignKey(x => x.ApprovalChainId).OnDelete(DeleteBehavior.Restrict);
         // Each step is signed once per record; concurrent signers of the same step conflict here.
         builder.HasIndex(x => new { x.SubjectType, x.SubjectId, x.StepSequence }).IsUnique();

@@ -67,8 +67,13 @@ public class FormsController(IFormService forms) : ApiControllerBase
 
 /// <summary>Approval chains and signed steps (docs/FORMS-REVISION-PLAN.md §4.5).</summary>
 [Route("api/approval-chains")]
-public class ApprovalChainsController(IApprovalChainService chains) : ApiControllerBase
+public class ApprovalChainsController(IApprovalChainService chains, Prime.Application.Common.Interfaces.IClock clock) : ApiControllerBase
 {
+    /// <summary>Records whose next approval step the signed-in user may sign today (docs/analysis/province-wide-operation.md §3.4).</summary>
+    [HttpGet("~/api/approvals/awaiting")]
+    public async Task<ActionResult<IReadOnlyList<ApprovalQueueItemDto>>> Awaiting(CancellationToken ct) =>
+        HandleResult(await chains.ListAwaitingAsync(clock.Today, ct));
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ApprovalChainDto>>> List(CancellationToken ct) => HandleResult(await chains.ListAsync(ct));
 

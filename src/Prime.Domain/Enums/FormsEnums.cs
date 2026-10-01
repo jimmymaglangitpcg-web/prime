@@ -61,6 +61,17 @@ public enum FormSubjectType
     Payment = 8,
 }
 
+/// <summary>Whose staff signs an approval step (docs/analysis/province-wide-operation.md §3.4).</summary>
+public enum ApprovalSigner
+{
+    /// <summary>Anyone other than the creator and earlier signers (the rule before offices).</summary>
+    Any = 0,
+    /// <summary>The municipal office whose jurisdiction covers the record.</summary>
+    PreparingOffice = 1,
+    /// <summary>The Provincial Assessor's Office (or the delegated municipal Assessor, on a final step).</summary>
+    ProvincialOffice = 2,
+}
+
 /// <summary>Records whose approval can follow a configured <c>ApprovalChain</c>.</summary>
 public enum ApprovalSubjectType
 {

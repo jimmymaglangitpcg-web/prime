@@ -2,27 +2,36 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Features.Offices;
 using Prime.Domain.Entities.Workflow;
 using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.Approvals;
 
-public sealed record ApprovalStepRequest(int Sequence, string StepCode, string Label, string? SignatoryPosition);
+/// <param name="SignerOffice">Whose staff signs the step (docs/analysis/province-wide-operation.md §3.4); Any by default.</param>
+/// <param name="RequiredRole">A role code the signer must hold in their office, e.g. ASSESSOR.</param>
+/// <param name="IsFinalApproval">The step that makes the record final; only the last step may be.</param>
+public sealed record ApprovalStepRequest(int Sequence, string StepCode, string Label, string? SignatoryPosition,
+    ApprovalSigner SignerOffice = ApprovalSigner.Any, string? RequiredRole = null, bool IsFinalApproval = false);
 
+/// <param name="OfficeId">The municipal office the chain is for; null for the provincial default.</param>
 public sealed record CreateApprovalChainRequest(
     string LegalBasis, DateOnly EffectiveDate, string? Remarks,
-    ApprovalSubjectType SubjectType, string Name, IReadOnlyList<ApprovalStepRequest> Steps);
+    ApprovalSubjectType SubjectType, string Name, IReadOnlyList<ApprovalStepRequest> Steps, Guid? OfficeId = null);
 
-public sealed record ApprovalStepDto(int Sequence, string StepCode, string Label, string? SignatoryPosition);
+public sealed record ApprovalStepDto(int Sequence, string StepCode, string Label, string? SignatoryPosition,
+    ApprovalSigner SignerOffice, string? RequiredRole, bool IsFinalApproval);
 
 public sealed record ApprovalChainDto(
     Guid Id, ApprovalSubjectType SubjectType, string Name, IReadOnlyList<ApprovalStepDto> Steps,
     string LegalBasis, DateOnly EffectiveDate, DateOnly? EndDate, WorkflowStatus Status,
-    Guid? CreatedBy, DateTimeOffset CreatedAt, Guid? ApprovedBy, DateTimeOffset? ApprovedAt, string? Remarks);
+    Guid? CreatedBy, DateTimeOffset CreatedAt, Guid? ApprovedBy, DateTimeOffset? ApprovedAt, string? Remarks,
+    Guid? OfficeId = null, string? OfficeCode = null);
 
 public sealed record ApprovalRecordDto(
     Guid Id, ApprovalSubjectType SubjectType, Guid SubjectId, Guid ApprovalChainId, int StepSequence, string StepCode,
-    string Label, string? SignatoryPosition, Guid? UserId, string SignatoryName, DateTimeOffset SignedAt, string? Remarks);
+    string Label, string? SignatoryPosition, Guid? UserId, string SignatoryName, DateTimeOffset SignedAt, string? Remarks,
+    Guid? SignerOfficeId = null, Guid? DelegationId = null, string? UnderDelegation = null);
 
 public sealed class CreateApprovalChainRequestValidator : AbstractValidator<CreateApprovalChainRequest>
 {
@@ -40,6 +49,8 @@ public sealed class CreateApprovalChainRequestValidator : AbstractValidator<Crea
                 .WithMessage("stepCode must be UPPER_SNAKE_CASE.");
             s.RuleFor(x => x.Label).NotEmpty().MaximumLength(200);
             s.RuleFor(x => x.SignatoryPosition).MaximumLength(200);
+            s.RuleFor(x => x.SignerOffice).IsInEnum();
+            s.RuleFor(x => x.RequiredRole).MaximumLength(50);
         });
         RuleFor(x => x.Steps)
             .Must(list => list.Select(s => s.Sequence).OrderBy(s => s).SequenceEqual(Enumerable.Range(1, list.Count)))
@@ -49,8 +60,20 @@ public sealed class CreateApprovalChainRequestValidator : AbstractValidator<Crea
             .Must(list => list.Select(s => s.StepCode).Distinct().Count() == list.Count)
             .When(x => x.Steps is { Count: > 0 })
             .WithMessage("Step codes must be unique within a chain.");
+        RuleFor(x => x.Steps)
+            .Must(list => list.Where(s => s.IsFinalApproval).All(s => s.Sequence == list.Max(t => t.Sequence)))
+            .When(x => x.Steps is { Count: > 0 })
+            .WithMessage("Only the last step may be the final approval.");
     }
 }
+
+/// <summary>A record waiting for an approval step the current user may sign now (§3.4).</summary>
+/// <param name="Reference">The TD number, the assessment's year and RPU, or the transaction number.</param>
+/// <param name="StepLabel">The step to sign; for a record without a chain, the two-person approval.</param>
+/// <param name="UnderDelegation">The delegation the signature would be given under, if any.</param>
+public sealed record ApprovalQueueItemDto(
+    ApprovalSubjectType SubjectType, Guid SubjectId, Guid PropertyId, string Pin, string Reference, string StepLabel,
+    string? UnderDelegation, DateTimeOffset CreatedAt);
 
 /// <summary>
 /// What happened when a user signed the next step of a record's approval.
@@ -72,16 +95,28 @@ public interface IApprovalChainService
     /// current user, adding (not saving) an <see cref="ApprovalRecord"/>; the
     /// caller saves it with its own status change. Separation of duties: the
     /// record's creator and anyone who signed an earlier step cannot sign.
+    /// The chain is the one of the office covering the record, else the
+    /// provincial default; each step's signer office and role are enforced,
+    /// and a final provincial step goes to the preparing office's Assessor
+    /// while a delegation is in force on <paramref name="asOf"/> (§3.4).
     /// </summary>
     Task<Result<ApprovalStepOutcome>> SignNextStepAsync(ApprovalSubjectType subjectType, Guid subjectId, Guid? creatorId,
         DateOnly asOf, string? remarks, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records pending review, in the user's jurisdiction, whose next step the current user may sign on
+    /// <paramref name="asOf"/>: the same rules as signing. The <see cref="QueueLimit"/> oldest of each kind are checked.
+    /// </summary>
+    Task<Result<IReadOnlyList<ApprovalQueueItemDto>>> ListAwaitingAsync(DateOnly asOf, CancellationToken cancellationToken = default);
 }
 
-/// <summary>docs/FORMS-REVISION-PLAN.md §4.5.</summary>
+/// <summary>docs/FORMS-REVISION-PLAN.md §4.5; offices and delegation: docs/analysis/province-wide-operation.md §3.4.</summary>
 public sealed class ApprovalChainService(
     IApplicationDbContext db,
     IValidator<CreateApprovalChainRequest> validator,
-    ICurrentUserService currentUser) : IApprovalChainService
+    ICurrentUserService currentUser,
+    IOfficeContext officeContext,
+    IApprovalDelegationService delegations) : IApprovalChainService
 {
     public async Task<Result<ApprovalChainDto>> CreateAsync(CreateApprovalChainRequest request, CancellationToken cancellationToken = default)
     {
@@ -90,19 +125,33 @@ public sealed class ApprovalChainService(
         {
             return Result.Failure<ApprovalChainDto>("VALIDATION_FAILED", string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)));
         }
+        if (request.OfficeId is { } officeId
+            && await db.Offices.AsNoTracking().FirstOrDefaultAsync(x => x.Id == officeId, cancellationToken) is not { Kind: OfficeKind.Municipal })
+        {
+            return Result.Failure<ApprovalChainDto>("OFFICE_NOT_MUNICIPAL",
+                "A chain belongs to a municipal office, or to none (the provincial default).");
+        }
+        var roles = request.Steps.Select(s => s.RequiredRole).OfType<string>().Where(r => r.Length > 0).Distinct().ToList();
+        var known = await db.Roles.Where(r => roles.Contains(r.Code)).Select(r => r.Code).ToListAsync(cancellationToken);
+        if (roles.Except(known).ToList() is { Count: > 0 } unknown)
+        {
+            return Result.Failure<ApprovalChainDto>("ROLE_NOT_FOUND", $"Unknown role(s): {string.Join(", ", unknown)}.");
+        }
         var chain = new ApprovalChain
         {
             LegalBasis = request.LegalBasis, EffectiveDate = request.EffectiveDate, Remarks = request.Remarks,
-            SubjectType = request.SubjectType, Name = request.Name,
+            SubjectType = request.SubjectType, Name = request.Name, OfficeId = request.OfficeId,
             Steps = request.Steps.OrderBy(s => s.Sequence).Select(s => new ApprovalChainStep
             {
                 Sequence = s.Sequence, StepCode = s.StepCode, Label = s.Label,
                 SignatoryPosition = string.IsNullOrWhiteSpace(s.SignatoryPosition) ? null : s.SignatoryPosition,
+                SignerOffice = s.SignerOffice, RequiredRole = string.IsNullOrWhiteSpace(s.RequiredRole) ? null : s.RequiredRole,
+                IsFinalApproval = s.IsFinalApproval,
             }).ToList(),
         };
         db.ApprovalChains.Add(chain);
         await db.SaveChangesAsync(cancellationToken);
-        return Result.Success(ToDto(chain));
+        return await GetAsync(chain.Id, cancellationToken);
     }
 
     public async Task<Result<ApprovalChainDto>> ApproveAsync(Guid id, CancellationToken cancellationToken = default)
@@ -112,22 +161,24 @@ public sealed class ApprovalChainService(
         {
             return NotFound();
         }
-        if (await ConfigurationApproval.ApproveAsync(db, currentUser, db.ApprovalChains.Where(x => x.SubjectType == chain.SubjectType),
+        // Scope: the subject and the office (the provincial default is its own scope).
+        if (await ConfigurationApproval.ApproveAsync(db, currentUser,
+                db.ApprovalChains.Where(x => x.SubjectType == chain.SubjectType && x.OfficeId == chain.OfficeId),
                 chain, "APPROVAL_CHAIN", cancellationToken) is { } failure)
         {
             return Result.Failure<ApprovalChainDto>(failure.Code!, failure.Message!);
         }
-        return Result.Success(ToDto(chain));
+        return await GetAsync(id, cancellationToken);
     }
 
     public async Task<Result<ApprovalChainDto>> GetAsync(Guid id, CancellationToken cancellationToken = default) =>
-        await db.ApprovalChains.Include(x => x.Steps).FirstOrDefaultAsync(x => x.Id == id, cancellationToken) is { } chain
+        await db.ApprovalChains.AsNoTracking().Include(x => x.Steps).Include(x => x.Office).FirstOrDefaultAsync(x => x.Id == id, cancellationToken) is { } chain
             ? Result.Success(ToDto(chain))
             : NotFound();
 
     public async Task<Result<IReadOnlyList<ApprovalChainDto>>> ListAsync(CancellationToken cancellationToken = default) =>
-        Result.Success<IReadOnlyList<ApprovalChainDto>>((await db.ApprovalChains.Include(x => x.Steps)
-            .OrderBy(x => x.SubjectType).ThenByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt)
+        Result.Success<IReadOnlyList<ApprovalChainDto>>((await db.ApprovalChains.AsNoTracking().Include(x => x.Steps).Include(x => x.Office)
+            .OrderBy(x => x.SubjectType).ThenBy(x => x.Office!.Code).ThenByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt)
             .ToListAsync(cancellationToken)).Select(ToDto).ToList());
 
     public async Task<Result<IReadOnlyList<ApprovalRecordDto>>> ListRecordsAsync(ApprovalSubjectType subjectType, Guid subjectId,
@@ -139,45 +190,196 @@ public sealed class ApprovalChainService(
     public async Task<Result<ApprovalStepOutcome>> SignNextStepAsync(ApprovalSubjectType subjectType, Guid subjectId, Guid? creatorId,
         DateOnly asOf, string? remarks, CancellationToken cancellationToken = default)
     {
-        var signed = await db.ApprovalRecords.Where(x => x.SubjectType == subjectType && x.SubjectId == subjectId)
-            .OrderBy(x => x.StepSequence).ToListAsync(cancellationToken);
-
-        // A record already in a chain finishes under that chain, even if a newer one was approved since.
-        var chain = signed.Count > 0
-            ? await db.ApprovalChains.Include(x => x.Steps).SingleAsync(x => x.Id == signed[0].ApprovalChainId, cancellationToken)
-            : await db.ApprovalChains.Include(x => x.Steps).InForce(asOf).FirstOrDefaultAsync(x => x.SubjectType == subjectType, cancellationToken);
-        if (chain is null)
+        var plan = await PlanNextStepAsync(subjectType, subjectId, creatorId, asOf, cancellationToken);
+        if (plan.IsFailure)
+        {
+            return Result.Failure<ApprovalStepOutcome>(plan.Code!, plan.Message!);
+        }
+        var p = plan.Value;
+        if (p.Chain is null)
         {
             return Result.Success(new ApprovalStepOutcome(false, false, null));
+        }
+
+        var userId = currentUser.AppUserId;
+        var name = userId is null ? null : await db.AppUsers.Where(u => u.Id == userId).Select(u => u.DisplayName).FirstOrDefaultAsync(cancellationToken);
+        var record = new ApprovalRecord
+        {
+            SubjectType = subjectType, SubjectId = subjectId, ApprovalChainId = p.Chain.Id,
+            StepSequence = p.Step!.Sequence, StepCode = p.Step.StepCode, Label = p.Step.Label,
+            // Under a delegation the municipal Assessor signs in their own capacity.
+            SignatoryPosition = p.Delegation is not null ? p.PreparingOfficeHeadPosition ?? p.Step.SignatoryPosition : p.Step.SignatoryPosition,
+            UserId = userId, SignatoryName = string.IsNullOrWhiteSpace(name) ? "(unknown user)" : name,
+            SignedAt = DateTimeOffset.UtcNow, Remarks = remarks,
+            SignerOfficeId = p.SignerOfficeId,
+            DelegationId = p.Delegation?.Id,
+            UnderDelegation = p.Delegation is { } d
+                ? $"{d.InstrumentReference} dated {d.InstrumentDate:yyyy-MM-dd} of {d.DelegatingOfficialName}, {d.DelegatingOfficialPosition}"
+                : null,
+        };
+        db.ApprovalRecords.Add(record);
+        return Result.Success(new ApprovalStepOutcome(true, p.IsLast, record));
+    }
+
+    /// <summary>How many pending records of each kind the queue checks (each is evaluated like a signature).</summary>
+    public const int QueueLimit = 200;
+
+    public async Task<Result<IReadOnlyList<ApprovalQueueItemDto>>> ListAwaitingAsync(DateOnly asOf, CancellationToken cancellationToken = default)
+    {
+        // Pending records in the jurisdiction (the query filters apply). TDs drafted under a transaction are approved with it.
+        var candidates = new List<(ApprovalSubjectType Type, Guid Id, Guid? CreatedBy, Guid PropertyId, string Pin, string Reference, DateTimeOffset CreatedAt)>();
+        candidates.AddRange((await db.TaxDeclarations.AsNoTracking()
+                .Where(x => x.Status == WorkflowStatus.PendingReview && x.PropertyTransactionId == null)
+                .OrderBy(x => x.CreatedAt).Take(QueueLimit)
+                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.TaxDeclarationNumber, x.CreatedAt })
+                .ToListAsync(cancellationToken))
+            .Select(x => (ApprovalSubjectType.TaxDeclaration, x.Id, x.CreatedBy, x.PropertyId, x.PropertyIdentificationNumber, $"TD {x.TaxDeclarationNumber}", x.CreatedAt)));
+        candidates.AddRange((await db.Assessments.AsNoTracking()
+                .Where(x => x.Status == WorkflowStatus.PendingReview)
+                .OrderBy(x => x.CreatedAt).Take(QueueLimit)
+                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.AssessmentYear, x.Rpu!.RpuNumber, x.CreatedAt })
+                .ToListAsync(cancellationToken))
+            .Select(x => (ApprovalSubjectType.Assessment, x.Id, x.CreatedBy, x.PropertyId, x.PropertyIdentificationNumber,
+                $"Assessment {x.AssessmentYear}, RPU {x.RpuNumber}", x.CreatedAt)));
+        candidates.AddRange((await db.PropertyTransactions.AsNoTracking()
+                .Where(x => x.Status == WorkflowStatus.PendingReview)
+                .OrderBy(x => x.CreatedAt).Take(QueueLimit)
+                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.TransactionNumber, x.CreatedAt })
+                .ToListAsync(cancellationToken))
+            .Select(x => (ApprovalSubjectType.PropertyTransaction, x.Id, x.CreatedBy, x.PropertyId, x.PropertyIdentificationNumber,
+                $"Transaction {x.TransactionNumber ?? "(unnumbered)"}", x.CreatedAt)));
+
+        var userId = currentUser.AppUserId;
+        var items = new List<ApprovalQueueItemDto>();
+        foreach (var c in candidates)
+        {
+            var plan = await PlanNextStepAsync(c.Type, c.Id, c.CreatedBy, asOf, cancellationToken);
+            if (plan.IsFailure)
+            {
+                continue; // not this user's step
+            }
+            if (plan.Value.Chain is null)
+            {
+                // No chain in force: the two-person approval, by anyone but the creator.
+                if (userId is null || userId != c.CreatedBy)
+                {
+                    items.Add(new ApprovalQueueItemDto(c.Type, c.Id, c.PropertyId, c.Pin, c.Reference, "Approve (two-person check)", null, c.CreatedAt));
+                }
+                continue;
+            }
+            items.Add(new ApprovalQueueItemDto(c.Type, c.Id, c.PropertyId, c.Pin, c.Reference, plan.Value.Step!.Label,
+                plan.Value.Delegation?.InstrumentReference, c.CreatedAt));
+        }
+        return Result.Success<IReadOnlyList<ApprovalQueueItemDto>>(items.OrderBy(i => i.CreatedAt).ToList());
+    }
+
+    // --- Routing (§3.4) ---
+
+    /// <summary>The chain and next step for a record, and whether the current user may sign it now.</summary>
+    private sealed record StepPlan(ApprovalChain? Chain, ApprovalChainStep? Step, bool IsLast, ApprovalDelegationDto? Delegation,
+        Guid? SignerOfficeId, string? PreparingOfficeHeadPosition);
+
+    private async Task<Result<StepPlan>> PlanNextStepAsync(ApprovalSubjectType subjectType, Guid subjectId, Guid? creatorId, DateOnly asOf,
+        CancellationToken ct)
+    {
+        var signed = await db.ApprovalRecords.Where(x => x.SubjectType == subjectType && x.SubjectId == subjectId)
+            .OrderBy(x => x.StepSequence).ToListAsync(ct);
+        var (municipalityId, kind) = await SubjectAsync(subjectType, subjectId, ct);
+        var preparing = municipalityId is { } m
+            ? await db.OfficeJurisdictions.AsNoTracking().InForce(asOf).Where(j => j.MunicipalityId == m)
+                .Select(j => new { j.OfficeId, j.Office!.Code, j.Office.HeadPosition }).FirstOrDefaultAsync(ct)
+            : null;
+
+        // A record already in a chain finishes under that chain, even if a newer one was approved since.
+        // Otherwise: the preparing office's chain in force, else the provincial default.
+        ApprovalChain? chain;
+        if (signed.Count > 0)
+        {
+            chain = await db.ApprovalChains.Include(x => x.Steps).SingleAsync(x => x.Id == signed[0].ApprovalChainId, ct);
+        }
+        else
+        {
+            var inForce = db.ApprovalChains.Include(x => x.Steps).InForce(asOf).Where(x => x.SubjectType == subjectType);
+            chain = (preparing is not null ? await inForce.FirstOrDefaultAsync(x => x.OfficeId == preparing.OfficeId, ct) : null)
+                ?? await inForce.FirstOrDefaultAsync(x => x.OfficeId == null, ct);
+        }
+        if (chain is null)
+        {
+            return Result.Success(new StepPlan(null, null, false, null, null, null));
         }
 
         var steps = chain.Steps.OrderBy(s => s.Sequence).ToList();
         if (signed.Count >= steps.Count)
         {
-            return Result.Failure<ApprovalStepOutcome>("APPROVAL_ALREADY_COMPLETE", "Every step of this approval has already been signed.");
+            return Result.Failure<StepPlan>("APPROVAL_ALREADY_COMPLETE", "Every step of this approval has already been signed.");
         }
         var userId = currentUser.AppUserId;
         if (userId is not null && userId == creatorId)
         {
-            return Result.Failure<ApprovalStepOutcome>("CANNOT_SIGN_OWN_RECORD", "The record's creator cannot sign its approval (CLAUDE.md §46).");
+            return Result.Failure<StepPlan>("CANNOT_SIGN_OWN_RECORD", "The record's creator cannot sign its approval (CLAUDE.md §46).");
         }
         if (userId is not null && signed.Any(r => r.UserId == userId))
         {
-            return Result.Failure<ApprovalStepOutcome>("APPROVAL_STEP_SAME_SIGNER",
+            return Result.Failure<StepPlan>("APPROVAL_STEP_SAME_SIGNER",
                 "You already signed an earlier step of this approval; each step needs a different person.");
         }
 
         var step = steps[signed.Count];
-        var name = userId is null ? null : await db.AppUsers.Where(u => u.Id == userId).Select(u => u.DisplayName).FirstOrDefaultAsync(cancellationToken);
-        var record = new ApprovalRecord
+        ApprovalDelegationDto? delegation = null;
+        if (step.IsFinalApproval && step.SignerOffice == ApprovalSigner.ProvincialOffice && preparing is not null)
         {
-            SubjectType = subjectType, SubjectId = subjectId, ApprovalChainId = chain.Id,
-            StepSequence = step.Sequence, StepCode = step.StepCode, Label = step.Label, SignatoryPosition = step.SignatoryPosition,
-            UserId = userId, SignatoryName = string.IsNullOrWhiteSpace(name) ? "(unknown user)" : name,
-            SignedAt = DateTimeOffset.UtcNow, Remarks = remarks,
-        };
-        db.ApprovalRecords.Add(record);
-        return Result.Success(new ApprovalStepOutcome(true, signed.Count + 1 == steps.Count, record));
+            delegation = await delegations.FindInForceAsync(preparing.OfficeId, subjectType, kind, asOf, ct);
+        }
+
+        Guid? signerOfficeId = null;
+        if (userId is not null)
+        {
+            var scope = await officeContext.GetAsync(ct);
+            signerOfficeId = scope.OfficeId;
+            var refusal = delegation is not null
+                ? scope.OfficeId == preparing!.OfficeId && scope.HasRole(RoleCodes.Assessor)
+                    ? null
+                    : $"This final approval is delegated to {preparing.Code} ({delegation.InstrumentReference}); only that office's Assessor signs it. A delegation is not passed on."
+                : step.SignerOffice switch
+                {
+                    ApprovalSigner.PreparingOffice when preparing is null =>
+                        "No office covers this record's municipality, so its preparing office cannot sign. Assign the municipality to an office.",
+                    ApprovalSigner.PreparingOffice when scope.OfficeId != preparing!.OfficeId =>
+                        $"The step \"{step.Label}\" is signed by the preparing office ({preparing.Code}).",
+                    ApprovalSigner.ProvincialOffice when scope.OfficeKind != OfficeKind.Provincial =>
+                        $"The step \"{step.Label}\" is signed by the Provincial Assessor's Office.",
+                    _ => null,
+                };
+            if (refusal is null && step.RequiredRole is { } role && delegation is null && !scope.HasRole(role))
+            {
+                refusal = $"The step \"{step.Label}\" needs the {role} role in the signing office.";
+            }
+            if (refusal is not null)
+            {
+                return Result.Failure<StepPlan>("APPROVAL_STEP_FORBIDDEN", refusal);
+            }
+        }
+        return Result.Success(new StepPlan(chain, step, signed.Count + 1 == steps.Count, delegation, signerOfficeId, preparing?.HeadPosition));
+    }
+
+    /// <summary>The record's municipality and, for FAAS/TD records, its property kind (delegations may be limited by kind).</summary>
+    private async Task<(Guid? MunicipalityId, RpuType? Kind)> SubjectAsync(ApprovalSubjectType type, Guid id, CancellationToken ct)
+    {
+        switch (type)
+        {
+            case ApprovalSubjectType.Assessment:
+                var a = await db.Assessments.Where(x => x.Id == id)
+                    .Select(x => new { x.Property!.MunicipalityId, x.Rpu!.RpuType }).FirstOrDefaultAsync(ct);
+                return (a?.MunicipalityId, a?.RpuType);
+            case ApprovalSubjectType.TaxDeclaration:
+                var t = await db.TaxDeclarations.Where(x => x.Id == id)
+                    .Select(x => new { x.Property!.MunicipalityId, x.Rpu!.RpuType }).FirstOrDefaultAsync(ct);
+                return (t?.MunicipalityId, t?.RpuType);
+            default:
+                // A transaction concerns the property as a whole: only delegations covering every kind apply.
+                var p = await db.PropertyTransactions.Where(x => x.Id == id).Select(x => (Guid?)x.Property!.MunicipalityId).FirstOrDefaultAsync(ct);
+                return (p, null);
+        }
     }
 
     private static Result<ApprovalChainDto> NotFound() =>
@@ -185,10 +387,12 @@ public sealed class ApprovalChainService(
 
     private static ApprovalChainDto ToDto(ApprovalChain x) => new(
         x.Id, x.SubjectType, x.Name,
-        x.Steps.OrderBy(s => s.Sequence).Select(s => new ApprovalStepDto(s.Sequence, s.StepCode, s.Label, s.SignatoryPosition)).ToList(),
-        x.LegalBasis, x.EffectiveDate, x.EndDate, x.Status, x.CreatedBy, x.CreatedAt, x.ApprovedBy, x.ApprovedAt, x.Remarks);
+        x.Steps.OrderBy(s => s.Sequence).Select(s => new ApprovalStepDto(s.Sequence, s.StepCode, s.Label, s.SignatoryPosition,
+            s.SignerOffice, s.RequiredRole, s.IsFinalApproval)).ToList(),
+        x.LegalBasis, x.EffectiveDate, x.EndDate, x.Status, x.CreatedBy, x.CreatedAt, x.ApprovedBy, x.ApprovedAt, x.Remarks,
+        x.OfficeId, x.Office?.Code);
 
     internal static ApprovalRecordDto ToDto(ApprovalRecord x) => new(
         x.Id, x.SubjectType, x.SubjectId, x.ApprovalChainId, x.StepSequence, x.StepCode, x.Label, x.SignatoryPosition,
-        x.UserId, x.SignatoryName, x.SignedAt, x.Remarks);
+        x.UserId, x.SignatoryName, x.SignedAt, x.Remarks, x.SignerOfficeId, x.DelegationId, x.UnderDelegation);
 }

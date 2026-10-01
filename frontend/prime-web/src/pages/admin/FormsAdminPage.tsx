@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Button, Card, DatePicker, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Checkbox, DatePicker, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography, message } from 'antd';
 import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
@@ -15,9 +15,12 @@ import {
   useNumberingSchemes,
 } from '../../api/forms';
 import { apiGet, ApiRequestError } from '../../lib/apiClient';
+import { useOffices, useRoles } from '../../api/offices';
 import { TransactionTypesTab } from './TransactionTypesTab';
 import type {
   ApprovalChainDto,
+  ApprovalSigner,
+  CreateApprovalChainRequest,
   FormAuthority,
   FormDefinitionDto,
   FormSubjectType,
@@ -208,8 +211,12 @@ function FormsTab() {
 
 // --- Approval chains ---
 
+const signerLabel: Record<ApprovalSigner, string> = { Any: 'Anyone', PreparingOffice: 'Preparing (municipal) office', ProvincialOffice: 'Provincial office' };
+
 function ChainsTab() {
   const { data = [], isLoading } = useApprovalChains();
+  const offices = useOffices();
+  const roles = useRoles();
   const create = useCreateApprovalChain();
   const approve = useApproveApprovalChain();
   const [open, setOpen] = useState(false);
@@ -221,17 +228,27 @@ function ChainsTab() {
       {ctx}
       <Space style={{ marginBottom: 12 }} wrap>
         <Button icon={<PlusOutlined />} onClick={() => setOpen(true)}>New approval chain</Button>
-        <Typography.Text type="secondary">Without an approved chain, approval is the two-person maker-checker.</Typography.Text>
+        <Typography.Text type="secondary">
+          A record follows its office&apos;s chain, else the provincial default. Without any approved chain, approval is the two-person maker-checker.
+        </Typography.Text>
       </Space>
       <Table<ApprovalChainDto>
         rowKey="id" size="small" loading={isLoading} dataSource={data} pagination={false} scroll={{ x: 'max-content' }}
         columns={[
           { title: 'Approves', dataIndex: 'subjectType' },
+          { title: 'Office', render: (_, x) => x.officeCode ?? <Tag color="blue">Provincial default</Tag> },
           { title: 'Name', dataIndex: 'name' },
           {
             title: 'Steps', render: (_, x) => (
               <ol style={{ margin: 0, paddingLeft: 18 }}>
-                {x.steps.map((s) => <li key={s.sequence}>{s.label}{s.signatoryPosition ? ` — ${s.signatoryPosition}` : ''} <code>{s.stepCode}</code></li>)}
+                {x.steps.map((s) => (
+                  <li key={s.sequence}>
+                    {s.label}{s.signatoryPosition ? ` — ${s.signatoryPosition}` : ''} <code>{s.stepCode}</code>
+                    {s.signerOffice !== 'Any' && <Tag style={{ marginInlineStart: 6 }}>{signerLabel[s.signerOffice]}</Tag>}
+                    {s.requiredRole && <Tag>{s.requiredRole}</Tag>}
+                    {s.isFinalApproval && <Tag color="green">final</Tag>}
+                  </li>
+                ))}
               </ol>
             ),
           },
@@ -251,10 +268,19 @@ function ChainsTab() {
           onFinish={(v) => create.mutate({
             ...v,
             effectiveDate: v.effectiveDate.format('YYYY-MM-DD'),
-            steps: v.steps.map((s: { stepCode: string; label: string; signatoryPosition?: string }, i: number) => ({ ...s, sequence: i + 1 })),
+            officeId: v.officeId === 'default' ? null : v.officeId,
+            steps: v.steps.map((s: CreateApprovalChainRequest['steps'][number], i: number, all: unknown[]) =>
+              ({ ...s, sequence: i + 1, isFinalApproval: !!s.isFinalApproval && i === all.length - 1 })),
           }, { onSuccess: () => { form.resetFields(); setOpen(false); } })}>
           <Form.Item name="subjectType" label="Approves" rules={[{ required: true }]}>
             <Select options={['Assessment', 'TaxDeclaration', 'PropertyTransaction'].map((s) => ({ value: s, label: s }))} />
+          </Form.Item>
+          <Form.Item name="officeId" label="For" rules={[{ required: true }]}
+            extra="A chain for one municipal office, or the provincial default used by offices without their own.">
+            <Select options={[
+              { value: 'default', label: 'Provincial default (all offices without their own chain)' },
+              ...(offices.data ?? []).filter((o) => o.kind === 'Municipal' && o.status === 'Active').map((o) => ({ value: o.id, label: `${o.code} — ${o.name}` })),
+            ]} />
           </Form.Item>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Typography.Text strong>Steps, in signing order</Typography.Text>
@@ -269,6 +295,15 @@ function ChainsTab() {
                     </Form.Item>
                     <Form.Item name={[field.name, 'label']} rules={[{ required: true }]}><Input placeholder="Printed label" /></Form.Item>
                     <Form.Item name={[field.name, 'signatoryPosition']}><Input placeholder="Position (optional)" /></Form.Item>
+                    <Form.Item name={[field.name, 'signerOffice']} initialValue="Any">
+                      <Select style={{ width: 210 }} aria-label="Signed by" options={(Object.keys(signerLabel) as ApprovalSigner[]).map((k) => ({ value: k, label: signerLabel[k] }))} />
+                    </Form.Item>
+                    <Form.Item name={[field.name, 'requiredRole']}>
+                      <Select allowClear style={{ width: 170 }} placeholder="Role (optional)" options={(roles.data ?? []).map((r) => ({ value: r.code, label: r.name }))} />
+                    </Form.Item>
+                    {i === fields.length - 1 && (
+                      <Form.Item name={[field.name, 'isFinalApproval']} valuePropName="checked"><Checkbox>Final approval</Checkbox></Form.Item>
+                    )}
                     {fields.length > 1 && <MinusCircleOutlined aria-label="Remove step" onClick={() => remove(field.name)} />}
                   </Space>
                 ))}

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-09-29 |
-| Status | **Approved 2026-09-29: all recommendations Q1–Q13 accepted.** LP-1 to LP-3 done (§9); LP-4 next |
+| Status | **Approved 2026-09-29: all recommendations Q1–Q13 accepted.** LP-1 to LP-5 done (§9); LP-6 next |
 | Rules | CLAUDE.md §9, §46, §47, §68, §85, §117 (deployment scope), §118 (no LGU data in git) |
 | Commit status | Contains no LAM text or LGU data; may be committed |
 
@@ -176,6 +176,18 @@ the record back to Draft for the municipal office to correct.
   snapshot, as for registers). The province acknowledges receipt. LP builds
   this one transmittal. The other reports (assessment rolls by municipality,
   the BLGF reports) come with Phase 11, once the office answers question A5.
+- **A5 answered (2026-09-29); revision accepted the same day, replacing the
+  period list above for LP-6.** Today
+  each TD, FAAS and Notice of Cancellation goes to the province one by one,
+  as an attachment, not as a list; the assessment roll goes monthly. Proposed
+  for LP-6 instead of the period list above:
+  - *Individual documents:* in one instance the Provincial Assessor already
+    approves every FAAS and TD (A2, A3), so the approval is the submission.
+    Each approved document keeps its frozen printed snapshot, and the
+    province gets a per-municipality list of them to open or download. The
+    Notice of Cancellation joins when it is built (L3-4).
+  - *Monthly assessment roll:* the municipal office produces the month's
+    roll (a register run) and submits it; the province acknowledges receipt.
 
 ### 3.8 Existing data
 
@@ -226,12 +238,12 @@ there is UI, documentation (CLAUDE.md §107).
 
 | Question list item | Enters PRIME as |
 |---|---|
-| A1 offices and coverage | Offices and jurisdictions (content pack or admin) |
-| A2 delegations | Delegation records |
-| A3 approval steps | Approval chains per office |
-| A4 signatories | Office letterhead and chain step positions; user accounts |
+| A1 offices and coverage — **answered 2026-09-29:** one provincial office, one office per municipality covering its own town; no exceptions | Offices and jurisdictions (content pack or admin); only the `Provincial` and `Municipal` kinds needed (Q1) |
+| A2 delegations — **answered 2026-09-29:** none; every FAAS and TD goes to the province for final approval | Delegation records |
+| A3 approval steps — **answered 2026-09-29:** municipal preparation → Municipal Assessor review → Provincial Assessor approval; no step in between; the same for every transaction type and property kind | Approval chains per office |
+| A4 signatories — **partly answered 2026-09-29:** titles "Municipal Assessor" and "Provincial Assessor"; "appraised by" has no fixed position; only the appointed Municipal Assessor signs the review (no officer in charge); names still open | Office letterhead and chain step positions; user accounts |
 | A5 reports | Transmittal contents; Phase 11 reports |
-| A6 province may edit? | §3.4 "returning a record" (default: return, not edit) |
+| A6 province may edit? — **answered 2026-09-29:** no; the province returns the record with remarks | §3.4 "returning a record" (default: return, not edit) |
 | A7 users | Office assignments |
 
 ## 8. Review questions
@@ -465,3 +477,136 @@ DEMO offices.
   - revoked from today, shown "Revoked";
   - no console errors, no overflow at 390 px.
   The revoked DEMO delegation `DEMO-UI-LP3 …` remains in the dev database.
+
+### LP-4 — approval by office, provincial or delegated (2026-09-29)
+
+**Built**
+- **Model (migration `OfficeApprovalRouting`, local database only):**
+  - `ApprovalChain.OfficeId`: a municipal office's chain, or null for the
+    provincial default. The open-approved index becomes (subject, office),
+    where "no office" counts as one scope.
+  - `ApprovalChainStep` gains `SignerOffice` (Any — the rule before offices
+    and the default for existing steps — PreparingOffice or
+    ProvincialOffice), `RequiredRole` and `IsFinalApproval` (only on the
+    last step).
+  - `ApprovalRecord` gains `SignerOfficeId`, `DelegationId` and the frozen
+    `UnderDelegation` text (instrument, date, delegating official).
+- **Routing (`ApprovalChainService.SignNextStepAsync`):**
+  - the preparing office is the one whose jurisdiction covers the record's
+    municipality on the signing date;
+  - the chain is that office's chain in force, else the provincial default;
+    a record already in a chain finishes under it;
+  - step rules: a PreparingOffice step is signed by that office's staff; a
+    ProvincialOffice step by the provincial office; a required role must be
+    held;
+  - a final ProvincialOffice step, while a delegation for the preparing
+    office covering the record type (and, for FAAS/TD records, the property
+    kind) is in force **on the signing date** (Q7), is signed by that
+    office's ASSESSOR only (not sub-delegable). The signature stores the
+    delegation, and its printed position is the office head's;
+  - a refusal is `APPROVAL_STEP_FORBIDDEN` (403) with a message naming who
+    signs;
+  - a property transaction concerns the whole property, so only
+    delegations covering every property kind apply to it.
+- **Unchanged:** with no chain in force, the two-person maker-checker
+  applies as before. **For deployment:** provincial final approval is
+  therefore enforced through the chains the province configures. The
+  province needs a default chain (and any per-office chains) whose last
+  step is ProvincialOffice and final.
+- **Printing (LP-4b):**
+  - signatures carry `underDelegation` (TD data provider,
+    `AppraisalSignatureDto`);
+  - new built-in versions TAX_DECLARATION v4 and FAAS_LAND/BUILDING/
+    MACHINERY v2 print it ("under delegation: …"). The seeder installs them
+    from today; issued forms keep their version.
+- **Awaiting my approval (LP-4c):**
+  - `GET /api/approvals/awaiting` lists pending TDs (not those under a
+    transaction), assessments and transactions in the user's jurisdiction
+    whose next step the user may sign now, evaluated by the same routing as
+    signing;
+  - it checks the 200 oldest of each kind;
+  - page `/approvals` in the menu, linking to each property.
+- **Chain editor:** chooses the office (or the provincial default) and, per
+  step, "signed by", role and "final approval"; the list shows them.
+- **Content pack:**
+  - approval chains accept `office` (a municipal office code in PRIME, or
+    one an earlier offices file of the pack adds, resolved at import);
+  - steps accept `signerOffice`, `requiredRole` and `isFinalApproval`;
+  - the key is subject + office.
+
+**Verified**
+- 5 new routing tests (`ApprovalRoutingTests`):
+  - no delegation: preparing-office review, province-only final step, the
+    role required, the creator refused;
+  - delegation in force: the province refused, another office refused, the
+    office's second Assessor signs, and the signature records the
+    delegation and the office head's position;
+  - a delegation for other property kinds, or revoked from today, leaves
+    the province;
+  - the provincial default for an office without its own chain;
+  - the queue lists the record for exactly the next signer.
+- 4 renderer tests: TD v4 and the three FAAS v2 layouts print the
+  delegation; the new templates parse.
+- 1 content-pack test: a chain naming an office the pack adds, with its
+  signer rules; an invalid `signerOffice` refused; a re-import is a no-op.
+- Full suite: 469 tests pass. `npm run build` and `npm run lint` are clean.
+- Browser (Playwright):
+  - a TaxDeclaration chain for the DEMO municipal office created (preparing
+    review, provincial final with ASSESSOR) and approved by the checker;
+    the table shows the office, signer tags and "final";
+  - the queue page loads for the DEMO municipal Assessor, the checker and
+    the usual user; the checker sees a pending DEMO TD for the two-person
+    check;
+  - no console errors, no overflow at 390 px.
+  The DEMO chain (effective 2099-01-01, so the dev database behaves as
+  before) remains in the dev database.
+
+### LP-5 — letterhead per office (2026-10-01)
+
+**Built**
+- **`Office.LguName`:** the local government printed above the office on
+  its letterhead (for example the province or the municipality). Migration
+  `OfficeLetterhead` adds one nullable column; **local database only**.
+  Entered on the Offices page ("Local government on the letterhead") or by
+  the content pack (`lguName` on an office; a change shows as Changed).
+- **Which office prints (`FormLetterhead`):**
+  - TD, FAAS, appraisal record, Notice of Assessment, register run and sworn
+    statement: the office whose jurisdiction covers the record's
+    municipality today;
+  - a register with no municipality (the Ownership Record Form, kept by
+    owner): the issuing user's office;
+  - otherwise, or when that office is inactive: the provincial office;
+  - with no active office at all, the `Lgu:` settings as before.
+- **What prints:** the snapshot key `lgu` keeps its shape, so every form
+  version already issued or in force prints the office without a new
+  template version: `name` = the office's LGU name, `office` = its name,
+  `address`, and new `contact`. `province` and `sanggunianName` stay
+  settings (§3.6). A new key `office` carries code, kind, LGU name, head's
+  position, address and contact for later layouts (L5).
+- **No borrowing:** once an office is found, the letterhead is that office's
+  fields only. A blank LGU name prints none, rather than another LGU's name
+  from the settings.
+- **Treasury forms** (tax bill, statement of account, receipt) keep the
+  `Lgu:` settings and get no office (CLAUDE.md §0).
+- Signatures were already per office: they come from the frozen approval
+  records (LP-4). Logos still wait for document storage (§59).
+
+**Deviation from §3.6:** the `Lgu:` name, office and address settings are
+not removed. They remain the fallback for a database with no office, which
+keeps single-office installations and the treasury forms unchanged.
+
+**Verified**
+- 1 new integration test (`LetterheadTests`): a TD in a covered town prints
+  that office (snapshot and the rendered TAX_DECLARATION form); an office
+  without an LGU name prints none; an uncovered town and an inactive office
+  fall back to the provincial office; an Ownership Record Form prints the
+  issuing user's office, else the provincial one; a tax bill keeps the
+  settings.
+- The content-pack offices test now imports and changes `lguName`.
+- Full suite: 470 tests pass. `npm run build` and `npm run lint` are clean.
+- Browser (Playwright): the LGU name and address entered for the DEMO
+  municipal office on the Offices page show in its row; a TD of
+  DEMO_Municipality previews with that name above the title; a TD of a town
+  no office covers does not; no console errors, no overflow at 390 px. The
+  DEMO office keeps that LGU name and address in the dev database.
+

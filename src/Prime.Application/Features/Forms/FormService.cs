@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Features.Offices;
 using Prime.Domain.Entities.Forms;
 using Prime.Domain.Enums;
 
@@ -79,7 +80,8 @@ public sealed class FormService(
     IEnumerable<IFormDataProvider> providers,
     IOptions<LguOptions> lgu,
     IClock clock,
-    IJurisdiction jurisdiction) : IFormService
+    IJurisdiction jurisdiction,
+    IOfficeContext officeContext) : IFormService
 {
     /// <summary>
     /// Whether an issued form's subject lies in the request's jurisdiction
@@ -284,8 +286,9 @@ public sealed class FormService(
             authority = definition.Authority.ToString(), provisional = Provisional(definition),
             sourceReference = definition.SourceReference, legalBasis = definition.LegalBasis,
         });
-        snapshot["lgu"] = FormData.ToJson(new { name = lgu.Value.Name, office = lgu.Value.Office, province = lgu.Value.Province, address = lgu.Value.Address,
-            sanggunianName = lgu.Value.SanggunianName });
+        var (letterhead, office) = await FormLetterhead.BuildAsync(db, officeContext, lgu.Value, definition.SubjectType, subjectId, today, ct);
+        snapshot["lgu"] = letterhead;
+        snapshot["office"] = office;
         snapshot["issue"] = FormData.ToJson(new { issuedAt = clock.UtcNow, issuedBy = issuerName, isPreview = preview, documentNumber = subject.DocumentNumber });
         return Result.Success((definition, subject, snapshot));
     }

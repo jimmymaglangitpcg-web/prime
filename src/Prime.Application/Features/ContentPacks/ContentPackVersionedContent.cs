@@ -13,6 +13,7 @@ using Prime.Application.Features.Numbering;
 using Prime.Application.Features.Offices;
 using Prime.Application.Features.Transactions;
 using Prime.Domain.Common;
+using Prime.Domain.Entities.Workflow;
 using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.ContentPacks;
@@ -28,6 +29,9 @@ public sealed record PlannedVersion(string Kind, string Key, string Name, int It
 
 /// <summary>An office's details to update (step LP-1).</summary>
 public sealed record PackOfficeUpdate(Guid OfficeId, UpdateOfficeRequest Request);
+
+/// <summary>An approval chain for an office the same pack creates; the office is resolved at import (step LP-4).</summary>
+public sealed record PackApprovalChain(string OfficeCode, CreateApprovalChainRequest Request);
 
 /// <summary>A jurisdiction draft; the office and municipality are resolved at import, when both exist (step LP-1).</summary>
 public sealed record PackOfficeJurisdiction(string OfficeCode, string MunicipalityPsgcCode, DateOnly EffectiveDate, string LegalBasis, string? Remarks);
@@ -80,17 +84,20 @@ public sealed class ContentPackVersionedContent(
     private sealed record ChainItem(string? SubjectType, string? Name, string? Office, string? LegalBasis, string? EffectiveDate, string? Remarks,
         List<StepItem>? Steps, string? Source);
 
-    private sealed record StepItem(string? StepCode, string? Label, string? SignatoryPosition);
+    private sealed record StepItem(string? StepCode, string? Label, string? SignatoryPosition, string? SignerOffice = null, string? RequiredRole = null,
+        bool? IsFinalApproval = null);
 
     private sealed record FormItem(string? Code, string? Title, string? SubjectType, string? Authority, string? Template, string? LegalBasis,
         string? SourceReference, string? EffectiveDate, string? Remarks, string? Source);
 
     private sealed record OfficeItem(string? Code, string? Name, string? Kind, string? HeadPosition, string? Address, string? Contact,
-        List<string>? Municipalities, string? EffectiveDate, string? LegalBasis, string? Remarks, string? Source);
+        List<string>? Municipalities, string? EffectiveDate, string? LegalBasis, string? Remarks, string? Source, string? LguName = null);
 
     /// <param name="pendingMunicipalities">PSGC codes of municipalities the same pack adds; offices may cover them.</param>
+    /// <param name="pendingOffices">Codes of offices an earlier file of the same pack adds; approval chains may name them.</param>
     public async Task<VersionedPreview> PreviewAsync(string kind, string path, byte[] bytes, string? fileSource,
-        Func<string, Task<Result<ContentFileRead>>> readFile, CancellationToken ct, IReadOnlySet<string>? pendingMunicipalities = null)
+        Func<string, Task<Result<ContentFileRead>>> readFile, CancellationToken ct, IReadOnlySet<string>? pendingMunicipalities = null,
+        IReadOnlySet<string>? pendingOffices = null)
     {
         var result = new VersionedPreview([], [], [], 0, 0);
         try
@@ -99,7 +106,7 @@ public sealed class ContentPackVersionedContent(
             {
                 ContentFileKinds.TransactionTypes => await TypesAsync(Parse<TypeItem>(bytes), fileSource, result, ct),
                 ContentFileKinds.NumberingSchemes => await SchemesAsync(Parse<SchemeItem>(bytes), fileSource, result, ct),
-                ContentFileKinds.ApprovalChains => await ChainsAsync(Parse<ChainItem>(bytes), fileSource, result, ct),
+                ContentFileKinds.ApprovalChains => await ChainsAsync(Parse<ChainItem>(bytes), fileSource, pendingOffices ?? new HashSet<string>(), result, ct),
                 ContentFileKinds.Forms => await FormsAsync(Parse<FormItem>(bytes), fileSource, readFile, result, ct),
                 ContentFileKinds.Offices => await OfficesAsync(Parse<OfficeItem>(bytes), fileSource, pendingMunicipalities ?? new HashSet<string>(), result, ct),
                 _ => throw new InvalidOperationException($"Not a versioned kind: {kind}"),
@@ -118,12 +125,22 @@ public sealed class ContentPackVersionedContent(
         CreateTransactionTypeRequest r => Map("TransactionType", await transactions.CreateTypeAsync(r, ct), x => x.Id),
         CreateNumberingSchemeRequest r => Map("NumberingScheme", await numbering.CreateAsync(r, ct), x => x.Id),
         CreateApprovalChainRequest r => Map("ApprovalChain", await chains.CreateAsync(r, ct), x => x.Id),
+        PackApprovalChain r => await CreateChainForNewOfficeAsync(r, ct),
         CreateFormDefinitionRequest r => Map("FormDefinition", await forms.CreateDefinitionAsync(r, ct), x => x.Id),
         CreateOfficeRequest r => Map("Office", await offices.CreateAsync(r, ct), x => x.Id),
         PackOfficeUpdate r => Map("Office", await offices.UpdateAsync(r.OfficeId, r.Request, ct), x => x.Id),
         PackOfficeJurisdiction r => await CreateJurisdictionAsync(r, ct),
         _ => throw new InvalidOperationException("Unknown planned version."),
     };
+
+    /// <summary>A chain for an office the same pack creates: the office is resolved by code at import.</summary>
+    private async Task<Result<(string, Guid)>> CreateChainForNewOfficeAsync(PackApprovalChain r, CancellationToken ct)
+    {
+        var officeId = await db.Offices.Where(o => o.Code == r.OfficeCode).Select(o => (Guid?)o.Id).FirstOrDefaultAsync(ct);
+        return officeId is null
+            ? Result.Failure<(string, Guid)>("CONTENT_PACK_IMPORT_FAILED", $"Office {r.OfficeCode} was not found at import.")
+            : Map("ApprovalChain", await chains.CreateAsync(r.Request with { OfficeId = officeId }, ct), x => x.Id);
+    }
 
     /// <summary>Resolves the office and municipality by code now that the pack's offices and geography exist.</summary>
     private async Task<Result<(string, Guid)>> CreateJurisdictionAsync(PackOfficeJurisdiction r, CancellationToken ct)
@@ -239,11 +256,18 @@ public sealed class ContentPackVersionedContent(
         return result with { Items = items.Count, Unchanged = unchanged };
     }
 
-    // --- Approval chains (key: the subject; offices come with step LP) ---
+    // --- Approval chains (key: the subject and office; docs/analysis/province-wide-operation.md §3.4) ---
 
-    private async Task<VersionedPreview> ChainsAsync(List<ChainItem> items, string? fileSource, VersionedPreview result, CancellationToken ct)
+    /// <summary>
+    /// A chain without "office" is the provincial default; with one, it names a municipal office by code, in
+    /// PRIME or added by an earlier offices file of the pack. Steps may carry signerOffice (Any,
+    /// PreparingOffice, ProvincialOffice), requiredRole and isFinalApproval.
+    /// </summary>
+    private async Task<VersionedPreview> ChainsAsync(List<ChainItem> items, string? fileSource, IReadOnlySet<string> pendingOffices,
+        VersionedPreview result, CancellationToken ct)
     {
         var existing = await db.ApprovalChains.AsNoTracking().Include(x => x.Steps).ToListAsync(ct);
+        var offices = await db.Offices.AsNoTracking().ToDictionaryAsync(o => o.Code, StringComparer.Ordinal, ct);
         var unchanged = 0;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (var i = 0; i < items.Count; i++)
@@ -254,39 +278,75 @@ public sealed class ContentPackVersionedContent(
             {
                 continue;
             }
-            if (Trim(x.Office) is not null)
+            var officeCode = Trim(x.Office);
+            Guid? officeId = null;
+            if (officeCode is not null)
             {
-                result.Issues.Add(Error("OFFICE_NOT_YET_SUPPORTED",
-                    $"Item {n}: approval chains per office arrive with step LP-4 (docs/analysis/province-wide-operation.md §3.4); remove 'office' for now.",
-                    null, $"[{n}].office"));
+                if (offices.TryGetValue(officeCode, out var office))
+                {
+                    if (office.Kind != OfficeKind.Municipal)
+                    {
+                        result.Issues.Add(Error("OFFICE_NOT_MUNICIPAL", $"Item {n}: a chain names a municipal office, or none for the provincial default.", null, $"[{n}].office"));
+                        continue;
+                    }
+                    officeId = office.Id;
+                }
+                else if (!pendingOffices.Contains(officeCode))
+                {
+                    result.Issues.Add(Error("OFFICE_NOT_FOUND", $"Item {n}: office {officeCode} is neither in PRIME nor added by an earlier offices file of the pack.",
+                        null, $"[{n}].office"));
+                    continue;
+                }
+            }
+
+            var steps = new List<ApprovalStepRequest>();
+            var stepsValid = true;
+            foreach (var (s, j) in (x.Steps ?? []).Select((s, j) => (s, j)))
+            {
+                var signer = ApprovalSigner.Any;
+                if (Trim(s.SignerOffice) is not null && !TryEnum(result, n, $"steps[{j + 1}].signerOffice", s.SignerOffice, out signer))
+                {
+                    stepsValid = false;
+                    continue;
+                }
+                steps.Add(new ApprovalStepRequest(j + 1, Trim(s.StepCode) ?? "", Trim(s.Label) ?? "", Trim(s.SignatoryPosition),
+                    signer, Trim(s.RequiredRole), s.IsFinalApproval ?? false));
+            }
+            var request = new CreateApprovalChainRequest(Trim(x.LegalBasis) ?? "", effective, Trim(x.Remarks), subject, Trim(x.Name) ?? "", steps, officeId);
+            if (!stepsValid || !await ValidAsync(chainValidator, request, result, n, ct)
+                || !Unique(result, seen, $"{subject} {officeCode ?? "(provincial default)"}", n, "subjectType/office"))
+            {
                 continue;
             }
-            var steps = (x.Steps ?? []).Select((s, j) => new ApprovalStepRequest(j + 1, Trim(s.StepCode) ?? "", Trim(s.Label) ?? "", Trim(s.SignatoryPosition))).ToList();
-            var request = new CreateApprovalChainRequest(Trim(x.LegalBasis) ?? "", effective, Trim(x.Remarks), subject, Trim(x.Name) ?? "", steps);
-            if (!await ValidAsync(chainValidator, request, result, n, ct) || !Unique(result, seen, subject.ToString(), n, "subjectType"))
-            {
-                continue;
-            }
-            var scope = existing.Where(e => e.SubjectType == subject).ToList();
+            // A new office has no chains yet.
+            var scope = officeCode is not null && officeId is null ? [] : existing.Where(e => e.SubjectType == subject && e.OfficeId == officeId).ToList();
             var current = Current(scope);
-            var wanted = Steps(steps.Select(s => (s.StepCode, s.Label, s.SignatoryPosition)));
+            var wanted = ChainSteps(steps.Select(s => (s.StepCode, s.Label, s.SignatoryPosition, s.SignerOffice, s.RequiredRole, s.IsFinalApproval)));
+            string Existing(ApprovalChain c) => ChainSteps(c.Steps.OrderBy(t => t.Sequence)
+                .Select(t => (t.StepCode, t.Label, t.SignatoryPosition, t.SignerOffice, t.RequiredRole, t.IsFinalApproval)));
             var changes = new List<ContentFieldChangeDto>();
             Diff(changes, "name", current?.Name, request.Name);
-            Diff(changes, "steps", current is null ? null : Steps(current.Steps.OrderBy(s => s.Sequence).Select(s => (s.StepCode, s.Label, s.SignatoryPosition))), wanted);
+            Diff(changes, "steps", current is null ? null : Existing(current), wanted);
             Diff(changes, "legalBasis", current?.LegalBasis, request.LegalBasis);
-            if (Same(scope, s => Equal(s.Name, request.Name) && Equal(s.LegalBasis, request.LegalBasis)
-                    && Steps(s.Steps.OrderBy(t => t.Sequence).Select(t => (t.StepCode, t.Label, t.SignatoryPosition))) == wanted))
+            if (Same(scope, s => Equal(s.Name, request.Name) && Equal(s.LegalBasis, request.LegalBasis) && Existing(s) == wanted))
             {
                 unchanged++;
                 continue;
             }
             if (Plan(result, scope, n, effective))
             {
-                result.Versions.Add(new PlannedVersion(ContentFileKinds.ApprovalChains, subject.ToString(), request.Name, n, request, changes, source));
+                var key = officeCode is null ? subject.ToString() : $"{subject} {officeCode}";
+                object planned = officeCode is not null && officeId is null ? new PackApprovalChain(officeCode, request) : request;
+                result.Versions.Add(new PlannedVersion(ContentFileKinds.ApprovalChains, key, request.Name, n, planned, changes, source));
             }
         }
         return result with { Items = items.Count, Unchanged = unchanged };
     }
+
+    private static string ChainSteps(IEnumerable<(string Code, string Label, string? Position, ApprovalSigner Signer, string? Role, bool Final)> steps) =>
+        string.Join(" → ", steps.Select(s =>
+            $"{s.Code}: {s.Label}{(s.Position is null ? "" : $" ({s.Position})")}"
+            + (s.Signer == ApprovalSigner.Any ? "" : $" [{s.Signer}]") + (s.Role is null ? "" : $" [{s.Role}]") + (s.Final ? " [final]" : "")));
 
     // --- Forms (key: form code; the template is a pack file) ---
 
@@ -393,7 +453,8 @@ public sealed class ContentPackVersionedContent(
             {
                 continue;
             }
-            var request = new CreateOfficeRequest(Trim(x.Code) ?? "", Trim(x.Name) ?? "", kind, Trim(x.HeadPosition), Trim(x.Address), Trim(x.Contact));
+            var request = new CreateOfficeRequest(Trim(x.Code) ?? "", Trim(x.Name) ?? "", kind, Trim(x.HeadPosition), Trim(x.Address), Trim(x.Contact),
+                Trim(x.LguName));
             if (!await ValidAsync(officeValidator, request, result, n, ct) || !Unique(result, seen, request.Code, n, "code"))
             {
                 continue;
@@ -435,12 +496,13 @@ public sealed class ContentPackVersionedContent(
             {
                 var changes = new List<ContentFieldChangeDto>();
                 Diff(changes, "name", office.Name, request.Name);
+                Diff(changes, "lguName", office.LguName, request.LguName);
                 Diff(changes, "headPosition", office.HeadPosition, request.HeadPosition);
                 Diff(changes, "address", office.Address, request.Address);
                 Diff(changes, "contact", office.Contact, request.Contact);
                 if (changes.Count > 0)
                 {
-                    var update = new UpdateOfficeRequest(request.Name, request.HeadPosition, request.Address, request.Contact, office.Status);
+                    var update = new UpdateOfficeRequest(request.Name, request.HeadPosition, request.Address, request.Contact, office.Status, request.LguName);
                     result.Versions.Add(new PlannedVersion(ContentFileKinds.Offices, request.Code, request.Name, n, new PackOfficeUpdate(office.Id, update),
                         changes, source, ContentImportAction.Changed));
                 }
@@ -584,8 +646,6 @@ public sealed class ContentPackVersionedContent(
     private static string Requirements(IEnumerable<(string Code, string Label, bool Mandatory, string? LegalBasis)> items) =>
         string.Join(" | ", items.Select(r => $"{r.Code}: {r.Label}{(r.Mandatory ? "" : " (optional)")}{(r.LegalBasis is null ? "" : $" [{r.LegalBasis}]")}"));
 
-    private static string Steps(IEnumerable<(string Code, string Label, string? Position)> steps) =>
-        string.Join(" → ", steps.Select(s => $"{s.Code} {s.Label}{(s.Position is null ? "" : $" ({s.Position})")}"));
 
     private static string Hash(string text) => $"sha256:{Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..12]}";
 

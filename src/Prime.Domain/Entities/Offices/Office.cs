@@ -18,6 +18,12 @@ public sealed class Office : AuditableEntity
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public OfficeKind Kind { get; set; }
+    /// <summary>
+    /// The local government named above the office on its letterhead, as printed, e.g.
+    /// "Province of …" or "Municipality of …" (§3.6). Blank prints none: an office's letterhead never
+    /// borrows another LGU's name from the <c>Lgu:</c> settings.
+    /// </summary>
+    public string? LguName { get; set; }
     /// <summary>The head's position title as printed, e.g. "Municipal Assessor".</summary>
     public string? HeadPosition { get; set; }
     public string? Address { get; set; }

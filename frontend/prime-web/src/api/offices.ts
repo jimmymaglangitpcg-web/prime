@@ -44,7 +44,7 @@ export function useDelegationActions() {
 }
 
 export interface OfficeDto {
-  id: string; code: string; name: string; kind: OfficeKind; headPosition: string | null; address: string | null; contact: string | null; status: RecordStatus;
+  id: string; code: string; name: string; kind: OfficeKind; lguName: string | null; headPosition: string | null; address: string | null; contact: string | null; status: RecordStatus;
 }
 export interface OfficeJurisdictionDto {
   id: string; officeId: string; officeCode: string; municipalityId: string; municipalityName: string; municipalityPsgcCode: string;
@@ -64,7 +64,7 @@ export interface CurrentUserDto {
 }
 export interface DevUser { key: string; displayName: string; office: string; roles: string[] }
 
-export interface OfficeInput { code?: string; name: string; kind?: OfficeKind; headPosition?: string | null; address?: string | null; contact?: string | null; status?: RecordStatus }
+export interface OfficeInput { code?: string; name: string; kind?: OfficeKind; lguName?: string | null; headPosition?: string | null; address?: string | null; contact?: string | null; status?: RecordStatus }
 export interface JurisdictionInput { officeId: string; municipalityId: string; effectiveDate: string; legalBasis: string; remarks?: string | null }
 export interface AssignmentInput { appUserId: string; officeId: string | null; roles: string[]; effectiveDate: string; legalBasis: string; remarks?: string | null }
 

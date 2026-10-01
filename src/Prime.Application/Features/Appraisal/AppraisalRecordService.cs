@@ -85,7 +85,8 @@ public sealed record AppraisalPreviousDto(Guid AssessmentId, string? FaasNumber,
     decimal AssessedValue, decimal AssessedValueChange);
 
 /// <summary>A completed approval step, as frozen when it was signed.</summary>
-public sealed record AppraisalSignatureDto(string Label, string Name, string? Position, DateTimeOffset SignedAt);
+/// <param name="UnderDelegation">The delegation the step was signed under, as printed (docs/analysis/province-wide-operation.md §3.4).</param>
+public sealed record AppraisalSignatureDto(string Label, string Name, string? Position, DateTimeOffset SignedAt, string? UnderDelegation = null);
 
 public sealed record AppraisalNoticeDto(Guid Id, string? Number, NoticeStatus Status, DateTimeOffset? IssuedAt, DateOnly? ReceivedDate, DateOnly? AppealDeadline);
 
@@ -212,7 +213,7 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
         var signatures = (await db.ApprovalRecords.AsNoTracking()
                 .Where(x => x.SubjectType == ApprovalSubjectType.Assessment && x.SubjectId == a.Id)
                 .OrderBy(x => x.StepSequence).ToListAsync(ct))
-            .Select(r => new AppraisalSignatureDto(r.Label, r.SignatoryName, r.SignatoryPosition, r.SignedAt)).ToList();
+            .Select(r => new AppraisalSignatureDto(r.Label, r.SignatoryName, r.SignatoryPosition, r.SignedAt, r.UnderDelegation)).ToList();
         if (signatures.Count == 0 && a.ApprovedBy is { } approver && a.ApprovedAt is { } approvedAt)
         {
             // Approved under the two-person maker-checker (no chain in force): the approver is the only signature.

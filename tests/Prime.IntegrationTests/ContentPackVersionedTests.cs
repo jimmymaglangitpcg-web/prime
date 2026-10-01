@@ -161,7 +161,7 @@ public class ContentPackVersionedTests(WebApplicationFactory<Program> factory) :
         codes.ShouldContain("VALUE_INVALID");                  // appliesTo "Nope"
         codes.ShouldContain("DATE_INVALID");                   // 01/01/2099
         codes.ShouldContain("VALIDATION_FAILED");              // pattern without {SEQ}; broken Liquid
-        codes.ShouldContain("OFFICE_NOT_YET_SUPPORTED");
+        codes.ShouldContain("OFFICE_NOT_FOUND");               // chain for an office neither in PRIME nor the pack (LP-4)
         codes.ShouldContain("JSON_INVALID");                   // unknown member "colour"
         codes.ShouldContain("AUTHORITY_BUILT_IN");
         codes.ShouldContain("TEMPLATE_PATH");
@@ -206,7 +206,7 @@ public class ContentPackVersionedTests(WebApplicationFactory<Program> factory) :
                 """,
             ["p.csv"] = $"psgc_code,name\n{prov},DEMO Offices Province\n",
             ["m.csv"] = $"psgc_code,province_psgc,name\n{town},{prov},DEMO Offices Town\n",
-            ["o.json"] = $$"""[ { "code": "DEMO-O-{{tag}}", "name": "DEMO Office", "kind": "Municipal", "municipalities": ["{{town}}"], "effectiveDate": "2026-01-01" } ]""",
+            ["o.json"] = $$"""[ { "code": "DEMO-O-{{tag}}", "name": "DEMO Office", "kind": "Municipal", "lguName": "DEMO Municipality", "municipalities": ["{{town}}"], "effectiveDate": "2026-01-01" } ]""",
         });
         var (c, scope) = await BeginAsync(root);
         await using var _ = scope;
@@ -215,6 +215,7 @@ public class ContentPackVersionedTests(WebApplicationFactory<Program> factory) :
         preview.CanImport.ShouldBeTrue();
         (await c.Packs.ImportAsync("offices", new(preview.Fingerprint))).Value.Applied.ShouldBeTrue();
         var office = await c.Db.Offices.SingleAsync(o => o.Code == $"DEMO-O-{tag}");
+        office.LguName.ShouldBe("DEMO Municipality");
         var jurisdiction = await c.Db.OfficeJurisdictions.SingleAsync(j => j.OfficeId == office.Id);
         (jurisdiction.Status, jurisdiction.CreatedBy).ShouldBe((WorkflowStatus.Draft, c.Importer.Id));
         var offices = c.Services.GetRequiredService<Prime.Application.Features.Offices.IOfficeService>();
@@ -225,7 +226,7 @@ public class ContentPackVersionedTests(WebApplicationFactory<Program> factory) :
 
         // A renamed office is a change; mistakes are refused.
         File.WriteAllText(Path.Combine(root, "offices", "o.json"), $$"""
-            [ { "code": "DEMO-O-{{tag}}", "name": "DEMO Office renamed", "kind": "Municipal" },
+            [ { "code": "DEMO-O-{{tag}}", "name": "DEMO Office renamed", "kind": "Municipal", "lguName": "DEMO Municipality renamed" },
               { "code": "DEMO-O-{{tag}}", "name": "Twice", "kind": "Municipal" },
               { "code": "DEMO-P-{{tag}}", "name": "DEMO Second province office", "kind": "Provincial" },
               { "code": "DEMO-Q-{{tag}}", "name": "DEMO Q", "kind": "Municipal", "municipalities": ["9199999999"], "effectiveDate": "2026-01-01" },
@@ -234,12 +235,55 @@ public class ContentPackVersionedTests(WebApplicationFactory<Program> factory) :
         var second = (await c.Packs.PreviewAsync("offices")).Value;
         var file = second.Files.Single(f => f.Kind == "offices");
         file.Changes.ShouldContain(ch => ch.Action == ContentChangeAction.Changed && ch.Fields.Any(f => f.Field == "name" && f.To == "DEMO Office renamed"));
+        file.Changes.ShouldContain(ch => ch.Fields.Any(f => f.Field == "lguName" && f.From == "DEMO Municipality" && f.To == "DEMO Municipality renamed"));
         var codes = file.Issues.Select(i => i.Code).ToList();
         codes.ShouldContain("DUPLICATE_KEY");
         codes.ShouldContain("OFFICE_PROVINCIAL_DUPLICATE");
         codes.ShouldContain("PARENT_NOT_FOUND");
         codes.ShouldContain("DATE_INVALID");
         second.CanImport.ShouldBeFalse();
+        Directory.Delete(root, recursive: true);
+    }
+
+    [Fact]
+    public async Task AChain_MayNameAnOfficeThePackAdds_WithItsSignerRules()
+    {
+        var tag = Random.Shared.Next(10_000_000, 99_999_999).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var root = TempPack("chains", new Dictionary<string, string>
+        {
+            ["manifest.json"] = """
+                { "schemaVersion": 1, "pack": "chains", "version": "C1", "files": [
+                  { "kind": "offices", "path": "o.json", "source": "DEMO" },
+                  { "kind": "approval-chains", "path": "c.json", "source": "DEMO" } ] }
+                """,
+            ["o.json"] = $$"""[ { "code": "DEMO-CH-{{tag}}", "name": "DEMO Chain Office", "kind": "Municipal" } ]""",
+            ["c.json"] = $$"""
+                [ { "subjectType": "TaxDeclaration", "name": "DEMO office chain", "office": "DEMO-CH-{{tag}}", "legalBasis": "DEMO", "effectiveDate": "2099-01-01",
+                    "steps": [
+                      { "stepCode": "DEMO_REVIEW", "label": "DEMO Reviewed", "signerOffice": "PreparingOffice", "requiredRole": "ASSESSOR" },
+                      { "stepCode": "DEMO_APPROVE", "label": "DEMO Approved", "signerOffice": "ProvincialOffice", "requiredRole": "ASSESSOR", "isFinalApproval": true } ] },
+                  { "subjectType": "TaxDeclaration", "name": "DEMO bad", "office": "DEMO-CH-{{tag}}", "legalBasis": "DEMO", "effectiveDate": "2099-01-01",
+                    "steps": [ { "stepCode": "DEMO_X", "label": "DEMO", "signerOffice": "Somewhere" } ] } ]
+                """,
+        });
+        var (c, scope) = await BeginAsync(root);
+        await using var _ = scope;
+
+        var preview = (await c.Packs.PreviewAsync("chains")).Value;
+        preview.Files.Single(f => f.Kind == "approval-chains").Issues.ShouldContain(i => i.Code == "VALUE_INVALID"); // signerOffice "Somewhere"
+        File.WriteAllText(Path.Combine(root, "chains", "c.json"), File.ReadAllText(Path.Combine(root, "chains", "c.json"))
+            .Replace("\"signerOffice\": \"Somewhere\"", "\"signerOffice\": \"Any\"").Replace("\"DEMO bad\", \"office\": \"DEMO-CH-" + tag + "\"", "\"DEMO bad\""));
+        preview = (await c.Packs.PreviewAsync("chains")).Value;
+        preview.CanImport.ShouldBeTrue();
+        (await c.Packs.ImportAsync("chains", new(preview.Fingerprint))).Value.Applied.ShouldBeTrue();
+
+        var office = await c.Db.Offices.SingleAsync(o => o.Code == $"DEMO-CH-{tag}");
+        var chain = await c.Db.ApprovalChains.Include(x => x.Steps).SingleAsync(x => x.OfficeId == office.Id);
+        chain.Status.ShouldBe(WorkflowStatus.Draft);
+        chain.Steps.OrderBy(s => s.Sequence).Select(s => (s.SignerOffice, s.RequiredRole, s.IsFinalApproval))
+            .ShouldBe([(ApprovalSigner.PreparingOffice, "ASSESSOR", false), (ApprovalSigner.ProvincialOffice, "ASSESSOR", true)]);
+        // The same pack again: both chains match their drafts.
+        (await c.Packs.ImportAsync("chains", new((await c.Packs.PreviewAsync("chains")).Value.Fingerprint))).Value.Applied.ShouldBeFalse();
         Directory.Delete(root, recursive: true);
     }
 }
