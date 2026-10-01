@@ -71,8 +71,8 @@ public class ApprovalChainsController(IApprovalChainService chains, Prime.Applic
 {
     /// <summary>Records whose next approval step the signed-in user may sign today (docs/analysis/province-wide-operation.md §3.4).</summary>
     [HttpGet("~/api/approvals/awaiting")]
-    public async Task<ActionResult<IReadOnlyList<ApprovalQueueItemDto>>> Awaiting(CancellationToken ct) =>
-        HandleResult(await chains.ListAwaitingAsync(clock.Today, ct));
+    public async Task<ActionResult<IReadOnlyList<ApprovalQueueItemDto>>> Awaiting([FromQuery] Guid? municipalityId, CancellationToken ct) =>
+        HandleResult(await chains.ListAwaitingAsync(clock.Today, ct, municipalityId));
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ApprovalChainDto>>> List(CancellationToken ct) => HandleResult(await chains.ListAsync(ct));

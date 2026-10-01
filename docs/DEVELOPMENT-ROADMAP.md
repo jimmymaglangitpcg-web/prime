@@ -933,7 +933,7 @@ is **LAM alignment** (CLAUDE.md §97):
 ```text
 10a  Real Property Identification System (MRPAAO)   done (d70a501)
 L0   Governance & groundwork                          done (L0-4 questions sent; answers pending)
-LP   Province-wide operation (CLAUDE.md §117)         in progress (LP-1 to LP-5 done)
+LP   Province-wide operation (CLAUDE.md §117)         done (LP-1 to LP-6)
 L1   Valuation foundation
 L2   Identification & numbering (LAM deltas)
 L3   Assessment, listing, exemptions
@@ -1094,8 +1094,14 @@ offices; migration `OfficeApprovalRouting` on the local database only).
 issuing user's or the provincial office; `Office.LguName`; the `lgu` form
 key keeps its shape and a new `office` key is added; treasury forms
 unchanged; migration `OfficeLetterhead` on the local database only).
-**Next:** LP-6, approved FAAS/TD list per municipality and the monthly
-assessment roll submission (§3.7 as revised). The paragraphs below are the earlier
+LP-4 and LP-5 committed as `161c691`.
+**LP-6 done** (TD and FAAS copies frozen at final approval; province's list
+of approved FAAS/TDs; monthly assessment roll submitted by the municipal
+office and acknowledged or returned by the province; municipality filters on
+properties, approvals and submissions; migration `AssessmentRollSubmissions`
+on the local database only). **Step LP is complete.**
+**Next:** L1, the valuation foundation (design document first, CLAUDE.md
+§108). The paragraphs below are the earlier
 history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so

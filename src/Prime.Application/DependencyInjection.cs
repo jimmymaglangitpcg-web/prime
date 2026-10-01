@@ -54,6 +54,8 @@ public static class DependencyInjection
         services.AddScoped<INumberingService, NumberingService>();
         services.AddScoped<IApprovalChainService, ApprovalChainService>();
         services.AddScoped<IFormService, FormService>();
+        services.AddScoped<Features.Submissions.IApprovedDocumentIssuer, Features.Submissions.ApprovedDocumentIssuer>();
+        services.AddScoped<Features.Submissions.ISubmissionService, Features.Submissions.SubmissionService>();
         services.AddScoped<ITransactionService, TransactionService>();
         services.AddScoped<INoticeService, NoticeService>();
         services.AddScoped<IFormDataProvider, NoticeFormDataProvider>();

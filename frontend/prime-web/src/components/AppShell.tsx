@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Alert, Layout, Menu, Select, Tag, Tooltip, Typography } from 'antd';
-import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined, NumberOutlined, CloudUploadOutlined, ApartmentOutlined, CheckSquareOutlined } from '@ant-design/icons';
+import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined, NumberOutlined, CloudUploadOutlined, ApartmentOutlined, CheckSquareOutlined, SendOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { devActAsAvailable, getDevActAs, setDevActAs, subscribeDevActAs } from '../lib/devActAs';
@@ -11,6 +11,7 @@ const { Header, Sider, Content } = Layout;
 const navItems = [
   { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
   { key: '/approvals', icon: <CheckSquareOutlined />, label: 'Awaiting my approval' },
+  { key: '/submissions', icon: <SendOutlined />, label: 'Submissions' },
   { key: '/properties', icon: <HomeOutlined />, label: 'Properties' },
   { key: '/taxpayers', icon: <TeamOutlined />, label: 'Taxpayers' },
   { key: '/gis', icon: <GlobalOutlined />, label: 'Tax Map' },

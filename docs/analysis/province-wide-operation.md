@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-09-29 |
-| Status | **Approved 2026-09-29: all recommendations Q1–Q13 accepted.** LP-1 to LP-5 done (§9); LP-6 next |
+| Status | **Approved 2026-09-29: all recommendations Q1–Q13 accepted.** LP-1 to LP-6 done (§9): step LP complete |
 | Rules | CLAUDE.md §9, §46, §47, §68, §85, §117 (deployment scope), §118 (no LGU data in git) |
 | Commit status | Contains no LAM text or LGU data; may be committed |
 
@@ -188,6 +188,22 @@ the record back to Draft for the municipal office to correct.
     Notice of Cancellation joins when it is built (L3-4).
   - *Monthly assessment roll:* the municipal office produces the month's
     roll (a register run) and submits it; the province acknowledges receipt.
+- **LP-6 details decided 2026-10-01** (user, all four recommendations):
+  - *Snapshot at approval:* on a TD's final approval (direct or through a
+    property transaction) PRIME issues its TD form, and its FAAS form when
+    the TD declares an assessment, if a form version is in force. Printing
+    never blocks approval; a TD without one shows "not printed".
+  - *Monthly roll contents:* one submission per municipality and month.
+    PRIME prepares and issues the Assessment Roll, taxable and exempt, of
+    every barangay with entries that month, as month supplements (FAAS
+    entered in the month). A month with no entries is submitted as a nil
+    return.
+  - *Province's action:* acknowledge, or return with remarks. A returned
+    submission is kept, and the municipality prepares a new one for the
+    same month.
+  - *Filters:* a municipality filter on the Properties list, the approvals
+    queue and the new submission pages. Dashboard and GIS breakdowns wait
+    for Phase 11.
 
 ### 3.8 Existing data
 
@@ -609,4 +625,76 @@ keeps single-office installations and the treasury forms unchanged.
   DEMO_Municipality previews with that name above the title; a TD of a town
   no office covers does not; no console errors, no overflow at 390 px. The
   DEMO office keeps that LGU name and address in the dev database.
+
+### LP-6 — submissions to the province (2026-10-01)
+
+Built to §3.7 as revised, with the details decided the same day (§3.7).
+
+**Built**
+- **Snapshot at approval (`ApprovedDocumentIssuer`):** after a TD's final
+  approval, directly or with its property transaction, PRIME issues the TD
+  form and, when the TD declares an assessment, the FAAS form for its kind
+  (land and other improvements share FAAS_LAND). This runs after the
+  approval is committed. A form not in force, or one that refuses to issue,
+  is logged and skipped.
+- **Approved FAAS and TDs (`GET /api/submissions/approved-documents`):** TDs
+  approved in a period of at most a year (on the LGU's calendar), optionally
+  for one municipality, newest first, at most 500, with the approver, the
+  current status and the frozen TD and FAAS copies. It follows the
+  jurisdiction filter, so a municipal office sees its own.
+- **Monthly assessment roll (`AssessmentRollSubmission` and its items;
+  migration `AssessmentRollSubmissions`, local database only):**
+  - submitted only by staff of the municipal office covering the town
+    (`ROLL_SUBMISSION_FORBIDDEN`), and only once the month is over
+    (`ROLL_MONTH_NOT_OVER`);
+  - PRIME creates the month-supplement Assessment Roll runs (taxable and
+    exempt) of each barangay. It keeps and issues those with entries, and
+    discards the empty runs, which were never issued. All of this happens
+    in one transaction; a form that cannot be issued submits nothing;
+  - a month with no entries is a nil return;
+  - one submission in play per municipality and month (filtered unique
+    index), and a returned one makes room for its replacement;
+  - the provincial office or a province-wide user acknowledges, or returns
+    with required remarks (`ROLL_REVIEW_FORBIDDEN` for others). Nothing is
+    deleted;
+  - jurisdiction filter by the submission's municipality.
+  - API: `/api/submissions/rolls` (list, get, submit, acknowledge, return).
+- **Filters:** municipality on the Properties list (the API already had
+  it), the approvals queue (`?municipalityId=`) and both submission tabs.
+  A municipal user is offered only their own municipalities.
+- **UI:** a **Submissions** page with two tabs:
+  - *Approved FAAS and TDs*: period, municipality, links to the frozen
+    copies, "TD not printed" when none;
+  - *Monthly assessment roll*: prepare and submit (municipal office), a
+    table with expandable barangay rolls opening the printed rolls, and
+    Acknowledge / Return with remarks (province).
+
+**Not in LP-6:** the Notice of Cancellation joins the list when L3 builds
+it. Dashboard and GIS breakdowns by municipality wait for Phase 11.
+
+**Verified**
+- 2 new integration tests (`SubmissionTests`):
+  - approval issues the TD copy, which the province's list returns; an
+    inverted period is refused;
+  - the monthly roll:
+    - refused for the current month, for provincial staff and for another
+      office;
+    - only the month's entries and only barangays with entries, with empty
+      runs not kept;
+    - a duplicate is refused;
+    - review by the province only, and a return needs remarks;
+    - resubmission after a return, then acknowledgement; a second
+      acknowledgement is refused.
+- Full suite: 472 tests pass. `npm run build` and `npm run lint` are clean.
+- Browser (Playwright):
+  - the usual user lists DEMO_Municipality's September approvals (5) and
+    opens a frozen TD;
+  - the Properties filter leaves only DEMO_Municipality (13);
+  - the DEMO municipal appraiser submits September 2026 (1 barangay roll)
+    and opens the printed roll;
+  - the checker returns it with remarks; the appraiser resubmits; the
+    checker acknowledges;
+  - no console errors, no overflow at 390 px.
+  The dev database keeps both DEMO September submissions (returned and
+  acknowledged).
 

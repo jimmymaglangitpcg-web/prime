@@ -61,3 +61,12 @@ export function useStructuralMaterials() {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+/** Every city/municipality PRIME holds (for filters across the province). */
+export function useAllMunicipalities() {
+  return useQuery({
+    queryKey: ['reference', 'municipalities', 'all'],
+    queryFn: () => apiGet<MunicipalityDto[]>('/api/reference/municipalities'),
+    staleTime: 5 * 60 * 1000,
+  });
+}

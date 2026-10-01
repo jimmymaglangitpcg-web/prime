@@ -107,7 +107,8 @@ public interface IApprovalChainService
     /// Records pending review, in the user's jurisdiction, whose next step the current user may sign on
     /// <paramref name="asOf"/>: the same rules as signing. The <see cref="QueueLimit"/> oldest of each kind are checked.
     /// </summary>
-    Task<Result<IReadOnlyList<ApprovalQueueItemDto>>> ListAwaitingAsync(DateOnly asOf, CancellationToken cancellationToken = default);
+    /// <param name="municipalityId">Only records of this municipality (the provincial consolidated view, §3.7).</param>
+    Task<Result<IReadOnlyList<ApprovalQueueItemDto>>> ListAwaitingAsync(DateOnly asOf, CancellationToken cancellationToken = default, Guid? municipalityId = null);
 }
 
 /// <summary>docs/FORMS-REVISION-PLAN.md §4.5; offices and delegation: docs/analysis/province-wide-operation.md §3.4.</summary>
@@ -224,18 +225,21 @@ public sealed class ApprovalChainService(
     /// <summary>How many pending records of each kind the queue checks (each is evaluated like a signature).</summary>
     public const int QueueLimit = 200;
 
-    public async Task<Result<IReadOnlyList<ApprovalQueueItemDto>>> ListAwaitingAsync(DateOnly asOf, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<ApprovalQueueItemDto>>> ListAwaitingAsync(DateOnly asOf, CancellationToken cancellationToken = default,
+        Guid? municipalityId = null)
     {
         // Pending records in the jurisdiction (the query filters apply). TDs drafted under a transaction are approved with it.
         var candidates = new List<(ApprovalSubjectType Type, Guid Id, Guid? CreatedBy, Guid PropertyId, string Pin, string Reference, DateTimeOffset CreatedAt)>();
         candidates.AddRange((await db.TaxDeclarations.AsNoTracking()
                 .Where(x => x.Status == WorkflowStatus.PendingReview && x.PropertyTransactionId == null)
+                .Where(x => municipalityId == null || x.Property!.MunicipalityId == municipalityId)
                 .OrderBy(x => x.CreatedAt).Take(QueueLimit)
                 .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.TaxDeclarationNumber, x.CreatedAt })
                 .ToListAsync(cancellationToken))
             .Select(x => (ApprovalSubjectType.TaxDeclaration, x.Id, x.CreatedBy, x.PropertyId, x.PropertyIdentificationNumber, $"TD {x.TaxDeclarationNumber}", x.CreatedAt)));
         candidates.AddRange((await db.Assessments.AsNoTracking()
                 .Where(x => x.Status == WorkflowStatus.PendingReview)
+                .Where(x => municipalityId == null || x.Property!.MunicipalityId == municipalityId)
                 .OrderBy(x => x.CreatedAt).Take(QueueLimit)
                 .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.AssessmentYear, x.Rpu!.RpuNumber, x.CreatedAt })
                 .ToListAsync(cancellationToken))
@@ -243,6 +247,7 @@ public sealed class ApprovalChainService(
                 $"Assessment {x.AssessmentYear}, RPU {x.RpuNumber}", x.CreatedAt)));
         candidates.AddRange((await db.PropertyTransactions.AsNoTracking()
                 .Where(x => x.Status == WorkflowStatus.PendingReview)
+                .Where(x => municipalityId == null || x.Property!.MunicipalityId == municipalityId)
                 .OrderBy(x => x.CreatedAt).Take(QueueLimit)
                 .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.TransactionNumber, x.CreatedAt })
                 .ToListAsync(cancellationToken))

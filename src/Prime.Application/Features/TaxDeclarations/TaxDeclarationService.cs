@@ -11,7 +11,7 @@ using Prime.Domain.Enums;
 namespace Prime.Application.Features.TaxDeclarations;
 
 public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<CreateTaxDeclarationRequest> validator, INumberingService numbering, IClock clock,
-    ICurrentUserService currentUser, IApprovalChainService approvals, IOptions<FaasOptions> faas) : ITaxDeclarationService
+    ICurrentUserService currentUser, IApprovalChainService approvals, IOptions<FaasOptions> faas, Submissions.IApprovedDocumentIssuer issuer) : ITaxDeclarationService
 {
     public async Task<Result<TaxDeclarationDto>> CreateAsync(CreateTaxDeclarationRequest request, CancellationToken cancellationToken = default)
     {
@@ -268,6 +268,11 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
             {
                 await transaction.DisposeAsync();
             }
+        }
+        if (completes)
+        {
+            // Approval is the submission to the province: freeze the printed TD and FAAS (§3.7, LP-6).
+            await issuer.IssueAsync([td.Id], cancellationToken);
         }
         return Result.Success((await MapToDto(id, cancellationToken))!);
     }

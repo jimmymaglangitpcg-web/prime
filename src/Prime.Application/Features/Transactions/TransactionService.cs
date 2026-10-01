@@ -95,7 +95,8 @@ public sealed class TransactionService(
     INumberingService numbering,
     INumberSequenceAllocator allocator,
     IClock clock,
-    IOptions<FaasOptions> faas) : ITransactionService
+    IOptions<FaasOptions> faas,
+    Submissions.IApprovedDocumentIssuer issuer) : ITransactionService
 {
     // --- Catalogue ---
 
@@ -460,6 +461,9 @@ public sealed class TransactionService(
                 await transaction.DisposeAsync();
             }
         }
+        // The transaction's TDs are approved with it: freeze their printed TD and FAAS (§3.7, LP-6).
+        await issuer.IssueAsync(await db.TaxDeclarations.Where(x => x.PropertyTransactionId == tx.Id && x.Status == WorkflowStatus.Approved)
+            .Select(x => x.Id).ToListAsync(cancellationToken), cancellationToken);
         return Result.Success(await MapAsync(id, cancellationToken));
     }
 

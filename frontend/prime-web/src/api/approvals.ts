@@ -15,5 +15,8 @@ export interface ApprovalQueueItemDto {
   createdAt: string;
 }
 
-export const useApprovalQueue = () =>
-  useQuery({ queryKey: ['approvals', 'awaiting'], queryFn: () => apiGet<ApprovalQueueItemDto[]>('/api/approvals/awaiting') });
+export const useApprovalQueue = (municipalityId?: string) =>
+  useQuery({
+    queryKey: ['approvals', 'awaiting', municipalityId ?? null],
+    queryFn: () => apiGet<ApprovalQueueItemDto[]>('/api/approvals/awaiting', { municipalityId }),
+  });

@@ -22,3 +22,12 @@ public enum RegisterKind
     /// </summary>
     PreTaxMapControlRoll = 5,
 }
+
+/// <summary>A monthly assessment roll submission's state (docs/analysis/province-wide-operation.md §3.7).</summary>
+public enum AssessmentRollSubmissionStatus
+{
+    Submitted = 0,
+    Acknowledged = 1,
+    /// <summary>Returned by the province with remarks; the municipality prepares a new submission.</summary>
+    Returned = 2,
+}

@@ -3,6 +3,8 @@ import { ReloadOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { useApprovalQueue, type ApprovalQueueItemDto } from '../../api/approvals';
 import { ApiRequestError } from '../../lib/apiClient';
+import { MunicipalityFilter } from '../../components/MunicipalityFilter';
+import { useState } from 'react';
 
 const kind: Record<ApprovalQueueItemDto['subjectType'], string> = {
   TaxDeclaration: 'Tax Declaration', Assessment: 'Assessment', PropertyTransaction: 'Transaction',
@@ -14,7 +16,8 @@ const kind: Record<ApprovalQueueItemDto['subjectType'], string> = {
  * itself is given on the property's page.
  */
 export function ApprovalsPage() {
-  const queue = useApprovalQueue();
+  const [municipalityId, setMunicipalityId] = useState<string>();
+  const queue = useApprovalQueue(municipalityId);
   return (
     <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
       <div>
@@ -24,7 +27,10 @@ export function ApprovalsPage() {
           approval unless it is delegated to the municipal Assessor.
         </Typography.Paragraph>
       </div>
-      <Button icon={<ReloadOutlined />} onClick={() => queue.refetch()} loading={queue.isFetching} style={{ alignSelf: 'flex-start' }}>Refresh</Button>
+      <Space wrap>
+        <MunicipalityFilter value={municipalityId} onChange={setMunicipalityId} />
+        <Button icon={<ReloadOutlined />} onClick={() => queue.refetch()} loading={queue.isFetching}>Refresh</Button>
+      </Space>
       {queue.isError && (
         <Alert type="error" showIcon title="Could not load the queue"
           description={queue.error instanceof ApiRequestError ? queue.error.apiError.message : (queue.error as Error).message} />

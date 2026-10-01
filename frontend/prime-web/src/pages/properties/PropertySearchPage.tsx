@@ -4,6 +4,7 @@ import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { usePropertySearch } from '../../api/properties';
 import type { PropertyDto } from '../../lib/types';
+import { MunicipalityFilter } from '../../components/MunicipalityFilter';
 
 const statusColor: Record<string, string> = {
   Active: 'green',
@@ -17,10 +18,11 @@ const statusColor: Record<string, string> = {
 export function PropertySearchPage() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
+  const [municipalityId, setMunicipalityId] = useState<string>();
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
-  const { data, isLoading, isError, error } = usePropertySearch({ searchTerm: searchTerm || undefined, page, pageSize });
+  const { data, isLoading, isError, error } = usePropertySearch({ searchTerm: searchTerm || undefined, municipalityId, page, pageSize });
 
   return (
     <div>
@@ -33,16 +35,19 @@ export function PropertySearchPage() {
         </Button>
       </Space>
 
-      <Input.Search
-        placeholder="Search by PIN, lot number, title number, survey number, or tax map number"
-        allowClear
-        enterButton={<SearchOutlined />}
-        style={{ marginBottom: 16, maxWidth: 600 }}
-        onSearch={(value) => {
-          setSearchTerm(value);
-          setPage(1);
-        }}
-      />
+      <Space wrap style={{ marginBottom: 16, width: '100%' }}>
+        <Input.Search
+          placeholder="Search by PIN, lot number, title number, survey number, or tax map number"
+          allowClear
+          enterButton={<SearchOutlined />}
+          style={{ width: 600, maxWidth: '100%' }}
+          onSearch={(value) => {
+            setSearchTerm(value);
+            setPage(1);
+          }}
+        />
+        <MunicipalityFilter value={municipalityId} onChange={(id) => { setMunicipalityId(id); setPage(1); }} />
+      </Space>
 
       {isError && (
         <Typography.Text type="danger">Could not load properties: {(error as Error).message}</Typography.Text>
