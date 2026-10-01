@@ -85,6 +85,11 @@
       "source": "DEMO data"
     },
     {
+      "kind": "adjustment-factors",
+      "path": "valuation/adjustment-factors.json",
+      "source": "DEMO data"
+    },
+    {
       "kind": "assessment-levels",
       "path": "valuation/assessment-levels.csv",
       "source": "DEMO data"

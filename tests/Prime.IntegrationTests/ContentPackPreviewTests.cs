@@ -114,7 +114,7 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
               { "kind": "lookup", "lookup": "classifications", "path": "classes.csv", "source": "DEMO" },
               { "kind": "lookup", "lookup": "no-such-lookup", "path": "x.csv", "source": "DEMO" },
               { "kind": "lookup", "lookup": "structural-materials", "path": "materials.csv", "source": "DEMO" },
-              { "kind": "adjustment-factors", "path": "valuation/factors.csv", "source": "DEMO" },
+              { "kind": "building-costs", "path": "valuation/factors.csv", "source": "DEMO" },
               { "kind": "provinces", "path": "../escape.csv", "source": "DEMO" },
               { "kind": "wizardry", "path": "w.csv", "source": "DEMO" },
               { "kind": "lookup", "lookup": "zones", "path": "missing.csv", "source": "DEMO" }
@@ -149,9 +149,9 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
         codes.ShouldContain("PIN_INDEX_DUPLICATE");  // two municipalities numbered 05
         codes.ShouldContain("NUMBER_INVALID");       // sort_order "first"
         codes.ShouldContain("REQUIRED");             // DEMO-Y has no name
-        codes.ShouldContain("NOT_YET_SUPPORTED");    // adjustment factors (L1-4)
+        codes.ShouldContain("NOT_YET_SUPPORTED");    // building costs (L1-5)
         codes.ShouldContain("FILE_UNREADABLE");      // missing.csv
-        preview.Files.Single(f => f.Kind == "adjustment-factors").Supported.ShouldBeFalse();
+        preview.Files.Single(f => f.Kind == "building-costs").Supported.ShouldBeFalse();
         preview.Issues.ShouldContain(i => i.Code == "MANIFEST_PATH" && i.Field == "files[7]");
 
         (await service.PreviewAsync("../broken")).Code.ShouldBe("VALIDATION_FAILED");

@@ -64,7 +64,8 @@ public sealed partial class ContentPackVersionedContent(
     IValidator<Smv.CreateSmvScheduleRequest> scheduleValidator,
     IValidator<AssessmentLevels.CreateAssessmentLevelRequest> levelValidator,
     Smv.ISmvService smvs,
-    AssessmentLevels.IAssessmentLevelService levels)
+    AssessmentLevels.IAssessmentLevelService levels,
+    Smv.IAdjustmentFactorService factors)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
 
@@ -118,6 +119,7 @@ public sealed partial class ContentPackVersionedContent(
                 ContentFileKinds.Smv => await SmvsAsync(Parse<SmvItem>(bytes), fileSource, pendingMunicipalities ?? new HashSet<string>(), result, ct),
                 ContentFileKinds.SmvSchedules => await SchedulesAsync(bytes, fileSource, pending ?? PackPending.None, result, ct),
                 ContentFileKinds.AssessmentLevels => await LevelsAsync(bytes, fileSource, pending ?? PackPending.None, result, ct),
+                ContentFileKinds.AdjustmentFactors => await FactorsAsync(Parse<FactorItem>(bytes), fileSource, pending ?? PackPending.None, result, ct),
                 _ => throw new InvalidOperationException($"Not a versioned kind: {kind}"),
             };
         }
@@ -142,6 +144,7 @@ public sealed partial class ContentPackVersionedContent(
         PackSmv r => await CreateSmvAsync(r, ct),
         PackSmvSchedule r => await CreateScheduleAsync(r, ct),
         PackAssessmentLevel r => await CreateLevelAsync(r, ct),
+        PackAdjustmentFactor r => await CreateFactorAsync(r, ct),
         _ => throw new InvalidOperationException("Unknown planned version."),
     };
 

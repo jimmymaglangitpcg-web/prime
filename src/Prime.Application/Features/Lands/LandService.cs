@@ -6,7 +6,7 @@ using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.Lands;
 
-public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandRequest> validator) : ILandService
+public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandRequest> validator, ICurrentUserService currentUser) : ILandService
 {
     public async Task<Result<LandDto>> CreateAsync(CreateLandRequest request, CancellationToken cancellationToken = default)
     {
@@ -93,7 +93,7 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
         var entity = await IncludeReferences(db.Lands).SingleOrDefaultAsync(x => x.RpuId == rpuId, cancellationToken);
         return entity is null
             ? Result.Failure<LandDto>("LAND_NOT_FOUND", "No Land record was found for this RPU.")
-            : Result.Success(ProjectToDto(entity));
+            : Result.Success(ProjectToDto(entity, await SeparateRpuNumbersAsync(entity, cancellationToken)));
     }
 
     public async Task<Result<LandDto>> AddStripAsync(Guid landId, AddLandStripRequest request, CancellationToken cancellationToken = default)
@@ -122,6 +122,7 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
             ClassificationId = request.ClassificationId, SubClassificationId = request.SubClassificationId,
             ActualUseId = request.ActualUseId, ZoneId = request.ZoneId, Area = request.Area,
             ValuationClassificationId = request.ValuationClassificationId, ValuationSubClassificationId = request.ValuationSubClassificationId,
+            DepthBand = request.DepthBand,
         });
         LandParts.MirrorPrincipal(land);
         await db.SaveChangesAsync(cancellationToken);
@@ -151,12 +152,19 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
         {
             return LandParts.Fail<LandDto>("ACTUAL_USE_NOT_FOUND", "The specified actual use does not exist.");
         }
+        // A separately owned improvement belongs to an OtherImprovement unit standing on this land (§4.4).
+        if (request.SeparateRpuId is { } separate && !await db.RealPropertyUnits.AnyAsync(
+                x => x.Id == separate && x.RpuType == RpuType.OtherImprovement && x.LandRpuId == land.RpuId, cancellationToken))
+        {
+            return LandParts.Fail<LandDto>("SEPARATE_RPU_INVALID", "The owning unit must be an other-improvement RPU recorded on this land.");
+        }
         Track(land.Improvements, db.LandImprovements, new Domain.Entities.LandImprovement
         {
             Sequence = land.Improvements.Count == 0 ? 1 : land.Improvements.Max(x => x.Sequence) + 1,
             ImprovementKindId = request.ImprovementKindId, Quantity = request.Quantity, IsProductive = request.IsProductive,
             ClassificationId = request.ClassificationId, ActualUseId = request.ActualUseId,
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+            SeparateRpuId = request.SeparateRpuId,
         });
         await db.SaveChangesAsync(cancellationToken);
         return Result.Success((await MapToDto(landId, cancellationToken))!);
@@ -199,6 +207,33 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
         return Result.Success((await MapToDto(landId, cancellationToken))!);
     }
 
+    public async Task<Result<LandDto>> UpdateAppraisalInputsAsync(Guid landId, UpdateLandAppraisalInputsRequest request, CancellationToken cancellationToken = default)
+    {
+        var land = await db.Lands.FirstOrDefaultAsync(x => x.Id == landId, cancellationToken);
+        if (land is null)
+        {
+            return NotFound();
+        }
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 500
+            || request.RoadFrontage < 0 || request.DistanceToAllWeatherRoadKm < 0 || request.DistanceToPoblacionKm < 0)
+        {
+            return LandParts.Fail<LandDto>("VALIDATION_FAILED", "A reason (max 500) is required; frontage and distances cannot be negative.");
+        }
+        if (request.RoadTypeId is { } road && !await db.RoadTypes.AnyAsync(x => x.Id == road, cancellationToken))
+        {
+            return LandParts.Fail<LandDto>("ROAD_TYPE_NOT_FOUND", "The specified road type does not exist.");
+        }
+        land.RoadTypeId = request.RoadTypeId;
+        land.RoadFrontage = request.RoadFrontage;
+        land.IsCornerLot = request.IsCornerLot;
+        land.DistanceToAllWeatherRoadKm = request.DistanceToAllWeatherRoadKm;
+        land.DistanceToPoblacionKm = request.DistanceToPoblacionKm;
+        land.IsSubdivisionLot = request.IsSubdivisionLot;
+        currentUser.Reason = request.Reason.Trim();
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success((await MapToDto(landId, cancellationToken))!);
+    }
+
     /// <summary>
     /// Adds a new row to a loaded land's collection. Entity keys are set on construction, so the
     /// row is registered as Added explicitly; EF would otherwise take it for an existing row.
@@ -214,7 +249,16 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
     private async Task<LandDto?> MapToDto(Guid id, CancellationToken cancellationToken)
     {
         var entity = await IncludeReferences(db.Lands).SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
-        return entity is null ? null : ProjectToDto(entity);
+        return entity is null ? null : ProjectToDto(entity, await SeparateRpuNumbersAsync(entity, cancellationToken));
+    }
+
+    /// <summary>The numbers of the units that own some of the land's improvements apart from it.</summary>
+    private async Task<IReadOnlyDictionary<Guid, string>> SeparateRpuNumbersAsync(Domain.Entities.Land land, CancellationToken ct)
+    {
+        var ids = land.Improvements.Where(i => i.SeparateRpuId is not null).Select(i => i.SeparateRpuId!.Value).Distinct().ToList();
+        return ids.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await db.RealPropertyUnits.Where(r => ids.Contains(r.Id)).ToDictionaryAsync(r => r.Id, r => r.RpuNumber, ct);
     }
 
     private static IQueryable<Domain.Entities.Land> IncludeReferences(IQueryable<Domain.Entities.Land> query) => query
@@ -231,7 +275,7 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
         .Include(x => x.Improvements).ThenInclude(i => i.ActualUse)
         .Include(x => x.Adjustments);
 
-    private static LandDto ProjectToDto(Domain.Entities.Land x) => new(
+    private static LandDto ProjectToDto(Domain.Entities.Land x, IReadOnlyDictionary<Guid, string> rpuNumbers) => new(
         x.Id,
         x.RpuId,
         x.PropertyId,
@@ -253,6 +297,9 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
         x.Status,
         x.CreatedAt,
         x.Strips.OrderBy(s => s.Sequence).Select(LandParts.ToDto).ToList(),
-        x.Improvements.OrderBy(i => i.Sequence).Select(LandParts.ToDto).ToList(),
-        x.Adjustments.OrderBy(a => a.FactorCode).Select(a => LandParts.ToDto(a, x.Strips)).ToList());
+        x.Improvements.OrderBy(i => i.Sequence).Select(i => LandParts.ToDto(i, rpuNumbers)).ToList(),
+        x.Adjustments.OrderBy(a => a.FactorCode).Select(a => LandParts.ToDto(a, x.Strips)).ToList(),
+        x.DistanceToAllWeatherRoadKm,
+        x.DistanceToPoblacionKm,
+        x.IsSubdivisionLot);
 }

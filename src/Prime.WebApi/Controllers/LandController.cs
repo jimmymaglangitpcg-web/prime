@@ -27,6 +27,11 @@ public class LandController(ILandService landService) : ApiControllerBase
     public async Task<ActionResult<LandDto>> AddImprovement(Guid id, AddLandImprovementRequest request, CancellationToken cancellationToken) =>
         HandleResult(await landService.AddImprovementAsync(id, request, cancellationToken));
 
+    /// <summary>Road, corner, distances and subdivision status, which the adjustment factors read; with a reason (audited).</summary>
+    [HttpPut("{id:guid}/appraisal-inputs")]
+    public async Task<ActionResult<LandDto>> UpdateAppraisalInputs(Guid id, UpdateLandAppraisalInputsRequest request, CancellationToken cancellationToken) =>
+        HandleResult(await landService.UpdateAppraisalInputsAsync(id, request, cancellationToken));
+
     [HttpPost("{id:guid}/adjustments")]
     public async Task<ActionResult<LandDto>> AddAdjustment(Guid id, AddLandAdjustmentRequest request, CancellationToken cancellationToken) =>
         HandleResult(await landService.AddAdjustmentAsync(id, request, cancellationToken));

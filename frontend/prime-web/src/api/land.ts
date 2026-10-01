@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiGet, apiPost } from '../lib/apiClient';
+import { apiGet, apiPost, apiPut } from '../lib/apiClient';
 import type {
   AddLandAdjustmentRequest, AddLandImprovementRequest, AddLandStripRequest, AdjustmentFactorDto, CreateLandRequest, LandDto,
+  UpdateLandAppraisalInputsRequest,
 } from '../lib/types';
 
 // A LAND_NOT_FOUND response here just means "not registered yet" (Land is
@@ -44,6 +45,18 @@ export const useAddLandImprovement = (landId: string, rpuId: string, propertyId:
   useAddLandRow<AddLandImprovementRequest>('improvements', landId, rpuId, propertyId);
 export const useAddLandAdjustment = (landId: string, rpuId: string, propertyId: string) =>
   useAddLandRow<AddLandAdjustmentRequest>('adjustments', landId, rpuId, propertyId);
+
+/** Road, corner, distances and subdivision status, with a reason (audited; valuation-foundation.md §4.4). */
+export function useUpdateLandAppraisalInputs(landId: string, rpuId: string, propertyId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: UpdateLandAppraisalInputsRequest) => apiPut<LandDto>(`/api/land/${landId}/appraisal-inputs`, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rpus', rpuId, 'land'] });
+      queryClient.invalidateQueries({ queryKey: ['properties', propertyId] });
+    },
+  });
+}
 
 export function useAdjustmentFactors() {
   return useQuery({

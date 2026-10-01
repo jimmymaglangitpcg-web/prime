@@ -33,8 +33,28 @@ public static class ValuationCalculator
         "IsBrandNew", "AcquisitionCost", "InstallationCost", "OtherCost", "TotalAcquisitionCost",
         "ReplacementCost", "EconomicLifeYears", "RemainingLifeYears", "RemainingFraction", "DepreciatedValue",
         "MinimumRemainingValuePercent", "MinimumRemainingValue", "MinimumApplied",
-        "BaseValue", "AdditionalItemsCost", "TotalConstructionCost", "AdjustmentPercent", "ValueAdjustment", "ValueBeforeClamp", "MinimumValue", "MaximumValue", "MarketValue",
+        "BaseValue", "AdditionalItemsCost", "TotalConstructionCost", "AdjustmentPercent", "ValueAdjustment", "ValueBeforeClamp", "MinimumValue", "MaximumValue",
+        "MarketValueBeforeRounding", "RoundingStep", "MarketValue",
     ];
+
+    /// <summary>
+    /// The row's market value rounded to the configured step (e.g. the nearest ten), half away
+    /// from zero, recording the value before rounding and the step; no step: unchanged
+    /// (docs/analysis/valuation-foundation.md §4.4, [C5]).
+    /// </summary>
+    public static ValuationCalculationResult WithRounding(ValuationCalculationResult result, decimal? step)
+    {
+        if (step is not { } s || s <= 0)
+        {
+            return result;
+        }
+        var rounded = Math.Round(result.MarketValue / s, 0, MidpointRounding.AwayFromZero) * s;
+        var breakdown = new Dictionary<string, decimal>(result.Breakdown)
+        {
+            ["MarketValueBeforeRounding"] = result.MarketValue, ["RoundingStep"] = s, ["MarketValue"] = rounded,
+        };
+        return result with { MarketValue = rounded, Breakdown = breakdown };
+    }
 
     /// <summary>Breakdown key prefix for one adjustment factor's percent, e.g. "Adjustment:CORNER".</summary>
     public const string AdjustmentKeyPrefix = "Adjustment:";

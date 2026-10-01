@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-10-01 |
-| Status | **Approved 2026-10-01: all recommendations Q1–Q16 accepted (§8).** L1-1 to L1-3 done (§9); L1-4 next |
+| Status | **Approved 2026-10-01: all recommendations Q1–Q16 accepted (§8).** L1-1 to L1-4 done (§9); L1-5 next |
 | Rules | CLAUDE.md §5–§7, §28–§32, §65, §75–§77, §97 (L1), §118 |
 | Sources | LAM 2025 Book III Ch. II (appraisal, pp.69–80), Ch. III §4–§6 (assessment cases and effectivity, pp.84–85); Book IV Ch. I §2 (SMV contents, pp.107–110), Ch. III (certification and publication); RA 7160 §§219–225; RA 12001 |
 | Commit status | Cites and paraphrases the LAM; reproduces none of its tables or figures. May be committed (§118) |
@@ -532,3 +532,64 @@ predates L1; worth fixing when the approval of configuration is reworked (Phase 
   barangay unit value of 3,000/sqm for DEMO_Barangay_1 with no actual use, approved by the
   checker; DEMO-BILL-AE94B8's land valued as of 2099-01-01 at 1,800,000 under that SMV. No
   overflow at 390 px; no script errors. Dev DB now holds that SMV and rate.
+
+### L1-4 — land adjustments, rounding, separate improvements (2026-10-01)
+
+**Built**
+- **Factor rule kinds (G-5):** `AdjustmentFactor.RuleKind` = `Flat` (as before), `ByRoadType`,
+  `ByDistance` (with a `DistanceReference`: all-weather road or poblacion), `Corner`, `Depth`
+  (with the standard depth), and a table of `AdjustmentFactorRows` (road type, distance band
+  "over … not over …" km, or depth band → signed percent). The service checks each kind's shape
+  (rows required or forbidden, no overlapping bands, no repeated road type or band). The pure
+  `AdjustmentRules.Evaluate` (Domain) gives a strip its percentage from the land's facts.
+- **Applying them:** the appraiser still names factors by code on the land or a strip; the rule
+  decides the percentage. A factor that cannot apply stops the valuation with the reason
+  (`ADJUSTMENT_NOT_APPLICABLE`): a corner factor on land not recorded as a corner lot, a road or
+  distance factor without the road type or distance, a depth band without a row, any depth factor
+  on a subdivision lot. A depth factor leaves strips without a band untouched. A depth factor
+  names its class (residential), so it is not found for commercial or industrial strips, as the
+  existing lookup already did. Percentages add (Formula 4, Q6).
+- **Land facts:** `DistanceToAllWeatherRoadKm`, `DistanceToPoblacionKm`, `IsSubdivisionLot`;
+  `LandStrip.DepthBand`. `PUT /api/land/{id}/appraisal-inputs` changes road type, frontage,
+  corner, distances and subdivision status with a reason (audited). Before this, road and corner
+  could be set only when the land was registered.
+- **Rounding (G-10, [C5]):** `Valuation:MarketValueRoundingStep` (with
+  `Valuation:MarketValueRoundingLegalBasis`, required with a step; checked at start-up) rounds
+  every row's market value, half away from zero; the breakdown keeps the value before rounding
+  and the step. **Not set: off**, until the office confirms.
+- **Separately owned improvements (G-11):** `LandImprovement.SeparateRpuId` names an
+  `OtherImprovement` RPU recorded on the land (`SEPARATE_RPU_INVALID` otherwise). The land's
+  valuation leaves those rows out; valuing the other-improvement RPU values them at the SMV's
+  rates for their kind (source type Land, so the land levels and the land FAAS apply).
+- **Content pack:** `adjustment-factors` is now read (JSON: smv, code, name, ruleKind, percent,
+  classification, distanceReference, standardDepth, rows with roadType / over / upTo / depthBand /
+  percent), imported as Draft versions keyed by SMV and code. The DEMO pack gained a corner
+  factor and a distance factor. `building-costs`, `extra-item-costs`, `depreciation-rates`
+  (L1-5), `exchange-rates` and `price-indices` (L1-6) are reserved as not yet read.
+- **Screens:** Valuation Rules → Adjustment factors shows each factor's rule in words, and the
+  new-factor dialog has the rule kind, reference or standard depth, and a row table. The land
+  section has "What the adjustment factors read" with an audited edit dialog, a depth band on
+  strips, and "owned by" on trees and plants. The SMV picker in the factor dialog is searchable.
+- Migration `LandAdjustmentRules`, additive (existing factors become `Flat`), **local database
+  only**.
+
+**Deviation:** the design said road-type and distance factors are "applied from the land's
+road type / distance"; they are still named on the land by the appraiser, and the rule supplies
+the percentage. This keeps one way of attaching factors and makes the appraiser's choice
+visible on the FAAS. Automatic application can be added if the office wants it.
+
+**Verified**
+- 15 unit tests (`AdjustmentRulesTests`: each kind, band edges "over / not over", missing
+  facts, depth on subdivision lots, overlap check, rounding half away from zero and off).
+- 5 integration tests (`LandAdjustmentRuleTests`, DEMO SMV 1,000/sqm): dirt road -10, 3 km to
+  the poblacion -5, corner +15 and depth band 1 -20 give 500,000 and 80,000 (580,000); each
+  refusal with its reason, the audited change of inputs; factor table checks; a rounding step of
+  100,000 set through configuration rounds 80,000 to 100,000; a mango tree owned by an
+  other-improvement unit is valued under that unit (20,000) and not with the land.
+- Full suite: 529 tests pass (182 domain, 56 application, 291 integration). `npm run build` and
+  `npm run lint` clean.
+- Browser (Playwright, API :5231, dev server :5174): a corner factor (+10 %) and a distance
+  factor with two bands created as admin and approved as the dev checker; on DEMO-BILL-AE94B8's
+  land, corner lot and 1.5 km to the poblacion recorded with a reason, the corner factor added,
+  and the land valued as of 2026-06-01 at 660,000 (500,000 + 50,000 and 100,000 + 10,000).
+  No script errors. Dev DB now holds factors DEMO-L14-CNR, DEMO-L14-KM and that land state.

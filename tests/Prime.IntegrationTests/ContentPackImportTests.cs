@@ -87,13 +87,13 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
         result.Applied.ShouldBeTrue();
         var record = result.Import.ShouldNotBeNull();
         // 1 province, 2 towns, 4 barangays, 2 classifications, 1 sub-class, 1 actual use, 2 parts, 2 materials,
-        // 4 draft versions, 1 office with 2 draft jurisdictions, a draft SMV with 2 unit values and 1 level, 2 barangay boundaries
-        record.CreatedCount.ShouldBe(28);
+        // 4 draft versions, 1 office with 2 draft jurisdictions, a draft SMV with 2 unit values, 2 factors and 1 level, 2 barangay boundaries
+        record.CreatedCount.ShouldBe(30);
         record.ChangedCount.ShouldBe(0);
         record.ImportedBy.ShouldBe(c.Importer.Id);
         record.ImportedByName.ShouldBe("DEMO Importer");
         record.Fingerprint.ShouldBe(preview.Fingerprint);
-        record.Files.Count.ShouldBe(17);
+        record.Files.Count.ShouldBe(18);
 
         var province = await c.Db.Provinces.SingleAsync(x => x.PsgcCode == "9900000000");
         province.PinIndexNumber.ShouldBe("998");
@@ -118,7 +118,7 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
             .ShouldSatisfyAllConditions(l => l.ActualUse!.Code.ShouldBe("DEMO-CP-RU"), l => l.AssessmentPercentage.ShouldBe(20m), l => l.Status.ShouldBe(WorkflowStatus.Draft));
 
         var items = (await c.Service.ListImportItemsAsync(record.Id, new PagedRequest { PageSize = 100 })).Value;
-        items.TotalCount.ShouldBe(28);
+        items.TotalCount.ShouldBe(30);
         items.Items.ShouldAllBe(i => i.Action == ContentImportAction.Created && i.Source.Length > 0 && i.Line >= 1);
         items.Items.Single(i => i.Key == "9900200001").Source.ShouldBe("DEMO data (row-level source)");
         items.Items.Single(i => i.Key == "9900200001").EntityId.ShouldBe((await c.Db.Barangays.SingleAsync(x => x.PsgcCode == "9900200001")).Id);

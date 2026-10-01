@@ -42,6 +42,7 @@ public static class ContentFileKinds
     public const string Smv = "smv";
     public const string SmvSchedules = "smv-schedules";
     public const string AssessmentLevels = "assessment-levels";
+    public const string AdjustmentFactors = "adjustment-factors";
 
     /// <summary>CSV tables (step C1–C2).</summary>
     public static readonly IReadOnlySet<string> Csv = new HashSet<string> { Provinces, Municipalities, Barangays, Lookup };
@@ -52,7 +53,7 @@ public static class ContentFileKinds
     /// </summary>
     /// From step L1-3: SMVs (JSON), their unit values and assessment levels (CSV), as Draft records.
     public static readonly IReadOnlySet<string> Versioned = new HashSet<string>
-        { TransactionTypes, NumberingSchemes, ApprovalChains, Forms, Offices, Smv, SmvSchedules, AssessmentLevels };
+        { TransactionTypes, NumberingSchemes, ApprovalChains, Forms, Offices, Smv, SmvSchedules, AssessmentLevels, AdjustmentFactors };
 
     /// <summary>Kinds PRIME reads and imports; GeoJSON map layers from step C5.</summary>
     public static readonly IReadOnlySet<string> Supported = Csv.Union(Versioned).Append(GisLayer).ToHashSet();
@@ -60,8 +61,11 @@ public static class ContentFileKinds
     /// <summary>Recognised, hashed and listed, but not yet read: the step that adds each.</summary>
     public static readonly IReadOnlyDictionary<string, string> Later = new Dictionary<string, string>
     {
-        // Factor rule kinds (road type, distance, corner, depth) change this file's shape in step L1-4.
-        ["adjustment-factors"] = "L1-4",
+        ["building-costs"] = "L1-5",
+        ["extra-item-costs"] = "L1-5",
+        ["depreciation-rates"] = "L1-5",
+        ["exchange-rates"] = "L1-6",
+        ["price-indices"] = "L1-6",
     };
 }
 

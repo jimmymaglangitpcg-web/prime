@@ -7,11 +7,22 @@ using Prime.Domain.Enums;
 namespace Prime.Application.Features.Lands;
 
 /// <param name="ValuationClassificationId">Prices the strip when it differs from its own classification (valuation-foundation.md §4.3); null: its own.</param>
+/// <param name="DepthBand">The strip's depth band beyond the standard depth, for a depth factor (valuation-foundation.md §4.4); null: none.</param>
 public sealed record AddLandStripRequest(Guid ClassificationId, Guid? SubClassificationId, Guid ActualUseId, Guid? ZoneId, decimal Area,
-    Guid? ValuationClassificationId = null, Guid? ValuationSubClassificationId = null);
+    Guid? ValuationClassificationId = null, Guid? ValuationSubClassificationId = null, int? DepthBand = null);
 
+/// <param name="SeparateRpuId">An <c>OtherImprovement</c> RPU on this land that owns the improvement apart from the land (§4.4); null: the land's own.</param>
 public sealed record AddLandImprovementRequest(
-    Guid ImprovementKindId, decimal Quantity, bool? IsProductive, Guid? ClassificationId, Guid? ActualUseId, string? Description);
+    Guid ImprovementKindId, decimal Quantity, bool? IsProductive, Guid? ClassificationId, Guid? ActualUseId, string? Description,
+    Guid? SeparateRpuId = null);
+
+/// <summary>
+/// What the land's adjustment factors read (valuation-foundation.md §4.4). Changed with a reason,
+/// kept in the audit trail; valuations already made keep the values they used.
+/// </summary>
+public sealed record UpdateLandAppraisalInputsRequest(
+    Guid? RoadTypeId, decimal? RoadFrontage, bool IsCornerLot, decimal? DistanceToAllWeatherRoadKm, decimal? DistanceToPoblacionKm,
+    bool IsSubdivisionLot, string Reason);
 
 public sealed record AddLandAdjustmentRequest(string FactorCode, Guid? LandStripId, string? Remarks);
 
@@ -19,11 +30,12 @@ public sealed record LandStripDto(
     Guid Id, int Sequence, Guid ClassificationId, string ClassificationName, Guid? SubClassificationId, string? SubClassificationName,
     Guid ActualUseId, string ActualUseName, Guid? ZoneId, string? ZoneName, decimal Area,
     Guid? ValuationClassificationId = null, string? ValuationClassificationName = null,
-    Guid? ValuationSubClassificationId = null, string? ValuationSubClassificationName = null);
+    Guid? ValuationSubClassificationId = null, string? ValuationSubClassificationName = null, int? DepthBand = null);
 
 public sealed record LandImprovementDto(
     Guid Id, int Sequence, Guid ImprovementKindId, string ImprovementKindName, decimal Quantity, bool? IsProductive,
-    Guid? ClassificationId, string? ClassificationName, Guid? ActualUseId, string? ActualUseName, string? Description);
+    Guid? ClassificationId, string? ClassificationName, Guid? ActualUseId, string? ActualUseName, string? Description,
+    Guid? SeparateRpuId = null, string? SeparateRpuNumber = null);
 
 public sealed record LandAdjustmentDto(Guid Id, string FactorCode, Guid? LandStripId, int? StripSequence, string? Remarks);
 
@@ -78,15 +90,20 @@ internal static class LandParts
         {
             return "The specified valuation sub-classification does not exist.";
         }
+        if (r.DepthBand is < 1 or > 50)
+        {
+            return "The depth band must be 1 or more (the standard strip has none).";
+        }
         return null;
     }
 
     public static LandStripDto ToDto(LandStrip x) => new(x.Id, x.Sequence, x.ClassificationId, x.Classification!.Name, x.SubClassificationId,
         x.SubClassification?.Name, x.ActualUseId, x.ActualUse!.Name, x.ZoneId, x.Zone?.Name, x.Area,
-        x.ValuationClassificationId, x.ValuationClassification?.Name, x.ValuationSubClassificationId, x.ValuationSubClassification?.Name);
+        x.ValuationClassificationId, x.ValuationClassification?.Name, x.ValuationSubClassificationId, x.ValuationSubClassification?.Name, x.DepthBand);
 
-    public static LandImprovementDto ToDto(LandImprovement x) => new(x.Id, x.Sequence, x.ImprovementKindId, x.ImprovementKind!.Name, x.Quantity,
-        x.IsProductive, x.ClassificationId, x.Classification?.Name, x.ActualUseId, x.ActualUse?.Name, x.Description);
+    public static LandImprovementDto ToDto(LandImprovement x, IReadOnlyDictionary<Guid, string> rpuNumbers) => new(x.Id, x.Sequence, x.ImprovementKindId,
+        x.ImprovementKind!.Name, x.Quantity, x.IsProductive, x.ClassificationId, x.Classification?.Name, x.ActualUseId, x.ActualUse?.Name, x.Description,
+        x.SeparateRpuId, x.SeparateRpuId is { } r ? rpuNumbers.GetValueOrDefault(r) : null);
 
     public static LandAdjustmentDto ToDto(LandAdjustment x, IEnumerable<LandStrip> strips) =>
         new(x.Id, x.FactorCode, x.LandStripId, strips.FirstOrDefault(s => s.Id == x.LandStripId)?.Sequence, x.Remarks);

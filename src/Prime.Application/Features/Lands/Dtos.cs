@@ -39,4 +39,7 @@ public sealed record LandDto(
     DateTimeOffset CreatedAt,
     IReadOnlyList<LandStripDto> Strips,
     IReadOnlyList<LandImprovementDto> Improvements,
-    IReadOnlyList<LandAdjustmentDto> Adjustments);
+    IReadOnlyList<LandAdjustmentDto> Adjustments,
+    decimal? DistanceToAllWeatherRoadKm = null,
+    decimal? DistanceToPoblacionKm = null,
+    bool IsSubdivisionLot = false);

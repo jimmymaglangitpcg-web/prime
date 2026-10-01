@@ -61,6 +61,8 @@ public static class DependencyInjection
                 "Valuation:MachineryMinimumRemainingValuePercent is required (0-100).")
             .Validate(o => !string.IsNullOrWhiteSpace(o.MachineryMinimumRemainingValueLegalBasis),
                 "Valuation:MachineryMinimumRemainingValueLegalBasis is required.")
+            .Validate(o => o.MarketValueRoundingStep is null || o.MarketValueRoundingStep > 0 && !string.IsNullOrWhiteSpace(o.MarketValueRoundingLegalBasis),
+                "Valuation:MarketValueRoundingStep must be positive and needs Valuation:MarketValueRoundingLegalBasis.")
             .ValidateOnStart();
 
         // Billing engine policy choices (docs/BILLING.md §5); each bill freezes the value used.

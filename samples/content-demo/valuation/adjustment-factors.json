@@ -1,0 +1,25 @@
+[
+  {
+    "smv": "DEMO-CP-CERT-2099",
+    "code": "DEMO-CP-CORNER",
+    "name": "DEMO corner influence",
+    "ruleKind": "Corner",
+    "percent": 10,
+    "legalBasis": "DEMO — not an SMV provision",
+    "effectiveDate": "2099-01-01"
+  },
+  {
+    "smv": "DEMO-CP-CERT-2099",
+    "code": "DEMO-CP-ROAD-KM",
+    "name": "DEMO distance to an all-weather road",
+    "ruleKind": "ByDistance",
+    "distanceReference": "AllWeatherRoad",
+    "rows": [
+      { "upTo": 1, "percent": 0 },
+      { "over": 1, "upTo": 3, "percent": -5 },
+      { "over": 3, "percent": -10 }
+    ],
+    "legalBasis": "DEMO — not an SMV provision",
+    "effectiveDate": "2099-01-01"
+  }
+]

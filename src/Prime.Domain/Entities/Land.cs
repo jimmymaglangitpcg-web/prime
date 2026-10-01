@@ -35,6 +35,14 @@ public sealed class Land : AuditableEntity
     public bool IsCornerLot { get; set; }
     public string? Zoning { get; set; }
 
+    // What distance and depth factors read (docs/analysis/valuation-foundation.md §4.4).
+    /// <summary>Km to the nearest all-weather road (agricultural land).</summary>
+    public decimal? DistanceToAllWeatherRoadKm { get; set; }
+    /// <summary>Km to the poblacion (agricultural land).</summary>
+    public decimal? DistanceToPoblacionKm { get; set; }
+    /// <summary>A subdivision lot: depth adjustments do not apply (LAM Bk III p.77).</summary>
+    public bool IsSubdivisionLot { get; set; }
+
     public decimal? MarketValue { get; set; }
     public decimal? AssessedValue { get; set; }
 
@@ -77,6 +85,9 @@ public sealed class LandStrip : AuditableEntity
     public Classification? ValuationClassification { get; set; }
     public Guid? ValuationSubClassificationId { get; set; }
     public SubClassification? ValuationSubClassification { get; set; }
+
+    /// <summary>The strip's depth band beyond the standard depth, which a depth factor prices; null: none (the standard strip).</summary>
+    public int? DepthBand { get; set; }
 }
 
 /// <summary>
@@ -99,6 +110,13 @@ public sealed class LandImprovement : AuditableEntity
     public Guid? ActualUseId { get; set; }
     public ActualUse? ActualUse { get; set; }
     public string? Description { get; set; }
+
+    /// <summary>
+    /// The separately owned improvement unit (an <c>OtherImprovement</c> RPU on this land) the
+    /// row belongs to: valued and assessed under that unit, in its owner's name, not with the
+    /// land (LAM Bk III p.72; docs/analysis/valuation-foundation.md §4.4). Null: the land's own.
+    /// </summary>
+    public Guid? SeparateRpuId { get; set; }
 }
 
 /// <summary>

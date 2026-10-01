@@ -10,4 +10,5 @@ public interface ILandService
     Task<Result<LandDto>> AddStripAsync(Guid landId, AddLandStripRequest request, CancellationToken cancellationToken = default);
     Task<Result<LandDto>> AddImprovementAsync(Guid landId, AddLandImprovementRequest request, CancellationToken cancellationToken = default);
     Task<Result<LandDto>> AddAdjustmentAsync(Guid landId, AddLandAdjustmentRequest request, CancellationToken cancellationToken = default);
+    Task<Result<LandDto>> UpdateAppraisalInputsAsync(Guid landId, UpdateLandAppraisalInputsRequest request, CancellationToken cancellationToken = default);
 }

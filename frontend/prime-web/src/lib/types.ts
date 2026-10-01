@@ -490,6 +490,15 @@ export interface LandDto {
   strips: LandStripDto[];
   improvements: LandImprovementDto[];
   adjustments: LandAdjustmentDto[];
+  /** What distance and depth factors read (valuation-foundation.md §4.4). */
+  distanceToAllWeatherRoadKm: number | null;
+  distanceToPoblacionKm: number | null;
+  isSubdivisionLot: boolean;
+}
+
+export interface UpdateLandAppraisalInputsRequest {
+  roadTypeId: string | null; roadFrontage: number | null; isCornerLot: boolean; distanceToAllWeatherRoadKm: number | null;
+  distanceToPoblacionKm: number | null; isSubdivisionLot: boolean; reason: string;
 }
 
 export interface LandStripDto {
@@ -498,22 +507,26 @@ export interface LandStripDto {
   /** The class and sub-class that price the strip when they differ from its own (valuation-foundation.md §4.3). */
   valuationClassificationId: string | null; valuationClassificationName: string | null;
   valuationSubClassificationId: string | null; valuationSubClassificationName: string | null;
+  depthBand: number | null;
 }
 
 export interface LandImprovementDto {
   id: string; sequence: number; improvementKindId: string; improvementKindName: string; quantity: number; isProductive: boolean | null;
   classificationId: string | null; classificationName: string | null; actualUseId: string | null; actualUseName: string | null; description: string | null;
+  /** The other-improvement unit that owns it apart from the land; null: the land's own. */
+  separateRpuId: string | null; separateRpuNumber: string | null;
 }
 
 export interface LandAdjustmentDto { id: string; factorCode: string; landStripId: string | null; stripSequence: number | null; remarks: string | null }
 
 export interface AddLandStripRequest {
   classificationId: string; subClassificationId: string | null; actualUseId: string; zoneId: string | null; area: number;
-  valuationClassificationId?: string | null; valuationSubClassificationId?: string | null;
+  valuationClassificationId?: string | null; valuationSubClassificationId?: string | null; depthBand?: number | null;
 }
 
 export interface AddLandImprovementRequest {
   improvementKindId: string; quantity: number; isProductive: boolean | null; classificationId: string | null; actualUseId: string | null; description: string | null;
+  separateRpuId?: string | null;
 }
 
 export interface AddLandAdjustmentRequest { factorCode: string; landStripId: string | null; remarks: string | null }
@@ -523,7 +536,29 @@ export interface AdjustmentFactorDto {
   id: string; smvId: string; smvOrdinanceNumber: string; code: string; name: string; percent: number; classificationId: string | null;
   classificationName: string | null; description: string | null; legalBasis: string; effectiveDate: string; endDate: string | null;
   status: WorkflowStatus; createdAt: string;
+  ruleKind: AdjustmentRuleKind; distanceReference: DistanceReference | null; standardDepth: number | null; rows: AdjustmentFactorRowDto[];
 }
+
+/** How a factor finds its percentage for a land (valuation-foundation.md §4.4). */
+export type AdjustmentRuleKind = 'Flat' | 'ByRoadType' | 'ByDistance' | 'Corner' | 'Depth';
+export type DistanceReference = 'AllWeatherRoad' | 'Poblacion';
+export const adjustmentRuleKinds: { value: AdjustmentRuleKind; label: string }[] = [
+  { value: 'Flat', label: 'Flat percent (chosen by the appraiser)' },
+  { value: 'ByRoadType', label: 'By kind of road' },
+  { value: 'ByDistance', label: 'By distance' },
+  { value: 'Corner', label: 'Corner lot' },
+  { value: 'Depth', label: 'By depth band' },
+];
+export const distanceReferences: { value: DistanceReference; label: string }[] = [
+  { value: 'AllWeatherRoad', label: 'to an all-weather road' },
+  { value: 'Poblacion', label: 'to the poblacion' },
+];
+
+export interface AdjustmentFactorRowDto {
+  sequence: number; roadTypeId: string | null; roadTypeName: string | null; overValue: number | null; upToValue: number | null; depthBand: number | null; percent: number;
+}
+
+export interface AdjustmentFactorRowRequest { roadTypeId: string | null; overValue: number | null; upToValue: number | null; depthBand: number | null; percent: number }
 
 // --- Building -----------------------------------------------------------
 
@@ -1722,4 +1757,5 @@ export interface CreateAssessmentLevelRequest {
 export interface CreateAdjustmentFactorRequest {
   smvId: string; code: string; name: string; percent: number; classificationId: string | null; description: string | null;
   legalBasis: string; effectiveDate: string; remarks: string | null;
+  ruleKind: AdjustmentRuleKind; distanceReference: DistanceReference | null; standardDepth: number | null; rows: AdjustmentFactorRowRequest[];
 }

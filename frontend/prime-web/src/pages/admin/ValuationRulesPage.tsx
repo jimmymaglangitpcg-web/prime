@@ -1,17 +1,21 @@
 import { useState } from 'react';
 import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import {
   useAllAdjustmentFactors, useApproveAdjustmentFactor, useApproveAssessmentLevel, useApproveSmv, useApproveSmvSchedule, useAssessmentLevels,
   useCreateAdjustmentFactor, useCreateAssessmentLevel, useCreateSmv, useCreateSmvSchedule, useSmvSchedules, useSmvs,
 } from '../../api/valuation';
 import {
-  useActualUses, useAllMunicipalities, useBarangays, useClassifications, useImprovementKinds, usePropertyTypes, useSubClassifications, useZones,
+  useActualUses, useAllMunicipalities, useBarangays, useClassifications, useImprovementKinds, usePropertyTypes, useRoadTypes, useSubClassifications,
+  useZones,
 } from '../../api/referenceData';
 import { ApiRequestError } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/format';
-import type { AdjustmentFactorDto, AssessmentLevelDto, LookupDto, SmvBasis, SmvDto, SmvScheduleDto, WorkflowStatus } from '../../lib/types';
+import {
+  adjustmentRuleKinds, distanceReferences, type AdjustmentFactorDto, type AdjustmentRuleKind, type AssessmentLevelDto, type LookupDto, type SmvBasis,
+  type SmvDto, type SmvScheduleDto, type WorkflowStatus,
+} from '../../lib/types';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error)?.message);
 const day = (d: Dayjs | null | undefined) => (d ? d.format('YYYY-MM-DD') : null);
@@ -250,6 +254,23 @@ function CreateScheduleModal({ smv, onClose }: { smv: SmvDto; onClose: () => voi
 
 // ---------------- Adjustment factors ----------------
 
+/** A factor's table in words: "Paved 0%; Dirt −10%", "≤ 2 km 0%; 2–5 km −5%", "band 1 −20%". */
+function factorRule(f: AdjustmentFactorDto) {
+  const rows = f.rows.map((r) => {
+    if (r.roadTypeName) return `${r.roadTypeName} ${pct(r.percent)}`;
+    if (r.depthBand !== null) return `band ${r.depthBand} ${pct(r.percent)}`;
+    const band = r.overValue === null ? `≤ ${r.upToValue} km` : r.upToValue === null ? `> ${r.overValue} km` : `${r.overValue}–${r.upToValue} km`;
+    return `${band} ${pct(r.percent)}`;
+  });
+  switch (f.ruleKind) {
+    case 'Flat': return pct(f.percent);
+    case 'Corner': return `${pct(f.percent)} on corner lots`;
+    case 'ByDistance': return `${distanceReferences.find((d) => d.value === f.distanceReference)?.label ?? ''}: ${rows.join('; ')}`;
+    case 'Depth': return `beyond ${f.standardDepth} m: ${rows.join('; ')}`;
+    default: return rows.join('; ');
+  }
+}
+
 function FactorsTab() {
   const { data = [], isLoading } = useAllAdjustmentFactors();
   const approve = useApproveAdjustmentFactor();
@@ -258,12 +279,17 @@ function FactorsTab() {
   return (
     <Card title="Adjustment factors" extra={<Button icon={<PlusOutlined />} onClick={() => setCreating(true)}>New factor</Button>}>
       {context}
+      <Typography.Paragraph type="secondary">
+        The appraiser names a factor on a land; its rule takes the percentage from the land&apos;s road, corner status, distance or the strip&apos;s depth band.
+        Several factors on one strip add up.
+      </Typography.Paragraph>
       <Table<AdjustmentFactorDto> rowKey="id" size="small" loading={isLoading} dataSource={data} pagination={false} scroll={{ x: true }}
         columns={[
           { title: 'SMV', dataIndex: 'smvOrdinanceNumber' },
           { title: 'Code', dataIndex: 'code' },
           { title: 'Name', dataIndex: 'name' },
-          { title: 'Adjustment', dataIndex: 'percent', align: 'right', render: pct },
+          { title: 'Rule', dataIndex: 'ruleKind', render: (k: AdjustmentRuleKind) => adjustmentRuleKinds.find((r) => r.value === k)?.label.split(' (')[0] ?? k },
+          { title: 'Adjustment', render: (_, f) => factorRule(f) },
           { title: 'Classification', dataIndex: 'classificationName', render: (v: string | null) => v ?? 'all' },
           { title: 'Legal basis', dataIndex: 'legalBasis' },
           { title: 'Period', render: (_, f) => period(f.effectiveDate, f.endDate) },
@@ -275,28 +301,89 @@ function FactorsTab() {
   );
 }
 
+interface FactorRowForm { roadTypeId?: string; overValue?: number; upToValue?: number; depthBand?: number; percent?: number }
+
 function CreateFactorModal({ onClose }: { onClose: () => void }) {
   const create = useCreateAdjustmentFactor();
   const [form] = Form.useForm();
   const { data: smvs } = useSmvs();
   const { data: classifications = [] } = useClassifications();
+  const { data: roadTypes = [] } = useRoadTypes();
+  const kind = (Form.useWatch('ruleKind', form) as AdjustmentRuleKind | undefined) ?? 'Flat';
+  const usesPercent = kind === 'Flat' || kind === 'Corner';
   return (
-    <Modal open title="New adjustment factor" okText="Create" onCancel={onClose} okButtonProps={{ loading: create.isPending }} onOk={() => form.submit()} width={680} destroyOnHidden>
+    <Modal open title="New adjustment factor" okText="Create" onCancel={onClose} okButtonProps={{ loading: create.isPending }} onOk={() => form.submit()} width={760} destroyOnHidden>
       {create.isError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Not created" description={errorText(create.error)} />}
-      <Form form={form} layout="vertical" onFinish={(v) => create.mutate({
-        smvId: v.smvId, code: v.code, name: v.name, percent: v.percent, classificationId: v.classificationId ?? null,
+      <Form form={form} layout="vertical" initialValues={{ ruleKind: 'Flat', rows: [] }} onFinish={(v) => create.mutate({
+        smvId: v.smvId, code: v.code, name: v.name, percent: usesPercent ? v.percent : 0, classificationId: v.classificationId ?? null,
         description: v.description || null, legalBasis: v.legalBasis, effectiveDate: day(v.effectiveDate)!, remarks: null,
+        ruleKind: v.ruleKind, distanceReference: v.ruleKind === 'ByDistance' ? v.distanceReference : null,
+        standardDepth: v.ruleKind === 'Depth' ? v.standardDepth : null,
+        rows: usesPercent ? [] : (v.rows ?? []).map((r: FactorRowForm) => ({
+          roadTypeId: kind === 'ByRoadType' ? r.roadTypeId ?? null : null,
+          overValue: kind === 'ByDistance' ? r.overValue ?? null : null, upToValue: kind === 'ByDistance' ? r.upToValue ?? null : null,
+          depthBand: kind === 'Depth' ? r.depthBand ?? null : null, percent: r.percent ?? 0,
+        })),
       }, { onSuccess: onClose })}>
         <Row gutter={12}>
-          <Col span={12}><Form.Item name="smvId" label="SMV" rules={[{ required: true }]}>
-            <Select options={(smvs?.items ?? []).map((s) => ({ value: s.id, label: `${s.reference} (${s.revisionYear})` }))} />
+          <Col xs={24} md={12}><Form.Item name="smvId" label="SMV" rules={[{ required: true }]}>
+            <Select showSearch optionFilterProp="label" options={(smvs?.items ?? []).map((s) => ({ value: s.id, label: `${s.reference} (${s.revisionYear})` }))} />
           </Form.Item></Col>
-          <Col span={12}><Form.Item name="classificationId" label="Classification" extra="Blank: all"><Select allowClear showSearch optionFilterProp="label" options={lookup(classifications)} /></Form.Item></Col>
-          <Col span={6}><Form.Item name="code" label="Code" rules={[{ required: true }]}><Input maxLength={30} /></Form.Item></Col>
-          <Col span={12}><Form.Item name="name" label="Name" rules={[{ required: true }]}><Input maxLength={200} /></Form.Item></Col>
-          <Col span={6}><Form.Item name="percent" label="Adjustment %" rules={[{ required: true }]}><InputNumber precision={4} style={{ width: '100%' }} /></Form.Item></Col>
-          <Col span={16}><Form.Item name="legalBasis" label="Legal basis" rules={[{ required: true }]}><Input maxLength={500} /></Form.Item></Col>
-          <Col span={8}><Form.Item name="effectiveDate" label="Effective" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={24} md={12}><Form.Item name="classificationId" label="Classification" extra={kind === 'Depth' ? 'Depth applies to the class named here (residential).' : 'Blank: all'}>
+            <Select allowClear showSearch optionFilterProp="label" options={lookup(classifications)} />
+          </Form.Item></Col>
+          <Col xs={12} md={6}><Form.Item name="code" label="Code" rules={[{ required: true }, { max: 20 }]}><Input /></Form.Item></Col>
+          <Col xs={12} md={18}><Form.Item name="name" label="Name" rules={[{ required: true }]}><Input maxLength={200} /></Form.Item></Col>
+          <Col xs={24} md={12}><Form.Item name="ruleKind" label="Rule"><Select options={adjustmentRuleKinds} /></Form.Item></Col>
+          {usesPercent && (
+            <Col xs={12} md={6}><Form.Item name="percent" label="Adjustment %" rules={[{ required: true }]}><InputNumber precision={4} style={{ width: '100%' }} /></Form.Item></Col>
+          )}
+          {kind === 'ByDistance' && (
+            <Col xs={24} md={12}><Form.Item name="distanceReference" label="Distance" rules={[{ required: true }]}><Select options={distanceReferences} /></Form.Item></Col>
+          )}
+          {kind === 'Depth' && (
+            <Col xs={12} md={6}><Form.Item name="standardDepth" label="Standard depth (m)" rules={[{ required: true }]}><InputNumber min={0.001} style={{ width: '100%' }} /></Form.Item></Col>
+          )}
+        </Row>
+        {!usesPercent && (
+          <Form.List name="rows">
+            {(fields, { add, remove }) => (
+              <>
+                <Typography.Text strong>
+                  {kind === 'ByRoadType' ? 'Percent per kind of road' : kind === 'ByDistance' ? 'Percent per distance band (over … not over …, km)' : 'Percent per depth band'}
+                </Typography.Text>
+                {fields.map((field) => (
+                  <Space key={field.key} align="baseline" wrap style={{ display: 'flex' }}>
+                    {kind === 'ByRoadType' && (
+                      <Form.Item name={[field.name, 'roadTypeId']} rules={[{ required: true, message: 'Road type' }]}>
+                        <Select aria-label="Road type" placeholder="Road type" style={{ width: 200 }} options={lookup(roadTypes)} />
+                      </Form.Item>
+                    )}
+                    {kind === 'ByDistance' && (
+                      <>
+                        <Form.Item name={[field.name, 'overValue']}><InputNumber aria-label="Over km" placeholder="over (km)" min={0} style={{ width: 120 }} /></Form.Item>
+                        <Form.Item name={[field.name, 'upToValue']}><InputNumber aria-label="Up to km" placeholder="not over (km)" min={0} style={{ width: 130 }} /></Form.Item>
+                      </>
+                    )}
+                    {kind === 'Depth' && (
+                      <Form.Item name={[field.name, 'depthBand']} rules={[{ required: true, message: 'Band' }]}>
+                        <InputNumber aria-label="Depth band" placeholder="band" min={1} precision={0} style={{ width: 100 }} />
+                      </Form.Item>
+                    )}
+                    <Form.Item name={[field.name, 'percent']} rules={[{ required: true, message: '%' }]}>
+                      <InputNumber aria-label="Row percent" placeholder="%" precision={4} style={{ width: 110 }} />
+                    </Form.Item>
+                    <MinusCircleOutlined aria-label="Remove row" onClick={() => remove(field.name)} />
+                  </Space>
+                ))}
+                <Button type="dashed" icon={<PlusOutlined />} onClick={() => add()} style={{ margin: '4px 0 12px' }}>Add row</Button>
+              </>
+            )}
+          </Form.List>
+        )}
+        <Row gutter={12}>
+          <Col xs={24} md={16}><Form.Item name="legalBasis" label="Legal basis" rules={[{ required: true }]}><Input maxLength={500} /></Form.Item></Col>
+          <Col xs={24} md={8}><Form.Item name="effectiveDate" label="Effective" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
           <Col span={24}><Form.Item name="description" label="Description"><Input maxLength={500} /></Form.Item></Col>
         </Row>
       </Form>

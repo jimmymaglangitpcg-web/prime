@@ -53,6 +53,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
 
         var date = asOf ?? clock.Today;
         var location = await LocationAsync(land.PropertyId, cancellationToken);
+        var facts = new LandFacts(land.RoadTypeId, land.IsCornerLot, land.DistanceToAllWeatherRoadKm, land.DistanceToPoblacionKm, land.IsSubdivisionLot);
         var lines = new List<(ValuationLine Line, SmvSchedule Schedule, ValuationCalculationResult Calc)>();
         // A land recorded without strips is valued as one strip of its own fields, adjustments included.
         // Each strip is priced by its valuation key (class and sub-class) and assessed by its own (§4.3).
@@ -61,9 +62,10 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
             ? strips.Select(x => (Source: ValuationLineSource.LandStrip, SourceId: x.Id, StripId: (Guid?)x.Id, x.Sequence, x.ClassificationId,
                 x.SubClassificationId, x.ActualUseId, ZoneId: x.ZoneId ?? land.ZoneId, x.Area,
                 PricedClassificationId: x.ValuationClassificationId ?? x.ClassificationId,
-                PricedSubClassificationId: x.ValuationClassificationId is null && x.ValuationSubClassificationId is null ? x.SubClassificationId : x.ValuationSubClassificationId)).ToList()
+                PricedSubClassificationId: x.ValuationClassificationId is null && x.ValuationSubClassificationId is null ? x.SubClassificationId : x.ValuationSubClassificationId,
+                x.DepthBand)).ToList()
             : [(ValuationLineSource.Land, land.Id, null, 1, land.ClassificationId, land.SubClassificationId, land.ActualUseId, land.ZoneId, land.Area,
-                land.ClassificationId, land.SubClassificationId)];
+                land.ClassificationId, land.SubClassificationId, null)];
         foreach (var row in rows)
         {
             var schedule = await ResolveScheduleAsync(row.PricedClassificationId, propertyType.Id, null, location.MunicipalityId,
@@ -73,10 +75,11 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 return Result.Failure<ValuationDto>("SMV_SCHEDULE_NOT_FOUND",
                     $"No approved SMV schedule covering this municipality matches land strip {row.Sequence}'s classification/sub-class/zone as of {date:yyyy-MM-dd}.");
             }
+            // Each named factor's percentage comes from its rule and the land's facts (valuation-foundation.md §4.4).
             var adjustments = new List<LandAdjustmentInput>();
             foreach (var adjustment in land.Adjustments.Where(a => a.LandStripId == null || a.LandStripId == row.StripId).OrderBy(a => a.FactorCode))
             {
-                var factor = await db.AdjustmentFactors.InForce(date)
+                var factor = await db.AdjustmentFactors.InForce(date).Include(f => f.Rows)
                     .Where(f => f.SmvId == schedule.SmvId && f.Code == adjustment.FactorCode
                         && (f.ClassificationId == null || f.ClassificationId == row.ClassificationId))
                     .OrderByDescending(f => f.ClassificationId != null)
@@ -84,9 +87,17 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 if (factor is null)
                 {
                     return Result.Failure<ValuationDto>("ADJUSTMENT_FACTOR_NOT_FOUND",
-                        $"No approved adjustment factor '{adjustment.FactorCode}' is in force under the SMV that prices land strip {row.Sequence}.");
+                        $"No approved adjustment factor '{adjustment.FactorCode}' for this classification is in force under the SMV that prices land strip {row.Sequence}.");
                 }
-                adjustments.Add(new LandAdjustmentInput(factor.Code, factor.Name, factor.Percent));
+                var outcome = AdjustmentRules.Evaluate(factor, facts, row.DepthBand);
+                if (outcome.Problem is { } problem)
+                {
+                    return Result.Failure<ValuationDto>("ADJUSTMENT_NOT_APPLICABLE", $"Land strip {row.Sequence}: {problem}");
+                }
+                if (outcome.Applies)
+                {
+                    adjustments.Add(new LandAdjustmentInput(factor.Code, factor.Name, outcome.Percent));
+                }
             }
             var pricedApart = row.PricedClassificationId != row.ClassificationId || row.PricedSubClassificationId != row.SubClassificationId;
             lines.Add((new ValuationLine
@@ -95,20 +106,70 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 SubClassificationId = row.SubClassificationId, ActualUseId = row.ActualUseId, Quantity = row.Area, Unit = land.AreaUnit,
                 PricedClassificationId = pricedApart ? row.PricedClassificationId : null,
                 PricedSubClassificationId = pricedApart ? row.PricedSubClassificationId : null,
-            }, schedule, ValuationCalculator.CalculateLandStrip(row.Area, schedule, land.LocationFactor, adjustments)));
+            }, schedule, Rounded(ValuationCalculator.CalculateLandStrip(row.Area, schedule, land.LocationFactor, adjustments))));
         }
 
-        // Improvements are assessed under their own classification and use, or the principal strip's.
-        var principal = strips.OrderByDescending(x => x.Area).ThenBy(x => x.Sequence).FirstOrDefault();
-        foreach (var improvement in land.Improvements.OrderBy(x => x.Sequence))
+        // The land's own improvements; separately owned ones are valued under their own unit.
+        var improvements = await ImprovementLinesAsync(land, land.Improvements.Where(i => i.SeparateRpuId == null), propertyType.Id, location, date, cancellationToken);
+        if (improvements.IsFailure)
+        {
+            return Result.Failure<ValuationDto>(improvements.Code!, improvements.Message!);
+        }
+        lines.AddRange(improvements.Value);
+
+        var valuation = PersistRated(land.RpuId, land.PropertyId, land.Id, lines, date);
+        land.MarketValue = valuation.ComputedMarketValue;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(await MapAsync(valuation.Id, cancellationToken));
+    }
+
+    /// <summary>
+    /// Values a separately owned improvement unit (an <c>OtherImprovement</c> RPU): the trees,
+    /// plants and other improvements recorded on its land as belonging to it, at the SMV's rates
+    /// for their kinds (LAM Bk III p.72; docs/analysis/valuation-foundation.md §4.4). Assessed like
+    /// land improvements, under their own classification and use or the land's principal strip's.
+    /// </summary>
+    private async Task<Result<ValuationDto>> ComputeForSeparateImprovementsAsync(RealPropertyUnit rpu, CancellationToken cancellationToken, DateOnly? asOf)
+    {
+        var owned = await db.LandImprovements.Include(i => i.ImprovementKind).Where(i => i.SeparateRpuId == rpu.Id).ToListAsync(cancellationToken);
+        if (owned.Count == 0)
+        {
+            return Result.Failure<ValuationDto>("OTHER_IMPROVEMENT_NOT_RECORDED",
+                "No trees, plants or other improvements are recorded on the land as belonging to this unit.");
+        }
+        var land = await db.Lands.Include(x => x.Strips).FirstAsync(x => x.Id == owned[0].LandId, cancellationToken);
+        var propertyType = await db.PropertyTypes.FirstOrDefaultAsync(x => x.Code == PropertyTypeCodes.Land, cancellationToken);
+        if (propertyType is null)
+        {
+            return Result.Failure<ValuationDto>("PROPERTY_TYPE_NOT_CONFIGURED", $"No PropertyType with code '{PropertyTypeCodes.Land}' is configured.");
+        }
+        var date = asOf ?? clock.Today;
+        var lines = await ImprovementLinesAsync(land, owned, propertyType.Id, await LocationAsync(land.PropertyId, cancellationToken), date, cancellationToken);
+        if (lines.IsFailure)
+        {
+            return Result.Failure<ValuationDto>(lines.Code!, lines.Message!);
+        }
+        var valuation = PersistRated(rpu.Id, rpu.PropertyId, land.Id, lines.Value, date);
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success(await MapAsync(valuation.Id, cancellationToken));
+    }
+
+    /// <summary>Improvement lines at the rate for their kind, assessed under their own classification and use, or the principal strip's.</summary>
+    private async Task<Result<List<(ValuationLine Line, SmvSchedule Schedule, ValuationCalculationResult Calc)>>> ImprovementLinesAsync(Land land,
+        IEnumerable<LandImprovement> improvements, Guid propertyTypeId, (Guid? MunicipalityId, Guid? BarangayId) location, DateOnly date, CancellationToken ct)
+    {
+        var lines = new List<(ValuationLine Line, SmvSchedule Schedule, ValuationCalculationResult Calc)>();
+        var principal = land.Strips.OrderByDescending(x => x.Area).ThenBy(x => x.Sequence).FirstOrDefault();
+        foreach (var improvement in improvements.OrderBy(x => x.Sequence))
         {
             var classificationId = improvement.ClassificationId ?? principal?.ClassificationId ?? land.ClassificationId;
             var actualUseId = improvement.ActualUseId ?? principal?.ActualUseId ?? land.ActualUseId;
-            var schedule = await ResolveScheduleAsync(classificationId, propertyType.Id, improvement.ImprovementKindId, location.MunicipalityId,
-                new SmvRateKey(null, land.ZoneId, location.BarangayId, actualUseId), date, cancellationToken);
+            var schedule = await ResolveScheduleAsync(classificationId, propertyTypeId, improvement.ImprovementKindId, location.MunicipalityId,
+                new SmvRateKey(null, land.ZoneId, location.BarangayId, actualUseId), date, ct);
             if (schedule is null)
             {
-                return Result.Failure<ValuationDto>("SMV_SCHEDULE_NOT_FOUND",
+                return Result.Failure<List<(ValuationLine, SmvSchedule, ValuationCalculationResult)>>("SMV_SCHEDULE_NOT_FOUND",
                     $"No approved SMV schedule gives a rate for '{improvement.ImprovementKind!.Name}' under this classification/actual use as of {date:yyyy-MM-dd}.");
             }
             lines.Add((new ValuationLine
@@ -116,22 +177,28 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 Source = ValuationLineSource.LandImprovement, SourceId = improvement.Id, ClassificationId = classificationId, ActualUseId = actualUseId,
                 Description = improvement.ImprovementKind!.Name + (improvement.IsProductive switch { true => " (productive)", false => " (non-productive)", _ => "" }),
                 Quantity = improvement.Quantity,
-            }, schedule, ValuationCalculator.CalculateImprovement(improvement.Quantity, schedule)));
+            }, schedule, Rounded(ValuationCalculator.CalculateImprovement(improvement.Quantity, schedule))));
         }
+        return Result.Success(lines);
+    }
 
-        foreach (var (line, schedule, calc) in lines)
+    /// <summary>Rate-based land lines: each line notes its rate and schedule; the valuation names the SMV of the first.</summary>
+    private Prime.Domain.Entities.Valuation PersistRated(Guid rpuId, Guid propertyId, Guid landId,
+        List<(ValuationLine Line, SmvSchedule Schedule, ValuationCalculationResult Calc)> lines, DateOnly date)
+    {
+        foreach (var (line, schedule, _) in lines)
         {
             line.Unit ??= schedule.Unit;
             line.UnitValue = schedule.MarketValue;
             line.SmvScheduleId = schedule.Id;
         }
-        var valuation = PersistLines(land.RpuId, land.PropertyId, ValuationSourceType.Land, land.Id, lines.Select(x => (x.Line, x.Calc)).ToList(),
+        return PersistLines(rpuId, propertyId, ValuationSourceType.Land, landId, lines.Select(x => (x.Line, x.Calc)).ToList(),
             lines[0].Schedule.SmvId, lines.Count == 1 ? lines[0].Schedule.Id : null, date);
-        land.MarketValue = valuation.ComputedMarketValue;
-        await db.SaveChangesAsync(cancellationToken);
-
-        return Result.Success(await MapAsync(valuation.Id, cancellationToken));
     }
+
+    /// <summary>The row's market value rounded to the configured step, if any (valuation-foundation.md §4.4, [C5]).</summary>
+    private ValuationCalculationResult Rounded(ValuationCalculationResult result) =>
+        ValuationCalculator.WithRounding(result, options.Value.MarketValueRoundingStep);
 
     /// <summary>
     /// Values a building by use portion (MRPAAO Att. 2; docs/analysis/mrpaao-forms-model.md
@@ -202,7 +269,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
             {
                 Source = p.Source, SourceId = p.SourceId, ClassificationId = p.ClassificationId, SubClassificationId = p.SubClassificationId,
                 ActualUseId = p.ActualUseId, Quantity = p.Area, Unit = schedule.Unit, UnitValue = schedule.MarketValue, SmvScheduleId = schedule.Id,
-            }, schedule, ValuationCalculator.CalculateBuildingPortion(p.Area, schedule, additional, building.CompletionPercentage)));
+            }, schedule, Rounded(ValuationCalculator.CalculateBuildingPortion(p.Area, schedule, additional, building.CompletionPercentage))));
         }
 
         var valuation = PersistLines(building.RpuId, building.PropertyId, ValuationSourceType.Building, building.Id,
@@ -237,7 +304,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 return Result.Failure<ValuationDto>("MACHINERY_VALUATION_INPUTS_MISSING",
                     $"Machinery that is not brand-new is valued from its replacement or reproduction cost and its remaining vs. estimated economic life (LGC §224(a)). {(name.Length > 0 ? name : "A machine")} is missing: {missing}.");
             }
-            var calc = ValuationCalculator.CalculateMachinery(machine, parameters);
+            var calc = Rounded(ValuationCalculator.CalculateMachinery(machine, parameters));
             lines.Add((new ValuationLine
             {
                 Source = ValuationLineSource.Machinery, SourceId = machine.Id,
@@ -277,6 +344,8 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 return building is null
                     ? Result.Failure<ValuationDto>("BUILDING_NOT_FOUND", "No Building record exists for this RPU.")
                     : await ComputeForBuildingAsync(building.Value, cancellationToken, asOf);
+            case RpuType.OtherImprovement:
+                return await ComputeForSeparateImprovementsAsync(rpu, cancellationToken, asOf);
             case RpuType.Machinery:
                 var machinery = await db.MachineryUnits.Where(x => x.RpuId == rpuId).Select(x => (Guid?)x.Id).FirstOrDefaultAsync(cancellationToken);
                 return machinery is null

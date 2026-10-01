@@ -26,6 +26,9 @@ public sealed record PackSmv(IReadOnlyList<string> MunicipalityPsgcCodes, Create
 public sealed record PackSmvSchedule(string SmvReference, string Classification, string? SubClassification, string? ActualUse, string PropertyType,
     string? Zone, string? BarangayPsgc, string? ImprovementKind, CreateSmvScheduleRequest Values);
 
+/// <summary>An adjustment factor whose SMV, classification and road types are resolved at import (step L1-4).</summary>
+public sealed record PackAdjustmentFactor(string SmvReference, string? Classification, IReadOnlyList<string?> RowRoadTypes, CreateAdjustmentFactorRequest Values);
+
 /// <summary>An assessment level whose codes are resolved at import (step L1-3).</summary>
 public sealed record PackAssessmentLevel(string Classification, string ActualUse, string PropertyType, CreateAssessmentLevelRequest Values);
 
@@ -281,6 +284,108 @@ public sealed partial class ContentPackVersionedContent
         return result with { Items = table.Rows.Count, Unchanged = unchanged };
     }
 
+    // --- Adjustment factors (JSON; key: SMV + code; versioned) ---
+
+    private sealed record FactorItem(string? Smv, string? Code, string? Name, string? RuleKind, decimal? Percent, string? Classification,
+        string? DistanceReference, decimal? StandardDepth, List<FactorRowItem>? Rows, string? Description, string? LegalBasis, string? EffectiveDate,
+        string? Remarks, string? Source);
+
+    private sealed record FactorRowItem(string? RoadType, decimal? Over, decimal? UpTo, int? DepthBand, decimal? Percent);
+
+    private async Task<VersionedPreview> FactorsAsync(List<FactorItem> items, string? fileSource, PackPending pending, VersionedPreview result, CancellationToken ct)
+    {
+        var smvIds = (await db.Smvs.AsNoTracking().Select(x => new { x.Id, x.OrdinanceNumber, x.CertificationReference }).ToListAsync(ct))
+            .ToDictionary(x => x.OrdinanceNumber ?? x.CertificationReference ?? "", x => x.Id, StringComparer.Ordinal);
+        var existing = await db.AdjustmentFactors.AsNoTracking().Include(x => x.Rows).ToListAsync(ct);
+        var codes = await CodesAsync(ct);
+        var roadTypes = await db.RoadTypes.AsNoTracking().ToDictionaryAsync(x => x.Code, x => x.Id, StringComparer.Ordinal, ct);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var unchanged = 0;
+        for (var i = 0; i < items.Count; i++)
+        {
+            var (n, x) = (i + 1, items[i]);
+            if (!Common(result, n, x.Source, fileSource, x.EffectiveDate, out var source, out var effective)
+                || !TryEnum<AdjustmentRuleKind>(result, n, "ruleKind", x.RuleKind ?? nameof(AdjustmentRuleKind.Flat), out var kind))
+            {
+                continue;
+            }
+            DistanceReference? reference = null;
+            if (Trim(x.DistanceReference) is not null)
+            {
+                if (!TryEnum<DistanceReference>(result, n, "distanceReference", x.DistanceReference, out var r))
+                {
+                    continue;
+                }
+                reference = r;
+            }
+            var smvRef = Trim(x.Smv) ?? "";
+            if (!smvIds.ContainsKey(smvRef) && !pending.Smvs.Contains(smvRef))
+            {
+                result.Issues.Add(Error("SMV_UNKNOWN", $"Item {n}: SMV {smvRef} is neither in PRIME nor added by an earlier smv file of this pack.", null, $"[{n}].smv"));
+                continue;
+            }
+            var classification = Trim(x.Classification);
+            var classPending = classification is not null && pending.Lookups.TryGetValue("classifications", out var newClasses) && newClasses.Contains(classification);
+            if (classification is not null && !codes["classifications"].ContainsKey(classification) && !classPending)
+            {
+                result.Issues.Add(Error("CODE_UNKNOWN", $"Item {n}: classification {classification} is neither in PRIME nor added by this pack.", null, $"[{n}].classification"));
+                continue;
+            }
+            var rowItems = x.Rows ?? [];
+            var unknownRoads = rowItems.Select(r => Trim(r.RoadType)).Where(r => r is not null && !roadTypes.ContainsKey(r)
+                && !(pending.Lookups.TryGetValue("road-types", out var newRoads) && newRoads.Contains(r))).ToList();
+            if (unknownRoads.Count > 0)
+            {
+                result.Issues.Add(Error("CODE_UNKNOWN", $"Item {n}: road type {string.Join(", ", unknownRoads)} is neither in PRIME nor added by this pack.", null, $"[{n}].rows"));
+                continue;
+            }
+            var rows = rowItems.Select(r => new AdjustmentFactorRowRequest(
+                Trim(r.RoadType) is { } road ? roadTypes.GetValueOrDefault(road, Guid.NewGuid()) : null, r.Over, r.UpTo, r.DepthBand, r.Percent ?? 0m)).ToList();
+            var values = new CreateAdjustmentFactorRequest(smvIds.GetValueOrDefault(smvRef), Trim(x.Code) ?? "", Trim(x.Name) ?? "", x.Percent ?? 0m,
+                classification is not null ? codes["classifications"].GetValueOrDefault(classification) : null, Trim(x.Description),
+                Trim(x.LegalBasis) ?? source, effective, Trim(x.Remarks), kind, reference, x.StandardDepth, rows);
+            if (AdjustmentFactorService.RuleProblem(values, rows) is { } problem)
+            {
+                result.Issues.Add(Error("VALIDATION_FAILED", $"Item {n}: {problem}", null, $"[{n}]"));
+                continue;
+            }
+            if (values.Code.Length is 0 or > 20 || values.Name.Length is 0 or > 200)
+            {
+                result.Issues.Add(Error("VALIDATION_FAILED", $"Item {n}: code (max 20) and name (max 200) are required.", null, $"[{n}]"));
+                continue;
+            }
+            var key = $"{smvRef} {values.Code}";
+            if (!Unique(result, seen, key, n, "code"))
+            {
+                continue;
+            }
+            var scope = smvIds.TryGetValue(smvRef, out var smvId) ? existing.Where(f => f.SmvId == smvId && f.Code == values.Code).ToList() : [];
+            // Decimals compared as written, since the database pads them (1 vs 1.000).
+            static string D(decimal? v) => v?.ToString("0.######", CultureInfo.InvariantCulture) ?? "";
+            var rowText = string.Join(" | ", rowItems.Select(r => $"{Trim(r.RoadType)}/{D(r.Over)}/{D(r.UpTo)}/{r.DepthBand}={D(r.Percent ?? 0m)}"));
+            string Rows(Domain.Entities.AdjustmentFactor f) => string.Join(" | ", f.Rows.OrderBy(r => r.Sequence).Select(r =>
+                $"{roadTypes.FirstOrDefault(t => t.Value == r.RoadTypeId).Key}/{D(r.OverValue)}/{D(r.UpToValue)}/{r.DepthBand}={D(r.Percent)}"));
+            if (!classPending && Same(scope, f => f.RuleKind == kind && f.Percent == values.Percent && f.ClassificationId == values.ClassificationId
+                    && f.DistanceReference == reference && f.StandardDepth == values.StandardDepth && Equal(f.Name, values.Name)
+                    && Equal(f.LegalBasis, values.LegalBasis) && Rows(f) == rowText))
+            {
+                unchanged++;
+                continue;
+            }
+            if (Plan(result, scope, n, effective))
+            {
+                var current = Current(scope);
+                var changes = new List<ContentFieldChangeDto>();
+                Diff(changes, "ruleKind", current?.RuleKind.ToString(), kind.ToString());
+                Diff(changes, "percent", current?.Percent.ToString(CultureInfo.InvariantCulture), values.Percent.ToString(CultureInfo.InvariantCulture));
+                Diff(changes, "rows", current is null ? null : Rows(current), rowText);
+                result.Versions.Add(new PlannedVersion(ContentFileKinds.AdjustmentFactors, key, $"{values.Code}: {values.Name}", n,
+                    new PackAdjustmentFactor(smvRef, classification, rowItems.Select(r => Trim(r.RoadType)).ToList(), values), changes, source));
+            }
+        }
+        return result with { Items = items.Count, Unchanged = unchanged };
+    }
+
     // --- Import ---
 
     private async Task<Result<(string, Guid)>> CreateSmvAsync(PackSmv r, CancellationToken ct)
@@ -316,6 +421,26 @@ public sealed partial class ContentPackVersionedContent
             BarangayId = barangayId,
         };
         return Map("SmvSchedule", await smvs.CreateScheduleAsync(smvId.Value, values, ct), x => x.Id);
+    }
+
+    private async Task<Result<(string, Guid)>> CreateFactorAsync(PackAdjustmentFactor r, CancellationToken ct)
+    {
+        var smvId = await db.Smvs.Where(x => x.OrdinanceNumber == r.SmvReference || x.CertificationReference == r.SmvReference)
+            .Select(x => (Guid?)x.Id).FirstOrDefaultAsync(ct);
+        if (smvId is null)
+        {
+            return Result.Failure<(string, Guid)>("CONTENT_PACK_IMPORT_FAILED", $"SMV {r.SmvReference} was not found at import.");
+        }
+        var c = await CodesAsync(ct);
+        var roads = await db.RoadTypes.ToDictionaryAsync(x => x.Code, x => x.Id, StringComparer.Ordinal, ct);
+        var rows = r.Values.Rows!.Select((row, i) => row with { RoadTypeId = r.RowRoadTypes[i] is { } code ? roads[code] : null }).ToList();
+        var values = r.Values with
+        {
+            SmvId = smvId.Value,
+            ClassificationId = r.Classification is null ? null : c["classifications"][r.Classification],
+            Rows = rows,
+        };
+        return Map("AdjustmentFactor", await factors.CreateAsync(values, ct), x => x.Id);
     }
 
     private async Task<Result<(string, Guid)>> CreateLevelAsync(PackAssessmentLevel r, CancellationToken ct)
