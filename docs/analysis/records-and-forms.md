@@ -241,3 +241,140 @@ Done; migration `LamRecords` (additive) applied to the local database only.
 - Dev DB (DEMO): DEMO-BILL has cadastral number "DEMO Cad-L51"; its machine DEMO Mill has documents; one office has
   Sanggunian "DEMO Sangguniang Panlalawigan"; DEMO Municipal Appraiser has licence DEMO-REA-0001; taxpayer
   "DelaCruz, Juan" (TIN-f0e2ad67) is Female.
+
+### L5-2 — form data (2026-10-02)
+
+Done; no migration, no screen. Each provider adds a `lam` object; the MRPAAO fields are unchanged (all earlier form
+tests pass, exit criterion 3).
+
+- **FAAS** (`lam`): `registrationType` (Titled when a title number is recorded), `cadastralNumber`, `owners` and
+  `administrators` with TIN, contact, email and `sex`, `backTaxPeriod`, `supersededMarketValue`, `encodedBy` (the TD's
+  creator and date), `machines` (acquisition documents in the order of the machine rows).
+- **TD** (`lam`): `kind` (Land, Building, Machinery, Others), registration type, cadastral number, parties,
+  `assessedValueInWords`, `backTaxPeriod`, `ordinances` (distinct ordinance numbers and dates of the assessment levels
+  applied); the Sanggunian is `lgu.sanggunianName` (office, else setting). `rows[]` per assessment line: sub-classes,
+  structural type, machines (type, brand, model), area, capacity.
+- **NOA**: `lam.addresseeEmail` (the combined notice's addressee, else the first current owner with one), service mode,
+  email address, dates sent and received; each item adds `lamKind` (its `pin` was already the unit PIN).
+- **Registers**: every row adds `lam`. TMCR: cadastral number (parcel, else property), `previousPin` (the property's
+  latest PIN retired by the run date, else the PINs of the properties a posted subdivision or consolidation produced it
+  from), market value. Rolls: administrator and address. ORF: notice number, machines (brand, model, capacity); the
+  heading's `lam` adds the owner's email and sex. ROA: `sectionParcel` (section index and the parcel number as the PIN
+  prints it), building floor area, market and assessed values split taxable/exempt.
+- `Forms:PrintOwnerSex` (default false) gates every `sex` value [D5].
+- **Single source for amounts in words:** the form renderer already had an `amount_words` filter. Its code moved to
+  `Prime.Domain.DomainServices.AmountInWords`, which the filter and the TD data both call. The output is unchanged:
+  "… PESOS ONLY" for whole pesos, "… PESOS AND NN/100" with centavos (Q9 gave only the centavos example).
+- Left to later steps, as planned: the Assessment Roll entry and page/line (L5-3), past owners on the ORF (L5-5), the
+  exempt roll's legal basis (L3).
+- Tests: `LamFormDataTests` (5), `AmountInWordsTests` (10 cases), renderer filter test reworked; 615 tests pass.
+
+### L5-3 — Assessment Roll entries (2026-10-02)
+
+Done; migration `AssessmentRollEntries` (one new table, additive) applied to the local database only. No screen.
+
+- `AssessmentRollEntry`: issued form, TD, kind (taxable or exempt roll), page, line, entered on (the local issue date)
+  and entered by. Unique per issued form and TD, and per issued form, page and line. Jurisdiction-filtered through its TD.
+- The register provider numbers each roll row (`lam.page`, `lam.line`) from `Registers:AssessmentRollRowsPerPage` and
+  returns the lines with the form data; `FormService.IssueAsync` saves them with the issued form, in the same save. This
+  covers rolls issued by hand and those issued by the monthly submission to the province (LP-6). A re-issue of an
+  already issued roll returns it and records nothing.
+- Rows per page belongs to the office's roll template. The setting ships as 0, which numbers every line on page 1;
+  the office sets it with the LAM template in L5-6. No page size is assumed.
+- A cancelled roll keeps its entries. They are not marked separately: an entry counts as cancelled when its issued
+  form is (one source for the status). The FAAS (`lam.assessmentRollEntry`: kind, page, line, date, by) prints the
+  TD's latest entry in a roll still valid, and `lam.supersededRollEntry` the previous TD's.
+- Tests: `RollPosition_FollowsTheRowsPerPage` (6 cases), `IssuingAnAssessmentRoll_RecordsTheEntry_AndTheFaasPrintsIt_UntilTheRollIsCancelled`;
+  622 tests pass.
+
+### L5-4 — annotation carry-over (2026-10-02)
+
+Done; migration `AnnotationCarryOver` (two columns, two indexes, one foreign key; additive) applied to the local
+database only.
+
+- `AnnotationType.CarriesOver`: yes for every existing type (set by the migration) and for new ones; a content pack
+  may give an optional `carries_over` column for `annotation-types` (yes/no). The column has no database default, so
+  a "no" is stored as given.
+- `TaxDeclarationAnnotation.CarriedFromAnnotationId` points to the annotation it was copied from. One copy per source
+  annotation per TD (unique index).
+- **When:** at the final approval of a TD, in the shared approval step, so direct TD approval and transaction approval
+  behave alike. Approving a TD that replaces a previous TD copies the previous TD's annotations that are not lifted and
+  whose type carries over. The copy keeps the type, text, reference and effective date; the source stays on the
+  cancelled TD unchanged.
+- **Subdivision and consolidation:** every TD the transaction ends (those it cancels and those its own TDs replace)
+  passes its annotations to each TD the transaction issues **of the same kind**: land to land, building to building.
+  This reads "every successor TD" (Q7) as the successors of the same unit kind, so a levy on the mother land does not
+  appear on a building's TD.
+- Lifting is unchanged: a copy is lifted on its own TD, with a reason. Lifting one does not lift the other.
+- The annotation list returns `carriedFromAnnotationId` and the source TD number; the TD's *Annotations* dialog shows
+  "Carried over from TD …".
+- Tests: `ApprovingReplacementTd_CarriesUnliftedAnnotations_PointingBackToTheirSource`,
+  `Subdivision_CarriesTheEndedTdsAnnotations_ToTheResultingTdsOfTheSameKind`,
+  `AnnotationTypes_CarryOverByDefault_UnlessThePackSaysNo`; 625 tests pass. Browser: the dialog shows the carried-from
+  line (DEMO copy inserted in the dev database on DEMO-TD-VA-2027B from DEMO-TD-AE94B8-R5).
+
+### L5-5 — ownership record form (2026-10-02)
+
+Done; migration `OrfPastOwners` (one column, default false, and a check constraint; additive) applied to the local
+database only.
+
+- **Name:** screens and messages say "Ownership Record Form". The stored kind (`OwnershipRecordCard`), the form code
+  (`ORC`) and the MRPAAO built-in layout titled "Ownership Record Card" are unchanged; the LAM version (L5-6) gives its
+  own title.
+- **Past owners [D4]:** `RegisterRun.IncludePastOwners`, ORF only (check constraint). Without it, a run for a taxpayer
+  who owns nothing in force on the date (in the user's jurisdiction) is refused (`OWNER_HOLDS_NO_PROPERTY`); this is
+  the "set apart". With it, the run is allowed, and after the units held the form lists every unit the owner held
+  before, as declared on the last day held, with `lam.past` = { `heldUntil`, `endReason` } (null for a unit still
+  held). A unit listed once is not repeated. PRIME deletes nothing.
+- The registers page has an *Include past owners* checkbox for the ORF; the runs list tags such runs "with past
+  holdings".
+- Test: `OwnershipRecordForm_ListsPastHoldings_OnlyWhenTheRunAsks`; 626 tests pass. Browser: refusal message, then
+  the run created with the box ticked (DEMO-E2E, Maria, who holds nothing).
+
+### L5-6 — LAM templates as content (2026-10-02)
+
+Done. The templates are content, not code: they are in the untracked pack `lgu-content/zamboanga-sibugay/forms/`
+(CLAUDE.md §118) and nothing LAM-derived is committed.
+
+- **Ten templates**, authority `Lam`, new versions of the existing codes (Q1, Q2): `FAAS_LAND`, `FAAS_BUILDING`,
+  `FAAS_MACHINERY`, `TAX_DECLARATION`, `NOTICE_OF_ASSESSMENT`, `TMCR`, `AR_TAXABLE`, `AR_EXEMPT`, `ORC` (the Ownership
+  Record Form) and `ROA`. Each is laid out from its annex's written instructions; the arrangement is PRIME's and every
+  form says so in its header line. The pack's `forms/forms.json` lists them; the manifest is at version
+  `…+lam-forms-1`. Effective date 2026-10-02, provisional.
+- **Form data added** (committed, additive; the MRPAAO templates are unchanged) where an annex asks for something
+  PRIME records but did not pass to the forms: building rows' depreciation rate and amount; machine rows' acquisition
+  cost and installation-and-other cost; the machine documents' imported flag, country of origin and acquisition cost;
+  the building reference's TD number; the title type code (FAAS and TD `lam`); the TMCR's machine count; the rolls'
+  section index, parcel number and actual-use code; the ORF row's municipality; the NOA's person served and proof
+  reference, and each item's actual use and effectivity.
+- **Verified** in one rolled-back transaction on the dev database (a temporary harness, not committed, because it
+  reads the untracked pack):
+  1. the pack previews clean (only the ten forms new) and imports as one DEMO user;
+  2. a second DEMO user approves the ten drafts;
+  3. DEMO land, building and machinery units on one property, each valued, assessed and declared, issue the LAM
+     FAAS and TD; the taxable roll, the exempt roll, the TMCR, the ORF and the ROA issue for the same barangay and
+     owner; the NOA issues after being served by email.
+
+  Values agree across the forms: land MV 500,000, AV 100,000; building 1,030,000 less 25 % = 772,500, AV 386,250;
+  machine replacement cost 1,200,000 less 60 % = 480,000, AV 384,000 (in words on the TD); ORF and ROA totals both MV
+  1,752,500, AV 870,250. The FAAS print their roll entries (page 1, lines 1–3). Each form was rendered and read in
+  the browser. Nothing stayed in the dev database (no `Lam` form definitions after the run).
+- **Approved in the dev database** (user decision, 2026-10-02): the pack was imported through the API as the dev
+  admin and the ten forms approved as the dev checker; the LAM versions are now in force there (effective
+  2026-10-02), the MRPAAO versions ended the day before. The six test classes that assert the reference layouts
+  (`MrpaaoFormsTests`, `NoticeOfAssessmentTests`, `PartiesAndTdLifecycleTests`, `FormsFoundationFlowTests`,
+  `RegistersTests`, `TaxMapRollsTests`) call `TestSeed.UseReferenceFormsAsync`, which puts the built-in versions
+  back in force inside the test's own rolled-back transaction. The shared (Supabase) database has no LAM forms.
+- Exit criteria (§7): 1 met, with the blanks below; 2 met in the rolled-back run; 3 met (all earlier form tests
+  pass); 4 met (L5-3, L5-4 tests and this run).
+
+**Left for the Provincial Assessor's review** (DOMAIN VERIFICATION REQUIRED):
+
+1. The arrangement of every form, especially those whose annex layout is an image (TMCR, both rolls, ORF, ROA).
+2. *Appraised by* and *Assessed by* both print the assessment's preparer; PRIME records one. The chain's earlier
+   steps print under *Recommending approval*, its last step under *Approved by*.
+3. The date the province adopts the LAM forms (the pack's effective date is provisional).
+4. Blanks the office fills by hand: the data-privacy notice, the land sketch and floor plan, the TMCR and ROA page
+   numbers, the ORF's province and municipality index numbers, the CCT registration date, and the NOA's *delivered
+   by*.
+5. The exempt roll's legal-basis column, which the annex does not list (printed by Q15; blank until L3).

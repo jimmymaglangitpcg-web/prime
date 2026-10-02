@@ -938,7 +938,7 @@ L1   Valuation foundation                         done (L1-1 to L1-8; exit crite
 L2   Identification & numbering (LAM deltas)      done (L2-1 to L2-3)
 L3   Assessment, listing, exemptions
 L4   Condominium                                      deferred
-L5   Records & forms                              in progress (L5-1 done)
+L5   Records & forms                              done (L5-1 to L5-6; LAM forms await the province's review)
 L6   SMV preparation & general revision
 L7   Assessment appeals
 L8   Treasury interface
@@ -948,7 +948,35 @@ The gap analysis and the plan are LAM-derived and kept untracked in
 `docs/lam/` (CLAUDE.md §118). Each step gets its own design document before
 any code (§108).
 
-## Phase 11 — Reporting
+## Phase order (revised 2026-10-02, user decision)
+
+Phases 11 and 13 are **deferred**; they do not block the assessor's basic
+functions. Order from here:
+
+```text
+Phase 10  LAM alignment (L5, L3, L6, L7; L8 when needed)
+Phase 12  Workflow & security
+Phase 13  Import / migration      before go-live (see the early step below)
+Phase 11  Reporting               when an export or required report is needed, or after go-live
+Phase 14  Production hardening
+Phase 15  System manual           after all phases
+```
+
+- **Phase 11 deferred.** The official records already issue as forms (FAAS,
+  TD, NOA, TMCR, both Assessment Rolls, ORC, ROA, the monthly roll
+  submissions) and the dashboard reads real data. Until Phase 11 there is no
+  Excel/CSV export, no summary or statistical reports (§57) and no
+  BLGF-required report; such reports are compiled by hand meanwhile.
+- **Phase 13 deferred, but not past go-live.** Everything works on records
+  entered through the screens, and reference data loads through content
+  packs. Without the import the province's existing TDs, owners and
+  assessment history must be encoded one by one: workable for a pilot
+  municipality, not for the province. **Early step (13-0), during Phase
+  10:** obtain a sample export of the province's current assessment records
+  and map its fields to PRIME's, so gaps in the data model surface while it
+  is still cheap to change. No import is built in 13-0.
+
+## Phase 11 — Reporting (deferred; see Phase order)
 
 **Goal**: the report catalog in CLAUDE.md §57 is available in PDF/Excel/
 CSV/print.
@@ -984,7 +1012,7 @@ history; an unauthenticated or wrongly-scoped request against Supabase's
 auto-generated REST/GraphQL API and against Storage bucket URLs is
 confirmed to fail (RLS/policy verification, not just PRIME API testing).
 
-## Phase 13 — Import / Migration
+## Phase 13 — Import / Migration (deferred to before go-live; 13-0 early)
 
 **Goal**: bulk LGU legacy data can be brought in safely.
 
@@ -1018,6 +1046,37 @@ system as a whole; a restore-from-backup drill against the Supabase
 project has actually been performed and verified, not merely documented as
 possible.
 
+
+## Phase 15 — System Manual (after all phases; user request 2026-10-02)
+
+**Goal**: a comprehensive manual for the system as finally built, written
+once the other phases are complete so that it describes what actually
+exists.
+
+Tasks: a manual covering, at least:
+- **Users** of each role (§9): signing in, the office and jurisdiction
+  scope, and each workflow end to end — registering a property and its
+  PIN, owners, parcels and the tax map, RPUs, land/building/machinery
+  appraisal, assessment and approval, TD/FAAS issuance, notices and
+  service, sworn statements, transactions (transfer, subdivision,
+  consolidation, cancellation …), back taxes, general revision,
+  exemptions, appeals, registers, submissions to the province, reports and
+  imports.
+- **Administrators**: offices, jurisdictions, staff and delegations;
+  approval chains and signatory licences; numbering schemes and PIN
+  formats; forms and content packs (lgu-content); SMV, adjustment factors,
+  building cost tables, machinery indices and assessment levels;
+  maker-checker for configuration.
+- **Operations**: deployment, configuration settings, backup and restore,
+  Supabase migrations, monitoring and health checks, troubleshooting.
+- A glossary of assessment terms and a reference to the legal basis
+  (RA 7160, RA 12001, the LAM by citation only — CLAUDE.md §118).
+
+The manual cites the LAM but does not reproduce its content; LGU values
+appear only as DEMO examples. Screenshots are taken from DEMO data.
+
+Exit criteria: each workflow in the manual has been followed step by step
+against the running system and works as written.
 ---
 
 ## Cross-cutting rules that apply to every phase
@@ -1132,7 +1191,16 @@ layer; migrations `LamNumbering`, `StructuredUnitPins`, `TerritorialChanges` on 
 **L5 decisions recorded** (`docs/analysis/records-and-forms.md`, Q1–Q16 accepted). **L5-1 done** (owner's sex,
 cadastral numbers, machinery acquisition documents, NOA by email with the date sent, office Sanggunian, signatory REA
 licence frozen on approval records with a warn-only licensed-signatory step; migration `LamRecords` on the local
-database only). Next: L5-2 (`lam` form data). L3 design after L5. The paragraphs below are the earlier
+database only). **L5-2 done** (`lam` form data in the FAAS, TD, NOA and register providers; `Forms:PrintOwnerSex`;
+one amount-in-words implementation). **L5-3 done** (Assessment Roll entries recorded on issuance; page and line from
+`Registers:AssessmentRollRowsPerPage`; the FAAS prints its roll entry and the superseded TD's; migration
+`AssessmentRollEntries`, local database only). **L5-4 done** (unlifted annotations carried to the replacing TD,
+and in a subdivision or consolidation to each resulting TD of the same kind; per-type opt-out; migration
+`AnnotationCarryOver`, local database only). **L5-5 done** (screens say "Ownership Record Form"; an ORF run may
+include past owners, otherwise a run for an owner holding nothing is refused; migration `OrfPastOwners`, local
+database only). **L5-6 done** (ten LAM form templates in the untracked content pack; imported, approved and issued
+against DEMO land, building and machinery in a rolled-back transaction; layouts await the Provincial Assessor's
+review). **L5 complete.** Next per CLAUDE.md §97: L3 (assessment, listing, exemptions) — design document first. L3 design after L5. The paragraphs below are the earlier
 history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so

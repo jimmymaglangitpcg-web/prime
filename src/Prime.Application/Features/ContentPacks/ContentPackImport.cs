@@ -281,6 +281,7 @@ public sealed partial class ContentPackService
             var description = row.Get("description");
             var sortOrder = row.Get("sort_order") is { } sort ? int.Parse(sort, NumberStyles.Integer, CultureInfo.InvariantCulture) : (int?)null;
             var isActive = ParseBool(row.Get("is_active"));
+            var carriesOver = ParseBool(row.Get("carries_over"));
             LookupEntity entity;
             if (plan.IsNew)
             {
@@ -294,6 +295,9 @@ public sealed partial class ContentPackService
                 {
                     case StructuralPart part:
                         partsAdded[plan.Key] = part;
+                        break;
+                    case AnnotationType type:
+                        type.CarriesOver = carriesOver ?? true;
                         break;
                     case StructuralMaterial material:
                         var partCode = row.Get("part_code")!;
@@ -309,6 +313,10 @@ public sealed partial class ContentPackService
                 entity.Description = description ?? entity.Description;
                 entity.SortOrder = sortOrder ?? entity.SortOrder;
                 entity.IsActive = isActive ?? entity.IsActive;
+                if (entity is AnnotationType type)
+                {
+                    type.CarriesOver = carriesOver ?? type.CarriesOver;
+                }
             }
             items.Add(Item(items, entity.GetType().Name, entity.Id, plan, work));
         }

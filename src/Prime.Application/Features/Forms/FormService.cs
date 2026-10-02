@@ -8,6 +8,7 @@ using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Offices;
 using Prime.Domain.Entities.Forms;
+using Prime.Domain.Entities.Registers;
 using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.Forms;
@@ -196,6 +197,13 @@ public sealed class FormService(
             Status = WorkflowStatus.Posted, IssuedAt = snapshot["issue"]!["issuedAt"]!.GetValue<DateTimeOffset>(), IssuedBy = currentUser.AppUserId,
         };
         db.IssuedForms.Add(issued);
+        // An Assessment Roll records where each TD was entered (docs/analysis/records-and-forms.md §4.3).
+        var entries = (subject.RollLines ?? []).Select(l => new AssessmentRollEntry
+        {
+            IssuedForm = issued, TaxDeclarationId = l.TaxDeclarationId, Kind = l.Kind, Page = l.Page, Line = l.Line,
+            EnteredOn = clock.LocalDate(issued.IssuedAt), EnteredBy = currentUser.AppUserId,
+        }).ToList();
+        db.AssessmentRollEntries.AddRange(entries);
         try
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -203,6 +211,7 @@ public sealed class FormService(
         catch (DbUpdateException)
         {
             // UX_IssuedForms_Definition_Subject_Valid: issued concurrently — return that one.
+            db.AssessmentRollEntries.RemoveRange(entries);
             db.IssuedForms.Remove(issued);
             if (await ValidIssueAsync(definition.Id, request.SubjectId, cancellationToken) is { } raced)
             {

@@ -126,7 +126,8 @@ public class FluidFormRendererTests
     [InlineData("0", "ZERO PESOS ONLY")]
     [InlineData("1234567.5", "ONE MILLION TWO HUNDRED THIRTY FOUR THOUSAND FIVE HUNDRED SIXTY SEVEN PESOS AND 50/100")]
     [InlineData("2000000000.05", "TWO BILLION PESOS AND 05/100")]
-    public void AmountInWords_WritesPesosAndCentavos(string amount, string expected) =>
-        FluidFormRenderer.AmountInWords(decimal.Parse(amount, System.Globalization.CultureInfo.InvariantCulture)).ShouldBe(expected);
+    public void AmountWordsFilter_WritesPesosAndCentavos(string amount, string expected) =>
+        renderer.Render("<p>{{ v | amount_words }}</p>", new System.Text.Json.Nodes.JsonObject { ["v"] = decimal.Parse(amount, System.Globalization.CultureInfo.InvariantCulture) },
+            provisional: false).ShouldContain($"<p>{expected}</p>");
 }
 

@@ -18,7 +18,7 @@ namespace Prime.Application.Features.Forms;
 /// out, and compute nothing.
 /// </summary>
 public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRecordService appraisals, IOptions<FaasOptions> faas, IClock clock,
-    IOptions<UnitPinOptions> unitPins) : IFormDataProvider
+    IOptions<UnitPinOptions> unitPins, IOptions<FormsOptions> forms) : IFormDataProvider
 {
     public FormSubjectType SubjectType => FormSubjectType.Faas;
 
@@ -67,6 +67,7 @@ public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRec
                 machineRows = r is null ? null : MachineRows(r),
             },
             appraisal = r,
+            lam = await LamAsync(td, r, cancellationToken),
         });
 
         string? blocker = null;
@@ -80,6 +81,62 @@ public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRec
         }
         return new FormSubjectData(number, data, blocker);
     }
+
+    /// <summary>
+    /// What the LAM FAAS prints beyond the MRPAAO one (docs/analysis/records-and-forms.md §4.2): registration type and
+    /// cadastral number, parties with email (and sex when enabled), the back-tax period, the superseded market value,
+    /// who encoded the TD, each machine's acquisition documents, and the TD's entry in the Assessment Roll with the
+    /// superseded TD's (§4.3; null until a roll listing it is issued).
+    /// </summary>
+    private async Task<object> LamAsync(TaxDeclaration td, AppraisalRecordDto? r, CancellationToken ct)
+    {
+        var property = await db.Properties.AsNoTracking().Where(p => p.Id == td.PropertyId)
+            .Select(p => new { p.TitleNumber, p.CadastralNumber, TitleTypeCode = p.TitleType == null ? null : p.TitleType.Code }).FirstAsync(ct);
+        var parties = await LamFormData.PartiesAsync(db, td.PropertyId, td.RpuId, td.EffectivityDate, forms.Value.PrintOwnerSex, ct);
+        var supersededMarketValue = td.PreviousTaxDeclarationId is { } previousId
+            ? await db.TaxDeclarations.Where(x => x.Id == previousId).Select(x => x.Assessment == null ? (decimal?)null : x.Assessment.MarketValue)
+                .FirstOrDefaultAsync(ct)
+            : null;
+        var encodedBy = td.CreatedBy is { } creator
+            ? await db.AppUsers.Where(u => u.Id == creator).Select(u => u.DisplayName).FirstOrDefaultAsync(ct)
+            : null;
+        var machineIds = r?.MachineryUnits.Select(m => m.Id).ToList() ?? [];
+        var documents = await db.MachineryUnits.AsNoTracking().Where(m => machineIds.Contains(m.Id)).ToDictionaryAsync(m => m.Id, m => new
+        {
+            engineeringRegistrationNumber = m.EngineeringRegistrationNumber, engineeringRegistrationDate = m.EngineeringRegistrationDate,
+            importPermitNumber = m.ImportPermitNumber, importPermitDate = m.ImportPermitDate,
+            supplierName = m.SupplierName, supplierAddress = m.SupplierAddress, receiptNumber = m.ReceiptNumber, receiptDate = m.ReceiptDate,
+            isImported = m.IsImported, originCountry = m.OriginCountry, acquisitionCost = m.AcquisitionCost,
+            acquisitionCurrency = m.AcquisitionCurrency, foreignAcquisitionCost = m.ForeignAcquisitionCost,
+        }, ct);
+        return new
+        {
+            registrationType = LamFormData.RegistrationType(property.TitleNumber),
+            titleTypeCode = property.TitleTypeCode,
+            cadastralNumber = property.CadastralNumber,
+            owners = parties.Where(p => p.isOwner),
+            administrators = parties.Where(p => !p.isOwner),
+            backTaxPeriod = await LamFormData.BackTaxPeriodAsync(db, td.AssessmentId, ct),
+            supersededMarketValue,
+            encodedBy = new { name = encodedBy, date = clock.LocalDate(td.CreatedAt) },
+            assessmentRollEntry = await RollEntryAsync(td.Id, ct),
+            supersededRollEntry = td.PreviousTaxDeclarationId is { } previous ? await RollEntryAsync(previous, ct) : null,
+            // In the order of the MRPAAO machine rows.
+            machines = machineIds.Select(id => documents.GetValueOrDefault(id)).ToList(),
+        };
+    }
+
+    /// <summary>The TD's latest entry in an Assessment Roll still valid (a cancelled roll's entries are kept but not printed).</summary>
+    private async Task<object?> RollEntryAsync(Guid taxDeclarationId, CancellationToken ct) =>
+        await db.AssessmentRollEntries.AsNoTracking()
+            .Where(e => e.TaxDeclarationId == taxDeclarationId && e.IssuedForm!.Status == WorkflowStatus.Posted)
+            .OrderByDescending(e => e.IssuedForm!.IssuedAt)
+            .Select(e => new
+            {
+                kind = e.Kind, page = e.Page, line = e.Line, date = e.EnteredOn,
+                by = db.AppUsers.Where(u => u.Id == e.EnteredBy).Select(u => u.DisplayName).FirstOrDefault(),
+            })
+            .FirstOrDefaultAsync(ct);
 
     /// <summary>The parties declared on the TD's effectivity date (the unit's own, else the property's), with TIN and contact.</summary>
     private async Task<List<FaasParty>> PartiesAsync(Guid propertyId, Guid rpuId, DateOnly asOf, CancellationToken ct)
@@ -164,7 +221,9 @@ public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRec
         var owners = (await PartiesAsync(host.PropertyId, host.Id, today, ct)).Where(p => p.role is "Owner" or "UnknownOwner").Select(p => p.name).ToList();
         var ownedSeparately = await db.PropertyTaxpayers.AnyAsync(x => x.RpuId == host.Id && x.IsCurrent
             && (x.Role == PropertyPartyRole.Owner || x.Role == PropertyPartyRole.UnknownOwner), ct);
-        return new { owner = string.Join("; ", owners), pin = await UnitPin.ForUnitAsync(db, unitPins.Value, host, pin, ownedSeparately, ct) };
+        var tdNumber = await db.TaxDeclarations.Where(x => x.RpuId == host.Id && x.Status == WorkflowStatus.Approved)
+            .Select(x => x.TaxDeclarationNumber).FirstOrDefaultAsync(ct);
+        return new { owner = string.Join("; ", owners), pin = await UnitPin.ForUnitAsync(db, unitPins.Value, host, pin, ownedSeparately, ct), tdNumber };
     }
 
     private async Task<object> AdditionalItemsAsync(Guid rpuId, CancellationToken ct) =>
@@ -211,6 +270,8 @@ public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRec
             buildingCore = Key(l, "BaseValue"), additionalItems = Key(l, "AdditionalItemsCost") ?? 0m,
             totalConstructionCost = Key(l, "TotalConstructionCost") ?? Key(l, "BaseValue"),
             completionPercent = Key(l, "CompletionPercentage"), marketValue = l.MarketValue,
+            // The LAM FAAS's depreciation columns (L1-5 records them on the line).
+            depreciationPercent = Key(l, "DepreciationPercent"), depreciation = Key(l, "Depreciation"),
         });
 
     /// <summary>MRPAAO Att. 3 "Property Appraisal", one row per machine (valuation lines follow the machines' order).</summary>
@@ -229,6 +290,8 @@ public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRec
                 condition = m.IsBrandNew ? "New" : "Second hand", economicLife = m.EconomicLifeYears, remainingLife = m.RemainingLifeYears,
                 yearInstalled = m.YearInstalled, yearOfInitialOperation = m.YearOfInitialOperation,
                 originalCost = m.AcquisitionCost + (m.InstallationCost ?? 0m) + (m.OtherCost ?? 0m), conversionFactor = m.ConversionFactor,
+                // The LAM FAAS splits the original cost (Annex I-F columns i and j).
+                acquisitionCost = m.AcquisitionCost, installationAndOtherCost = (m.InstallationCost ?? 0m) + (m.OtherCost ?? 0m),
                 rcn, yearsUsed = m.EconomicLifeYears is { } e && m.RemainingLifeYears is { } rl ? e - rl : (int?)null,
                 depreciationPercent = fraction is { } f ? Math.Round((1m - f) * 100m, 2) : (decimal?)null,
                 depreciationValue = fraction is { } f2 && rcn is { } c ? Math.Round(c * (1m - f2), 2) : (decimal?)null,

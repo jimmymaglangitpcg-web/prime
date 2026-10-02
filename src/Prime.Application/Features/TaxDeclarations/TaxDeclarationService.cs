@@ -341,7 +341,8 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
             .Where(x => x.TaxDeclarationId == id)
             .OrderBy(x => x.LiftedAt != null).ThenByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt)
             .ToListAsync(cancellationToken);
-        return Result.Success<IReadOnlyList<TaxDeclarationAnnotationDto>>(rows.Select(ToDto).ToList());
+        var sources = await CarriedFromNumbersAsync(rows, cancellationToken);
+        return Result.Success<IReadOnlyList<TaxDeclarationAnnotationDto>>(rows.Select(a => ToDto(a, sources)).ToList());
     }
 
     public async Task<Result<TaxDeclarationAnnotationDto>> AddAnnotationAsync(Guid id, AddTaxDeclarationAnnotationRequest request, CancellationToken cancellationToken = default)
@@ -398,7 +399,7 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         annotation.LiftReference = string.IsNullOrWhiteSpace(request.Reference) ? null : request.Reference.Trim();
         currentUser.Reason = request.Reason;
         await db.SaveChangesAsync(cancellationToken);
-        return Result.Success(ToDto(annotation));
+        return Result.Success(ToDto(annotation, await CarriedFromNumbersAsync([annotation], cancellationToken)));
     }
 
     private static Result<TaxDeclarationDto> InTransaction() =>
@@ -408,9 +409,19 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
     private static Result<TaxDeclarationDto> NotFound() =>
         Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NOT_FOUND", "No Tax Declaration was found with the given id.");
 
-    private static TaxDeclarationAnnotationDto ToDto(TaxDeclarationAnnotation a) => new(
+    /// <summary>The TD number each carried annotation was copied from, by source annotation.</summary>
+    private async Task<Dictionary<Guid, string>> CarriedFromNumbersAsync(IReadOnlyCollection<TaxDeclarationAnnotation> rows, CancellationToken ct)
+    {
+        var ids = rows.Select(x => x.CarriedFromAnnotationId).OfType<Guid>().ToList();
+        return ids.Count == 0 ? [] : await db.TaxDeclarationAnnotations.Where(x => ids.Contains(x.Id))
+            .Join(db.TaxDeclarations, a => a.TaxDeclarationId, t => t.Id, (a, t) => new { a.Id, t.TaxDeclarationNumber })
+            .ToDictionaryAsync(x => x.Id, x => x.TaxDeclarationNumber, ct);
+    }
+
+    private static TaxDeclarationAnnotationDto ToDto(TaxDeclarationAnnotation a, IReadOnlyDictionary<Guid, string>? carriedFrom = null) => new(
         a.Id, a.TaxDeclarationId, a.AnnotationTypeId, a.AnnotationType!.Code, a.AnnotationType.Name, a.Text, a.ReferenceNumber,
-        a.ReferenceDate, a.EffectiveDate, a.CreatedAt, a.CreatedBy, a.LiftedAt, a.LiftedBy, a.LiftReason, a.LiftReference);
+        a.ReferenceDate, a.EffectiveDate, a.CreatedAt, a.CreatedBy, a.LiftedAt, a.LiftedBy, a.LiftReason, a.LiftReference,
+        a.CarriedFromAnnotationId, a.CarriedFromAnnotationId is { } source ? carriedFrom?.GetValueOrDefault(source) : null);
 
     private static IQueryable<TaxDeclaration> IncludeReferences(IQueryable<TaxDeclaration> query) => query
         .Include(td => td.Classification)

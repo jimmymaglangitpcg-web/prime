@@ -35,6 +35,7 @@ public class FormsFoundationFlowTests(WebApplicationFactory<Program> factory) : 
         var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PrimeDbContext>();
         var transaction = await db.Database.BeginTransactionAsync();
+        await TestSeed.UseReferenceFormsAsync(db); // these tests assert the reference layouts
         await BillingFlowTests.RetireExistingRulesAsync(db);
         await db.NumberingSchemes.Where(x => x.Status == WorkflowStatus.Approved)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, WorkflowStatus.Cancelled).SetProperty(x => x.ApprovedAt, (DateTimeOffset?)null));

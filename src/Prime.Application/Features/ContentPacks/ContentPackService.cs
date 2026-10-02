@@ -585,8 +585,10 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
     private async Task PreviewLookupAsync(FileWork work, List<FileWork> files, CancellationToken ct)
     {
         var isMaterial = work.Entry.Lookup == "structural-materials";
+        var isAnnotation = work.Entry.Lookup == "annotation-types";
         string[] required = isMaterial ? ["code", "name", "part_code"] : ["code", "name"];
-        if (!Columns(work, required, ["description", "sort_order", "is_active", "source"]))
+        string[] optional = isAnnotation ? ["description", "sort_order", "is_active", "source", "carries_over"] : ["description", "sort_order", "is_active", "source"];
+        if (!Columns(work, required, optional))
         {
             return;
         }
@@ -627,7 +629,8 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
                 continue;
             }
             if (!CheckName(work, row, out var name) || !CheckLength(work, row, "description", 1000, out var description)
-                || !CheckInt(work, row, "sort_order", out var sortOrder) || !CheckBool(work, row, "is_active", out var isActive) || !CheckSource(work, row))
+                || !CheckInt(work, row, "sort_order", out var sortOrder) || !CheckBool(work, row, "is_active", out var isActive) || !CheckSource(work, row)
+                || !CheckBool(work, row, "carries_over", out var carriesOver))
             {
                 continue;
             }
@@ -659,6 +662,12 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
             AddChange(changes, "description", current?.Description, description, keepWhenNull: true);
             AddChange(changes, "sort_order", current?.SortOrder.ToString(CultureInfo.InvariantCulture), sortOrder?.ToString(CultureInfo.InvariantCulture), keepWhenNull: true);
             AddChange(changes, "is_active", current is null ? null : Bool(current.IsActive), isActive is null ? (current is null ? Bool(true) : null) : Bool(isActive.Value), keepWhenNull: true);
+            if (isAnnotation)
+            {
+                // records-and-forms.md §4.4: a new type carries over unless the pack says otherwise.
+                AddChange(changes, "carries_over", current is AnnotationType t ? Bool(t.CarriesOver) : null,
+                    carriesOver is null ? (current is null ? Bool(true) : null) : Bool(carriesOver.Value), keepWhenNull: true);
+            }
             Tally(work, row, code, name, current is null, changes);
         }
         work.Missing.AddRange(existing.Where(x => !work.Valid.ContainsKey(x.Code) && !Listed(work, x.Code)).Select(x => $"{x.Code} {x.Name}"));

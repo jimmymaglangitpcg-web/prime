@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Button, Card, DatePicker, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Checkbox, DatePicker, Form, Input, Select, Space, Table, Tag, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useSections } from '../../api/propertyIdentification';
 import { useCreateRegisterRun, useRegisterRuns } from '../../api/registers';
@@ -18,6 +18,7 @@ interface RunForm {
   sectionId?: string;
   classificationId?: string;
   taxpayerId?: string;
+  includePastOwners?: boolean;
   period?: [Dayjs, Dayjs];
   fromDate?: Dayjs;
   asOf?: Dayjs;
@@ -55,6 +56,7 @@ export function RegistersPage() {
         barangayId: byOwner ? null : values.barangayId ?? null, classificationId: periodic ? values.classificationId ?? null : null,
         sectionId: kind === 'TaxMapControlRoll' ? values.sectionId ?? null : null,
         taxpayerId: byOwner ? values.taxpayerId ?? null : null, remarks: values.remarks || null,
+        includePastOwners: byOwner && !!values.includePastOwners,
       },
       { onSuccess: () => form.resetFields(['remarks']) },
     );
@@ -75,10 +77,16 @@ export function RegistersPage() {
             <Select options={(Object.keys(registerKindLabel) as RegisterKind[]).map((k) => ({ value: k, label: registerKindLabel[k] }))} />
           </Form.Item>
           {byOwner ? (
-            <Form.Item name="taxpayerId" label="Owner" rules={[{ required: true, message: 'Choose the owner' }]} style={{ maxWidth: 420 }}>
-              <Select showSearch filterOption={false} onSearch={setTaxpayerTerm} loading={searching} placeholder="Type at least 2 characters"
-                options={(taxpayers?.items ?? []).map((t) => ({ value: t.id, label: t.displayName }))} />
-            </Form.Item>
+            <>
+              <Form.Item name="taxpayerId" label="Owner" rules={[{ required: true, message: 'Choose the owner' }]} style={{ maxWidth: 420 }}>
+                <Select showSearch filterOption={false} onSearch={setTaxpayerTerm} loading={searching} placeholder="Type at least 2 characters"
+                  options={(taxpayers?.items ?? []).map((t) => ({ value: t.id, label: t.displayName }))} />
+              </Form.Item>
+              <Form.Item name="includePastOwners" valuePropName="checked"
+                extra="Also lists the properties the owner no longer holds, and allows a form for an owner who holds nothing on the date. Past owners' forms are set apart, never deleted.">
+                <Checkbox>Include past owners</Checkbox>
+              </Form.Item>
+            </>
           ) : (
             <LocationSelect provinceFieldName="provinceId" municipalityFieldName="municipalityId" barangayFieldName="barangayId"
               provinceId={provinceId} municipalityId={municipalityId}
@@ -116,7 +124,7 @@ export function RegistersPage() {
         <Table<RegisterRunDto> rowKey="id" size="small" loading={isLoading} dataSource={runs} scroll={{ x: true }}
           columns={[
             { title: 'Register', dataIndex: 'kind', render: (k: RegisterKind) => registerKindLabel[k] },
-            { title: 'Scope', render: (_, r) => r.taxpayerName ?? [r.barangayName, r.sectionIndexNumber && `Section ${r.sectionIndexNumber}`, r.classificationName].filter(Boolean).join(' · ') },
+            { title: 'Scope', render: (_, r) => r.taxpayerName ? <>{r.taxpayerName} {r.includePastOwners && <Tag>with past holdings</Tag>}</> : [r.barangayName, r.sectionIndexNumber && `Section ${r.sectionIndexNumber}`, r.classificationName].filter(Boolean).join(' · ') },
             { title: 'Period', render: (_, r) => (r.fromDate ? <>{r.fromDate} – {r.asOf} {r.kind !== 'RecordOfAssessment' && <Tag>supplement</Tag>}</> : <>as of {r.asOf}</>) },
             { title: 'Remarks', dataIndex: 'remarks' },
             { title: 'Created', dataIndex: 'createdAt', render: (d: string) => dayjs(d).format('YYYY-MM-DD HH:mm') },

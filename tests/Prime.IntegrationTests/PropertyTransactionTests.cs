@@ -247,4 +247,57 @@ public class PropertyTransactionTests(WebApplicationFactory<Program> factory) : 
         var t = (await c.Tx.OpenAsync(new OpenTransactionRequest(type.Id, c.Seed.PropertyId, new DateOnly(2026, 5, 1), "DEMO correction"))).Value;
         t.TransactionNumber.ShouldBe("DEMO-TX-2026-001");
     }
+
+    /// <summary>Step L5-4 (docs/analysis/records-and-forms.md §4.4): a subdivision carries the mother TD's levy to the lot's TD of the same kind.</summary>
+    [Fact]
+    public async Task Subdivision_CarriesTheEndedTdsAnnotations_ToTheResultingTdsOfTheSameKind()
+    {
+        var (c, tx) = await BeginAsync();
+        await using var _ = tx;
+        var levy = new AnnotationType { Code = $"AN{Guid.NewGuid():N}"[..8], Name = "DEMO Levy" };
+        c.Db.AnnotationTypes.Add(levy);
+        var mother = await c.Db.Properties.AsNoTracking().SingleAsync(x => x.Id == c.Seed.PropertyId);
+        var lot = new PropertyEntity
+        {
+            PropertyIdentificationNumber = $"DEMO-LOT-{Guid.NewGuid():N}"[..24], ProvinceId = mother.ProvinceId, MunicipalityId = mother.MunicipalityId,
+            BarangayId = mother.BarangayId, Status = RecordStatus.Active,
+        };
+        var lotLand = new RealPropertyUnit { Property = lot, RpuNumber = $"RPU-{Guid.NewGuid():N}", RpuType = RpuType.Land, EffectivityDate = new DateOnly(2026, 9, 1) };
+        var lotBuilding = new RealPropertyUnit { Property = lot, RpuNumber = $"RPU-{Guid.NewGuid():N}", RpuType = RpuType.Building, EffectivityDate = new DateOnly(2026, 9, 1) };
+        var lot2 = new PropertyEntity
+        {
+            PropertyIdentificationNumber = $"DEMO-LOT-{Guid.NewGuid():N}"[..24], ProvinceId = mother.ProvinceId, MunicipalityId = mother.MunicipalityId,
+            BarangayId = mother.BarangayId, Status = RecordStatus.Active,
+        };
+        c.Db.AddRange(lot, lot2, lotLand, lotBuilding, new Parcel { Property = lot, BarangayId = mother.BarangayId, Area = 250m },
+            new Parcel { Property = lot2, BarangayId = mother.BarangayId, Area = 250m });
+        await c.Db.SaveChangesAsync();
+        var added = await c.Tds.AddAnnotationAsync(c.Seed.TaxDeclaration.Id,
+            new AddTaxDeclarationAnnotationRequest(levy.Id, "DEMO levy on the mother lot", "WL-DEMO-3", null, new DateOnly(2026, 6, 1)));
+        added.IsSuccess.ShouldBeTrue(added.IsSuccess ? null : added.Message);
+        var annotation = added.Value;
+
+        var type = await ApprovedTypeAsync(c, PropertyTransactionKind.Subdivision);
+        c.User.AppUserId = c.A.Id;
+        var opened = await c.Tx.OpenAsync(new OpenTransactionRequest(type.Id, c.Seed.PropertyId, new DateOnly(2026, 9, 1), "DEMO subdivision",
+            CancelTaxDeclarationIds: [c.Seed.TaxDeclaration.Id],
+            RelatedProperties: [new RelatedPropertyRequest(lot.Id, TransactionPropertyRole.Result), new RelatedPropertyRequest(lot2.Id, TransactionPropertyRole.Result)]));
+        opened.IsSuccess.ShouldBeTrue(opened.IsSuccess ? null : opened.Message);
+        var t = opened.Value;
+        CreateTaxDeclarationRequest LotTd(Guid rpuId) => new(rpuId, $"DEMO-TD-{Guid.NewGuid():N}"[..24], new DateOnly(2026, 9, 1), Taxability.Taxable,
+            c.Seed.ClassificationId, c.Seed.TaxDeclaration.ActualUseId, null, 2027, null, "DEMO lot", t.Id);
+        var landTd = await c.Tds.CreateAsync(LotTd(lotLand.Id));
+        landTd.IsSuccess.ShouldBeTrue(landTd.IsSuccess ? null : landTd.Message);
+        var buildingTd = (await c.Tds.CreateAsync(LotTd(lotBuilding.Id))).Value;
+        var submitted = await c.Tx.SubmitAsync(t.Id);
+        submitted.IsSuccess.ShouldBeTrue(submitted.IsSuccess ? null : submitted.Message);
+        c.User.AppUserId = c.B.Id;
+        var approved = await c.Tx.ApproveAsync(t.Id);
+        approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
+
+        var carried = (await c.Tds.ListAnnotationsAsync(landTd.Value.Id)).Value.ShouldHaveSingleItem();
+        (carried.Text, carried.CarriedFromAnnotationId, carried.CarriedFromTaxDeclarationNumber)
+            .ShouldBe(("DEMO levy on the mother lot", (Guid?)annotation.Id, c.Seed.TaxDeclaration.TaxDeclarationNumber));
+        (await c.Tds.ListAnnotationsAsync(buildingTd.Id)).Value.ShouldBeEmpty(); // a land annotation stays with the land
+    }
 }

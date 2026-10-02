@@ -2324,12 +2324,19 @@ Phase 7   GIS                                        done
           Forms foundation and MRPAAO forms model    done
 Phase 8   Billing                                    built under the earlier scope; frozen (§0)
 Phase 9   Collection                                 built under the earlier scope; frozen (§0)
-Phase 10  LAM alignment                              next (§97)
-Phase 11  Reporting                                  (§98)
+Phase 10  LAM alignment                              in progress (§97)
+Phase 11  Reporting                                  deferred (§98)
 Phase 12  Workflow & security                        (§99)
-Phase 13  Import / migration                         (§100)
+Phase 13  Import / migration                         deferred to before go-live (§100)
 Phase 14  Production hardening                       (§101)
+Phase 15  System manual                              after all phases (§119)
 ```
+
+Order of the remaining phases (user decision, 2026-10-02): 10 → 12 → 13 →
+11 → 14 → 15. Phases 11 and 13 do not block the assessor's basic functions.
+Phase 13 must be done before go-live. Its early step 13-0, done during
+Phase 10, maps a sample export of the province's current records to PRIME's
+fields. `docs/DEVELOPMENT-ROADMAP.md` gives the reasons.
 
 `docs/DEVELOPMENT-ROADMAP.md` holds each phase's status; check it against
 the code before trusting it.
@@ -2890,3 +2897,18 @@ and approved in another.
   `lgu-content/` or entered through the admin screens, under maker-checker.
   The repository ships only DEMO or provisional content.
 
+---
+
+# 119. PHASE 15 — SYSTEM MANUAL (2026-10-02)
+
+After all other phases, write a comprehensive manual of PRIME as built:
+- for users, each role's workflows end to end;
+- for administrators, offices, chains, numbering, forms, content packs and
+  valuation configuration;
+- for operations, deployment, configuration, backup and restore, migrations
+  and troubleshooting;
+- a glossary and the legal bases.
+
+It cites the LAM without reproducing it (§118), and its examples and
+screenshots use DEMO data. It is complete only when every workflow in it has
+been followed against the running system and works as written.

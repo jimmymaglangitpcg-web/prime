@@ -105,6 +105,10 @@ public sealed class TaxDeclarationAnnotation : AuditableEntity
     public DateOnly? ReferenceDate { get; set; }
     public DateOnly EffectiveDate { get; set; }
 
+    /// <summary>The annotation of the replaced TD this one was copied from when its TD was approved (records-and-forms.md §4.4).</summary>
+    public Guid? CarriedFromAnnotationId { get; set; }
+    public TaxDeclarationAnnotation? CarriedFrom { get; set; }
+
     public DateTimeOffset? LiftedAt { get; set; }
     public Guid? LiftedBy { get; set; }
     public string? LiftReason { get; set; }

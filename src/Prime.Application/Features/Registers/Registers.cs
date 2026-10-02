@@ -14,13 +14,15 @@ using Prime.Domain.Enums;
 namespace Prime.Application.Features.Registers;
 
 /// <param name="SectionId">Tax Map Control Roll only: the tax map section (its barangay is taken from it).</param>
+/// <param name="IncludePastOwners">Ownership Record Form only: also list properties the owner no longer holds (records-and-forms.md §4.5).</param>
 public sealed record CreateRegisterRunRequest(
-    RegisterKind Kind, DateOnly AsOf, Guid? BarangayId, Guid? ClassificationId, Guid? TaxpayerId, DateOnly? FromDate, string? Remarks, Guid? SectionId = null);
+    RegisterKind Kind, DateOnly AsOf, Guid? BarangayId, Guid? ClassificationId, Guid? TaxpayerId, DateOnly? FromDate, string? Remarks, Guid? SectionId = null,
+    bool IncludePastOwners = false);
 
 public sealed record RegisterRunDto(
     Guid Id, RegisterKind Kind, string FormCode, DateOnly AsOf, DateOnly? FromDate, Guid? BarangayId, string? BarangayName,
     Guid? ClassificationId, string? ClassificationName, Guid? TaxpayerId, string? TaxpayerName, string? Remarks, DateTimeOffset CreatedAt,
-    Guid? SectionId = null, string? SectionIndexNumber = null);
+    Guid? SectionId = null, string? SectionIndexNumber = null, bool IncludePastOwners = false);
 
 public interface IRegisterService
 {
@@ -74,7 +76,11 @@ public sealed class RegisterService(IApplicationDbContext db, IJurisdiction juri
         }
         if (needsOwner ? r.TaxpayerId is null : barangayId is null)
         {
-            return Fail("VALIDATION_FAILED", needsOwner ? "An Ownership Record Card is for one owner: name the taxpayer." : "This register is kept by barangay: name the barangay.");
+            return Fail("VALIDATION_FAILED", needsOwner ? "An Ownership Record Form is for one owner: name the taxpayer." : "This register is kept by barangay: name the barangay.");
+        }
+        if (r.IncludePastOwners && !needsOwner)
+        {
+            return Fail("VALIDATION_FAILED", "Only the Ownership Record Form lists past owners.");
         }
         if (r.Kind == RegisterKind.RecordOfAssessment && r.ClassificationId is null)
         {
@@ -100,12 +106,19 @@ public sealed class RegisterService(IApplicationDbContext db, IJurisdiction juri
         {
             return Fail("TAXPAYER_NOT_FOUND", "The specified taxpayer does not exist.");
         }
+        // A past owner's form is set apart (LAM Book I p.21): printed only when the run asks for past owners (Q12).
+        if (needsOwner && !r.IncludePastOwners && !await db.PropertyTaxpayers.AnyAsync(x => x.TaxpayerId == r.TaxpayerId && x.Role == PropertyPartyRole.Owner
+                && x.StartDate <= r.AsOf && (x.EndDate == null || x.EndDate > r.AsOf), cancellationToken))
+        {
+            return Fail("OWNER_HOLDS_NO_PROPERTY",
+                $"The taxpayer owns no property in your jurisdiction on {r.AsOf:yyyy-MM-dd}. A past owner's form is set apart: tick \"include past owners\" to print it.");
+        }
         var run = new RegisterRun
         {
             Kind = r.Kind, AsOf = r.AsOf, FromDate = r.FromDate, Remarks = string.IsNullOrWhiteSpace(r.Remarks) ? null : r.Remarks.Trim(),
             BarangayId = needsOwner ? null : barangayId, SectionId = r.SectionId,
             ClassificationId = r.Kind == RegisterKind.RecordOfAssessment ? r.ClassificationId : null,
-            TaxpayerId = needsOwner ? r.TaxpayerId : null,
+            TaxpayerId = needsOwner ? r.TaxpayerId : null, IncludePastOwners = r.IncludePastOwners,
         };
         db.RegisterRuns.Add(run);
         await db.SaveChangesAsync(cancellationToken);
@@ -121,7 +134,7 @@ public sealed class RegisterService(IApplicationDbContext db, IJurisdiction juri
         return rows.Select(x => new RegisterRunDto(x.Id, x.Kind, FormCode(x.Kind), x.AsOf, x.FromDate, x.BarangayId, x.Barangay?.Name,
             x.ClassificationId, x.Classification?.Name, x.TaxpayerId,
             x.Taxpayer is { } tp ? TaxpayerNameFormatter.Format(tp.TaxpayerType, tp.LastName, tp.FirstName, tp.MiddleName, tp.Suffix, tp.CorporateName) : null,
-            x.Remarks, x.CreatedAt, x.SectionId, x.Section?.IndexNumber)).ToList();
+            x.Remarks, x.CreatedAt, x.SectionId, x.Section?.IndexNumber, x.IncludePastOwners)).ToList();
     }
 
     private static Result<RegisterRunDto> Fail(string code, string message) => Result.Failure<RegisterRunDto>(code, message);
@@ -137,7 +150,7 @@ public sealed class RegisterService(IApplicationDbContext db, IJurisdiction juri
 /// numbering (barangay index + sheet).
 /// </summary>
 public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock clock, IOptions<FaasOptions> faas, IGeometryMeasurementService measurement,
-    IOptions<UnitPinOptions> unitPins) : IFormDataProvider
+    IOptions<UnitPinOptions> unitPins, IOptions<FormsOptions> forms, IOptions<RegistersOptions> registers) : IFormDataProvider
 {
     public FormSubjectType SubjectType => FormSubjectType.Register;
 
@@ -153,12 +166,17 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
             return null;
         }
         var ct = cancellationToken;
+        var roll = run.Kind switch
+        {
+            RegisterKind.AssessmentRollTaxable => await RollRowsAsync(run, Taxability.Taxable, ct),
+            RegisterKind.AssessmentRollExempt => await RollRowsAsync(run, Taxability.Exempt, ct),
+            _ => default((List<object> Rows, List<RollLine> Lines)?),
+        };
         object rows = run.Kind switch
         {
             RegisterKind.TaxMapControlRoll => run.SectionId is null ? await TaxMapRowsAsync(run, ct) : await SectionTaxMapRowsAsync(run, ct),
             RegisterKind.PreTaxMapControlRoll => await PreTaxMapRowsAsync(run, ct),
-            RegisterKind.AssessmentRollTaxable => await RollRowsAsync(run, Taxability.Taxable, ct),
-            RegisterKind.AssessmentRollExempt => await RollRowsAsync(run, Taxability.Exempt, ct),
+            RegisterKind.AssessmentRollTaxable or RegisterKind.AssessmentRollExempt => roll!.Value.Rows,
             RegisterKind.OwnershipRecordCard => await OwnershipRowsAsync(run, ct),
             RegisterKind.RecordOfAssessment => await RecordRowsAsync(run, ct),
             _ => throw new InvalidOperationException($"Unhandled {nameof(RegisterKind)}: {run.Kind}"),
@@ -193,8 +211,15 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
                 },
             },
             rows,
+            // The LAM versions (docs/analysis/records-and-forms.md §4.2): each row also carries a `lam` object; the
+            // ownership record form's heading adds the owner's email (and sex when enabled).
+            lam = owner is null ? null : new
+            {
+                ownerEmail = owner.Email,
+                ownerSex = forms.Value.PrintOwnerSex ? owner.Sex?.ToString() : null,
+            },
         });
-        return new FormSubjectData(null, data, null);
+        return new FormSubjectData(null, data, null, roll?.Lines);
     }
 
     // ---------------- FAAS in force ----------------
@@ -269,6 +294,37 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
         _ => (null, null),
     };
 
+    /// <summary>The administrators of the unit (else the property) on the date, with the first address recorded (LAM Assessment Roll).</summary>
+    private async Task<(string? Names, string? Address)> AdministratorAsync(Guid propertyId, Guid rpuId, DateOnly asOf, CancellationToken ct)
+    {
+        var rows = (await PropertyParties.ProjectAsync(await PropertyParties.ScopeAsync(db, propertyId, rpuId,
+                x => x.StartDate <= asOf && (x.EndDate == null || x.EndDate > asOf), ct), ct))
+            .Where(o => o.Role is not (PropertyPartyRole.Owner or PropertyPartyRole.UnknownOwner)).ToList();
+        return (rows.Count == 0 ? null : string.Join("; ", rows.Select(o => o.TaxpayerDisplayName)),
+            rows.Select(o => o.Address).FirstOrDefault(a => !string.IsNullOrWhiteSpace(a)));
+    }
+
+    /// <summary>The number of the latest issued or served notice giving the assessment (LAM ownership record form).</summary>
+    private async Task<string?> NoticeNumberAsync(Guid? assessmentId, CancellationToken ct) =>
+        assessmentId is not { } id ? null
+            : await db.NoticesOfAssessment.Where(n => (n.AssessmentId == id || n.Items.Any(i => i.AssessmentId == id))
+                    && (n.Status == NoticeStatus.Issued || n.Status == NoticeStatus.Served))
+                .OrderByDescending(n => n.IssuedAt).Select(n => n.NoticeNumber).FirstOrDefaultAsync(ct);
+
+    /// <summary>The section and parcel numbers of the property's permanent PIN in force on the date (LAM Record of Assessment).</summary>
+    private async Task<string?> SectionParcelAsync(Guid propertyId, DateOnly asOf, CancellationToken ct) =>
+        await SectionAndParcelAsync(propertyId, asOf, ct) is { Section: { } section } sp ? $"{section}-{sp.Parcel}" : null;
+
+    /// <summary>The section index and the parcel number (as the configured PIN prints it, CLAUDE.md §115) of the permanent PIN in force.</summary>
+    private async Task<(string? Section, string? Parcel)> SectionAndParcelAsync(Guid propertyId, DateOnly asOf, CancellationToken ct)
+    {
+        var pin = (await db.PinAssignments.AsNoTracking().Include(x => x.Section)
+                .Where(x => x.PropertyId == propertyId && x.Kind == PinKind.Permanent).ToListAsync(ct))
+            .Where(x => clock.LocalDate(x.AssignedAt) <= asOf && (x.RetiredAt is not { } r || clock.LocalDate(r) > asOf))
+            .MaxBy(x => x.AssignedAt);
+        return pin?.Section?.IndexNumber is { } section ? (section, ParcelNumber(pin.Pin)) : (null, null);
+    }
+
     // ---------------- Registers ----------------
 
     /// <summary>MRPAAO Att. 5 (p.158–159): one row per land parcel of the barangay, in PIN order.</summary>
@@ -321,6 +377,12 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
                     lotNumber = a.Parcel?.LotNumber ?? p.LotNumber, blockNumber = a.Parcel?.BlockNumber ?? p.BlockNumber,
                     titleNumber = p.TitleNumber, area = a.Parcel?.Area, areaUnit = a.Parcel?.Area is null ? null : "sqm",
                     owner = owners, buildings = 0, machinery = false, others = "", remarks = "No land FAAS in force",
+                    lam = new
+                    {
+                        cadastralNumber = a.Parcel?.CadastralNumber ?? p.CadastralNumber,
+                        previousPin = await LamFormData.PreviousPinAsync(db, clock, p.Id, run.AsOf, ct),
+                        marketValue = (decimal?)null,
+                    },
                 });
             }
         }
@@ -376,6 +438,7 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
     private async Task<(string Pin, object Row)> TaxMapRowAsync(Faas f, PropertyEntity p, List<Faas> all, DateOnly asOf, CancellationToken ct)
     {
         var units = all.Where(x => x.Td.PropertyId == f.Td.PropertyId).Select(x => x.Td.Rpu!.RpuType).ToList();
+        var machineRpus = all.Where(x => x.Td.PropertyId == f.Td.PropertyId && x.Td.Rpu!.RpuType == RpuType.Machinery).Select(x => x.Td.RpuId).ToList();
         var improvements = await db.LandImprovements.Where(i => db.Lands.Any(l => l.Id == i.LandId && l.RpuId == f.Td.RpuId))
             .Select(i => i.ImprovementKind!.Name).Distinct().ToListAsync(ct);
         var (area, unit) = await AreaAsync(f.Td, ct);
@@ -389,70 +452,145 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
             buildings = units.Count(t => t == RpuType.Building), machinery = units.Any(t => t == RpuType.Machinery),
             others = string.Join(", ", improvements.Concat(units.Where(t => t == RpuType.OtherImprovement).Select(_ => "other improvement")).Distinct()),
             remarks = f.Td.TransactionCode,
+            lam = new
+            {
+                cadastralNumber = await db.Parcels.Where(x => x.PropertyId == p.Id && x.Status == RecordStatus.Active && x.CadastralNumber != null)
+                    .OrderBy(x => x.CreatedAt).Select(x => x.CadastralNumber).FirstOrDefaultAsync(ct) ?? p.CadastralNumber,
+                previousPin = await LamFormData.PreviousPinAsync(db, clock, p.Id, asOf, ct),
+                marketValue = f.Assessment?.MarketValue,
+                // The LAM's count of machines (the MRPAAO column only marks whether there are any).
+                machineCount = await db.MachineryUnits.CountAsync(m => machineRpus.Contains(m.RpuId), ct),
+            },
         });
     }
 
-    /// <summary>MRPAAO Att. 6–7 (p.160–163): the FAAS of the barangay, taxable or exempt; a supplement lists only those entered since the from-date.</summary>
-    private async Task<List<object>> RollRowsAsync(RegisterRun run, Taxability taxability, CancellationToken ct)
+    /// <summary>The 1-based page and line of the roll's row at <paramref name="index"/>; 0 rows per page numbers every line on page 1.</summary>
+    public static (int Page, int Line) RollPosition(int index, int rowsPerPage) =>
+        rowsPerPage > 0 ? (index / rowsPerPage + 1, index % rowsPerPage + 1) : (1, index + 1);
+
+    /// <summary>
+    /// MRPAAO Att. 6–7 (p.160–163): the FAAS of the barangay, taxable or exempt; a supplement lists only those entered
+    /// since the from-date. Each row's page and line follow <see cref="RegistersOptions.AssessmentRollRowsPerPage"/>,
+    /// and are recorded per TD when the roll is issued (docs/analysis/records-and-forms.md §4.3).
+    /// </summary>
+    private async Task<(List<object> Rows, List<RollLine> Lines)> RollRowsAsync(RegisterRun run, Taxability taxability, CancellationToken ct)
     {
         var all = await FaasInForceAsync(db.TaxDeclarations.Where(x => x.Property!.BarangayId == run.BarangayId), run.AsOf, ct);
+        var perPage = registers.Value.AssessmentRollRowsPerPage;
         var rows = new List<object>();
+        var lines = new List<RollLine>();
         foreach (var f in all.Where(x => taxability == Taxability.Taxable ? x.Td.Taxability == Taxability.Taxable : x.Td.Taxability != Taxability.Taxable)
                      .Where(x => run.FromDate is not { } from || x.EnteredOn >= from)
                      .OrderBy(x => x.Td.Rpu!.RpuNumber))
         {
             var p = await PropertyAsync(f.Td.PropertyId, ct);
             var (owners, address) = await OwnersAsync(f.Td.PropertyId, f.Td.RpuId, run.AsOf, ct);
+            var (administrator, administratorAddress) = await AdministratorAsync(f.Td.PropertyId, f.Td.RpuId, run.AsOf, ct);
+            var (page, lineNumber) = RollPosition(rows.Count, perPage);
+            var (section, parcel) = await SectionAndParcelAsync(p.Id, run.AsOf, ct);
+            var useCode = await db.ActualUses.Where(x => x.Id == f.Td.ActualUseId).Select(x => x.Code).FirstOrDefaultAsync(ct);
+            var line = new RollLine(f.Td.Id, run.Kind, page, lineNumber);
+            lines.Add(line);
             rows.Add(new
             {
                 arpNumber = Arp(f), tdNumber = f.Td.TaxDeclarationNumber,
                 pin = await UnitPinAsync(p, f.Td.Rpu!, run.AsOf, ct),
                 lotBlock = $"{p.LotNumber ?? "—"} / {p.BlockNumber ?? "—"}", owner = owners, ownerAddress = address,
-                kind = KindCode(f.Td.Rpu.RpuType), classCode = f.Td.Classification!.Code, assessedValue = f.Assessment?.AssessedValue,
+                kind = KindCode(f.Td.Rpu!.RpuType), classCode = f.Td.Classification!.Code, assessedValue = f.Assessment?.AssessedValue,
                 previousArpNumber = f.Td.PreviousTaxDeclaration is { } prev
                     ? faas.Value.NumberSource == FaasNumberSource.TaxDeclaration ? prev.TaxDeclarationNumber : prev.Assessment?.FaasNumber : null, previousTdNumber = f.Td.PreviousTaxDeclaration?.TaxDeclarationNumber,
                 legalBasis = (string?)null, // exemptions are not yet modelled (CLAUDE.md §43)
                 effectivity = Effectivity(f.Td.EffectivityDate), remarks = f.Td.TransactionCode, enteredOn = f.EnteredOn,
+                lam = new { administrator, administratorAddress, page = line.Page, line = line.Line, sectionIndex = section, parcelNumber = parcel, actualUseCode = useCode },
             });
         }
-        return rows;
+        return (rows, lines);
     }
 
-    /// <summary>MRPAAO Att. 8 (p.164–166): the owner's properties in force, the owner's own units and the properties they own whole.</summary>
+    /// <summary>
+    /// MRPAAO Att. 8 (p.164–166): the owner's properties in force, the owner's own units and the properties they own
+    /// whole. With <see cref="RegisterRun.IncludePastOwners"/>, also the units the owner held before, each as declared
+    /// on the last day held and marked past (records-and-forms.md §4.5).
+    /// </summary>
     private async Task<List<object>> OwnershipRowsAsync(RegisterRun run, CancellationToken ct)
     {
         var asOf = run.AsOf;
         var holdings = await db.PropertyTaxpayers.AsNoTracking()
-            .Where(x => x.TaxpayerId == run.TaxpayerId && x.Role == PropertyPartyRole.Owner && x.StartDate <= asOf && (x.EndDate == null || x.EndDate > asOf))
-            .Select(x => new { x.PropertyId, x.RpuId }).ToListAsync(ct);
-        var propertyIds = holdings.Select(h => h.PropertyId).Distinct().ToList();
+            .Where(x => x.TaxpayerId == run.TaxpayerId && x.Role == PropertyPartyRole.Owner && x.StartDate <= asOf)
+            .Select(x => new { x.PropertyId, x.EndDate, x.EndReason }).ToListAsync(ct);
+        var propertyIds = holdings.Where(h => h.EndDate is null || h.EndDate > asOf).Select(h => h.PropertyId).Distinct().ToList();
         var all = await FaasInForceAsync(db.TaxDeclarations.Where(x => propertyIds.Contains(x.PropertyId)), asOf, ct);
         var rows = new List<object>();
+        var listed = new HashSet<Guid>();
         foreach (var f in all.OrderBy(x => x.Td.PropertyId).ThenBy(x => x.Td.Rpu!.RpuNumber))
         {
-            // The unit is the owner's when the owner holds it, or holds the property and the unit has no owners of its own.
-            var scoped = await PropertyParties.ScopeAsync(db, f.Td.PropertyId, f.Td.RpuId,
-                x => x.StartDate <= asOf && (x.EndDate == null || x.EndDate > asOf), ct);
-            if (!await scoped.AnyAsync(x => x.TaxpayerId == run.TaxpayerId && x.Role == PropertyPartyRole.Owner, ct))
+            if (await OwnedAsync(f, run.TaxpayerId!.Value, asOf, lastDayHeld: false, ct))
             {
-                continue;
+                listed.Add(f.Td.Id);
+                rows.Add(await OwnershipRowAsync(f, asOf, past: null, ct));
             }
-            var p = await PropertyAsync(f.Td.PropertyId, ct);
-            var (area, unit) = await AreaAsync(f.Td, ct);
-            var previousOwner = f.Td.PreviousTaxDeclaration is { } prev
-                ? (await OwnersAsync(prev.PropertyId, prev.RpuId, Entered(prev), ct)).Names : null;
-            rows.Add(new
+        }
+        if (!run.IncludePastOwners)
+        {
+            return rows;
+        }
+        // Holdings ended by the run's date, latest first; a unit already listed (held again, or still held) is not repeated.
+        foreach (var h in holdings.Where(h => h.EndDate is { } end && end <= asOf).OrderByDescending(h => h.EndDate))
+        {
+            var lastDay = h.EndDate!.Value;
+            var then = await FaasInForceAsync(db.TaxDeclarations.Where(x => x.PropertyId == h.PropertyId), lastDay, ct);
+            foreach (var f in then.OrderBy(x => x.Td.Rpu!.RpuNumber))
             {
-                enteredOn = f.EnteredOn, kind = KindCode(f.Td.Rpu!.RpuType), classCode = f.Td.Classification!.Code,
-                pin = await UnitPinAsync(p, f.Td.Rpu, asOf, ct),
-                titleNumber = p.TitleNumber, lotBlock = $"{p.LotNumber ?? "—"} / {p.BlockNumber ?? "—"}",
-                arpNumber = Arp(f), tdNumber = f.Td.TaxDeclarationNumber, previousOwner,
-                location = string.Join(", ", new[] { p.Street, p.Barangay!.Name }.Where(x => !string.IsNullOrWhiteSpace(x))),
-                area, areaUnit = unit, marketValue = f.Assessment?.MarketValue, assessedValue = f.Assessment?.AssessedValue,
-                remarks = f.Td.TransactionCode,
-            });
+                if (listed.Add(f.Td.Id) && await OwnedAsync(f, run.TaxpayerId!.Value, lastDay, lastDayHeld: true, ct))
+                {
+                    rows.Add(await OwnershipRowAsync(f, lastDay, new { heldUntil = lastDay, endReason = h.EndReason }, ct));
+                }
+            }
         }
         return rows;
+    }
+
+    /// <summary>
+    /// The unit is the owner's when the owner holds it, or holds the property and the unit has no owners of its own.
+    /// In force on a date: ended after it, as everywhere in the registers; <paramref name="lastDayHeld"/> also counts a
+    /// holding ending on the date itself (a past holding, on its last day).
+    /// </summary>
+    private async Task<bool> OwnedAsync(Faas f, Guid taxpayerId, DateOnly on, bool lastDayHeld, CancellationToken ct)
+    {
+        var scoped = await PropertyParties.ScopeAsync(db, f.Td.PropertyId, f.Td.RpuId,
+            x => x.StartDate <= on && (x.EndDate == null || x.EndDate > on || (lastDayHeld && x.EndDate == on)), ct);
+        return await scoped.AnyAsync(x => x.TaxpayerId == taxpayerId && x.Role == PropertyPartyRole.Owner, ct);
+    }
+
+    /// <summary>One ORF row, as declared on <paramref name="on"/>; <paramref name="past"/> is null for a unit still held.</summary>
+    private async Task<object> OwnershipRowAsync(Faas f, DateOnly on, object? past, CancellationToken ct)
+    {
+        var p = await PropertyAsync(f.Td.PropertyId, ct);
+        var (area, unit) = await AreaAsync(f.Td, ct);
+        var previousOwner = f.Td.PreviousTaxDeclaration is { } prev
+            ? (await OwnersAsync(prev.PropertyId, prev.RpuId, Entered(prev), ct)).Names : null;
+        return new
+        {
+            enteredOn = f.EnteredOn, kind = KindCode(f.Td.Rpu!.RpuType), classCode = f.Td.Classification!.Code,
+            pin = await UnitPinAsync(p, f.Td.Rpu, on, ct),
+            titleNumber = p.TitleNumber, lotBlock = $"{p.LotNumber ?? "—"} / {p.BlockNumber ?? "—"}",
+            arpNumber = Arp(f), tdNumber = f.Td.TaxDeclarationNumber, previousOwner,
+            location = string.Join(", ", new[] { p.Street, p.Barangay!.Name }.Where(x => !string.IsNullOrWhiteSpace(x))),
+            area, areaUnit = unit, marketValue = f.Assessment?.MarketValue, assessedValue = f.Assessment?.AssessedValue,
+            remarks = f.Td.TransactionCode,
+            lam = new
+            {
+                noticeNumber = await NoticeNumberAsync(f.Assessment?.Id, ct),
+                machines = f.Td.Rpu.RpuType != RpuType.Machinery ? null : string.Join("; ", (await db.MachineryUnits.Where(m => m.RpuId == f.Td.RpuId)
+                        .OrderBy(m => m.CreatedAt).Select(m => new { m.Brand, m.Model, m.Capacity, m.CapacityUnit }).ToListAsync(ct))
+                    .Select(m => string.Join(" ", new[] { m.Brand, m.Model, m.Capacity is { } c ? $"{c:0.##} {m.CapacityUnit}".Trim() : null }
+                        .Where(x => !string.IsNullOrWhiteSpace(x))))),
+                // Null while held; the last day held and why it ended for a unit the owner no longer holds.
+                past,
+                // Provincial records add the municipality to the location (LAM Annex I-J).
+                municipality = await db.Municipalities.Where(x => x.Id == p.MunicipalityId).Select(x => x.Name).FirstOrDefaultAsync(ct),
+            },
+        };
     }
 
     /// <summary>
@@ -488,6 +626,13 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
                 marketValueL = kind == "L" ? mv : null, marketValueB = kind == "B" ? mv : null, marketValueM = kind == "M" ? mv : null,
                 assessedValueL = kind == "L" ? av : null, assessedValueB = kind == "B" ? av : null, assessedValueM = kind == "M" ? av : null,
                 yearTaxesBegin = taxable ? td.EffectivityDate.Year : (int?)null, transactionCode = td.TransactionCode,
+                lam = new
+                {
+                    sectionParcel = await SectionParcelAsync(p.Id, Entered(td), ct),
+                    buildingArea = kind == "B" ? (await AreaAsync(td, ct)).Area : null,
+                    marketValueTaxable = taxable ? mv : null, marketValueExempt = taxable ? null : mv,
+                    assessedValueTaxable = taxable ? av : null, assessedValueExempt = taxable ? null : av,
+                },
             });
         }
         return rows;

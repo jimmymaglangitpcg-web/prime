@@ -16,9 +16,13 @@ namespace Prime.Application.Features.Forms;
 /// <summary>
 /// What a form shows for one record. <see cref="IssueBlocker"/> explains why
 /// it may be previewed but not issued (e.g. an unposted bill); null when it
-/// can be issued.
+/// can be issued. <see cref="RollLines"/>: an Assessment Roll's TDs with the
+/// page and line they print on, recorded when the roll is issued.
 /// </summary>
-public sealed record FormSubjectData(string? DocumentNumber, JsonObject Data, string? IssueBlocker);
+public sealed record FormSubjectData(string? DocumentNumber, JsonObject Data, string? IssueBlocker, IReadOnlyList<RollLine>? RollLines = null);
+
+/// <summary>One TD's place in an Assessment Roll (docs/analysis/records-and-forms.md §4.3).</summary>
+public sealed record RollLine(Guid TaxDeclarationId, RegisterKind Kind, int Page, int Line);
 
 /// <summary>
 /// Builds the data snapshot for one <see cref="FormSubjectType"/>
@@ -133,7 +137,8 @@ public sealed class TaxBillFormDataProvider(IApplicationDbContext db) : IFormDat
 /// Tax Declaration. Shows the latest posted assessment of its RPU and the
 /// signatories frozen in that assessment's approval records (§4.5).
 /// </summary>
-public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db, IOptions<RealPropertyUnits.UnitPinOptions> unitPins) : IFormDataProvider
+public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db, IOptions<RealPropertyUnits.UnitPinOptions> unitPins, IOptions<FormsOptions> forms)
+    : IFormDataProvider
 {
     public FormSubjectType SubjectType => FormSubjectType.TaxDeclaration;
 
@@ -265,6 +270,7 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db, IOp
                     transferTax = c.TransferTax, transferTaxReceipt = c.TransferTaxReceipt, transferTaxDate = c.TransferTaxDate,
                 }).FirstOrDefaultAsync(cancellationToken)
                 : null,
+            lam = await LamAsync(td, assessment, cancellationToken),
         });
         // A cancelled TD stays printable — certified copies of historical records (LGC §472(b)(9));
         // the form marks it CANCELLED. A rejected or voided one never became a declaration.
@@ -272,6 +278,61 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db, IOp
             ? $"A {td.Status} Tax Declaration cannot be issued."
             : null;
         return new FormSubjectData(td.TaxDeclarationNumber, data, blocker);
+    }
+
+    /// <summary>
+    /// What the LAM TD prints beyond the MRPAAO one (docs/analysis/records-and-forms.md §4.2): the kind of property,
+    /// registration type and cadastral number, parties with email (and sex when enabled), the total assessed value in
+    /// words (Q9), the back-tax period, the ordinances of the assessment levels applied (the Sanggunian is
+    /// <c>lgu.sanggunianName</c>, Q8), and per row the sub-classes, structural type or machines, and area or capacity.
+    /// </summary>
+    private async Task<object> LamAsync(TaxDeclaration td, Assessment? assessment, CancellationToken ct)
+    {
+        var property = await db.Properties.AsNoTracking().Where(p => p.Id == td.PropertyId)
+            .Select(p => new { p.TitleNumber, p.CadastralNumber, TitleTypeCode = p.TitleType == null ? null : p.TitleType.Code }).FirstAsync(ct);
+        var parties = await LamFormData.PartiesAsync(db, td.PropertyId, td.RpuId, td.EffectivityDate, forms.Value.PrintOwnerSex, ct);
+        var type = td.Rpu!.RpuType;
+
+        var subClassIds = assessment?.Valuation?.Lines.Select(v => v.SubClassificationId ?? v.PricedSubClassificationId).OfType<Guid>().Distinct().ToList() ?? [];
+        var subClassNames = await db.SubClassifications.Where(x => subClassIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.Name, ct);
+        var structuralTypes = type == RpuType.Building
+            ? await db.Buildings.Where(b => b.RpuId == td.RpuId).Select(b => b.StructuralType!.Name).Distinct().ToListAsync(ct)
+            : [];
+        var machines = type == RpuType.Machinery
+            ? await db.MachineryUnits.Where(m => m.RpuId == td.RpuId).OrderBy(m => m.CreatedAt)
+                .Select(m => new { m.MachineryType!.Name, m.Brand, m.Model, m.Capacity, m.CapacityUnit }).ToListAsync(ct)
+            : [];
+
+        return new
+        {
+            kind = LamFormData.Kind(type),
+            registrationType = LamFormData.RegistrationType(property.TitleNumber),
+            titleTypeCode = property.TitleTypeCode,
+            cadastralNumber = property.CadastralNumber,
+            owners = parties.Where(p => p.isOwner),
+            administrators = parties.Where(p => !p.isOwner),
+            assessedValueInWords = assessment is null ? null : Domain.DomainServices.AmountInWords.Pesos(assessment.AssessedValue),
+            backTaxPeriod = await LamFormData.BackTaxPeriodAsync(db, assessment?.Id, ct),
+            ordinances = await LamFormData.AssessmentLevelOrdinancesAsync(db, assessment?.Id, ct),
+            rows = assessment is null ? null : assessment.Lines.OrderBy(l => l.Sequence).Select(l =>
+            {
+                var lines = assessment.Valuation?.Lines
+                    .Where(v => (v.ClassificationId ?? td.ClassificationId) == l.ClassificationId && (v.ActualUseId ?? td.ActualUseId) == l.ActualUseId)
+                    .ToList() ?? [];
+                return (object)new
+                {
+                    sequence = l.Sequence,
+                    subClassifications = string.Join(", ", lines.Select(v => v.SubClassificationId ?? v.PricedSubClassificationId).OfType<Guid>().Distinct()
+                        .Select(id => subClassNames.GetValueOrDefault(id)).OfType<string>()),
+                    structuralType = structuralTypes.Count == 0 ? null : string.Join(", ", structuralTypes),
+                    machines = machines.Count == 0 ? null : string.Join("; ", machines.Select(m =>
+                        string.Join(" ", new[] { m.Name, m.Brand, m.Model }.Where(x => !string.IsNullOrWhiteSpace(x))))),
+                    area = AreaOf(assessment, td, l.ClassificationId, l.ActualUseId),
+                    capacity = machines.Count == 0 ? null : string.Join("; ", machines.Where(m => m.Capacity != null)
+                        .Select(m => $"{m.Capacity:0.##} {m.CapacityUnit}".Trim())),
+                };
+            }).ToList(),
+        };
     }
 
     /// <summary>The parties declared on the TD's effectivity date (the unit's own, else the property's), with TIN and contact (MRPAAO Att. 4).</summary>
@@ -328,7 +389,8 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db, IOp
 /// issued as a form; a draft is previewed. Its <c>items</c> are the MRPAAO
 /// Att. 10 rows: ARPN, TDN, PIN, location, classification, MV, AV.
 /// </summary>
-public sealed class NoticeFormDataProvider(IApplicationDbContext db, IOptions<FaasOptions> faas, IOptions<RealPropertyUnits.UnitPinOptions> unitPins) : IFormDataProvider
+public sealed class NoticeFormDataProvider(IApplicationDbContext db, IOptions<FaasOptions> faas, IOptions<RealPropertyUnits.UnitPinOptions> unitPins)
+    : IFormDataProvider
 {
     public FormSubjectType SubjectType => FormSubjectType.NoticeOfAssessment;
 
@@ -374,6 +436,23 @@ public sealed class NoticeFormDataProvider(IApplicationDbContext db, IOptions<Fa
             },
             property = await FormData.PropertyAsync(db, n.PropertyId, cancellationToken),
             items = await ItemsAsync(n, cancellationToken),
+            // The LAM NOA (records-and-forms.md §4.2): the addressee's email, the service by email, and each item's kind
+            // (items[].lamKind) and unit PIN (items[].pin).
+            lam = new
+            {
+                addresseeEmail = n.AddresseeTaxpayerId is { } addressee
+                    ? await db.Taxpayers.Where(t => t.Id == addressee).Select(t => t.Email).FirstOrDefaultAsync(cancellationToken)
+                    : await db.PropertyTaxpayers.Where(x => x.PropertyId == n.PropertyId && x.IsCurrent && x.Role == PropertyPartyRole.Owner
+                            && x.Taxpayer!.Email != null)
+                        .OrderBy(x => x.StartDate).Select(x => x.Taxpayer!.Email).FirstOrDefaultAsync(cancellationToken),
+                serviceMode = n.ServiceMode?.ToString(),
+                emailAddress = n.EmailAddress,
+                sentDate = n.SentDate,
+                receivedDate = n.ReceivedDate,
+                // Proof of service as recorded: who received it, and the registered mail number or other proof.
+                servedTo = n.ServedTo,
+                proofReference = n.ProofReference,
+            },
         });
         var blocker = n.Status is NoticeStatus.Issued or NoticeStatus.Served
             ? null
@@ -412,6 +491,10 @@ public sealed class NoticeFormDataProvider(IApplicationDbContext db, IOptions<Fa
                 marketValue = i.MarketValue,
                 assessedValue = i.AssessedValue,
                 assessmentYear = i.AssessmentYear,
+                lamKind = LamFormData.Kind(unit.RpuType),
+                lamActualUse = string.Join(", ", await db.AssessmentLines.Where(l => l.AssessmentId == i.AssessmentId).OrderBy(l => l.Sequence)
+                    .Select(l => l.ActualUse!.Name).Distinct().ToListAsync(ct)),
+                lamEffectivity = i.AssessmentEffectiveDate,
             });
         }
         return rows;

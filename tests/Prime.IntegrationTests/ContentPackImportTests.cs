@@ -208,4 +208,30 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
         items.Single(i => i.EntityType == nameof(RoadType)).Changes.Select(x => x.Field).ShouldBe(["name", "is_active"]);
         Directory.Delete(root, recursive: true);
     }
+
+    /// <summary>Step L5-4 (docs/analysis/records-and-forms.md §4.4): annotation types take an optional carries_over column, yes by default.</summary>
+    [Fact]
+    public async Task AnnotationTypes_CarryOverByDefault_UnlessThePackSaysNo()
+    {
+        var tag = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+        var root = TempPack("annotations", new Dictionary<string, string>
+        {
+            ["manifest.json"] = """
+                { "schemaVersion": 1, "pack": "annotations", "version": "T1", "files": [
+                  { "kind": "lookup", "lookup": "annotation-types", "path": "annotation-types.csv", "source": "DEMO" }
+                ] }
+                """,
+            ["annotation-types.csv"] = $"code,name,carries_over\nDEMO-L{tag},DEMO Levy,\nDEMO-N{tag},DEMO Note,no\n",
+        });
+        var (c, scope) = await BeginAsync(root);
+        await using var _ = scope;
+
+        var preview = (await c.Service.PreviewAsync("annotations")).Value;
+        preview.CanImport.ShouldBeTrue();
+        preview.Files.Single().Changes.Single(x => x.Key == $"DEMO-N{tag}").Fields.ShouldContain(f => f.Field == "carries_over" && f.To == "false");
+        (await c.Service.ImportAsync("annotations", new(preview.Fingerprint))).Value.Applied.ShouldBeTrue();
+
+        (await c.Db.AnnotationTypes.SingleAsync(x => x.Code == $"DEMO-L{tag}")).CarriesOver.ShouldBeTrue();
+        (await c.Db.AnnotationTypes.SingleAsync(x => x.Code == $"DEMO-N{tag}")).CarriesOver.ShouldBeFalse();
+    }
 }

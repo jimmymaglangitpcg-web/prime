@@ -10,8 +10,8 @@ namespace Prime.Application.Features.TaxDeclarations;
 /// The final approval of a Tax Declaration, shared by direct TD approval and
 /// transaction approval (docs/FORMS-REVISION-PLAN.md A4–A5), so both apply
 /// the same rules: one Approved TD per RPU, and approving a TD that names a
-/// previous TD cancels that one ("Cancelled by TD No. …"). The caller owns
-/// the database transaction.
+/// previous TD cancels that one ("Cancelled by TD No. …") and carries its
+/// unlifted annotations over. The caller owns the database transaction.
 /// </summary>
 internal static class TaxDeclarationApproval
 {
@@ -62,7 +62,35 @@ internal static class TaxDeclarationApproval
         td.Status = WorkflowStatus.Approved;
         td.ApprovedBy = userId;
         td.ApprovedAt = now;
+        if (previous is not null)
+        {
+            await CarryAnnotationsAsync(db, [previous.Id], td.Id, ct);
+        }
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Copies to <paramref name="targetId"/> every annotation still in force (not lifted) on the replaced TDs
+    /// <paramref name="sourceIds"/> whose type carries over, each pointing back to its source
+    /// (docs/analysis/records-and-forms.md §4.4, Q7). One already carried to the target is not copied again.
+    /// The caller saves.
+    /// </summary>
+    public static async Task CarryAnnotationsAsync(IApplicationDbContext db, IReadOnlyCollection<Guid> sourceIds, Guid targetId, CancellationToken ct)
+    {
+        if (sourceIds.Count == 0)
+        {
+            return;
+        }
+        var carried = await db.TaxDeclarationAnnotations.AsNoTracking()
+            .Where(x => sourceIds.Contains(x.TaxDeclarationId) && x.LiftedAt == null && x.AnnotationType!.CarriesOver
+                && !db.TaxDeclarationAnnotations.Any(c => c.TaxDeclarationId == targetId && c.CarriedFromAnnotationId == x.Id))
+            .OrderBy(x => x.EffectiveDate).ThenBy(x => x.CreatedAt).ToListAsync(ct);
+        db.TaxDeclarationAnnotations.AddRange(carried.Select(a => new TaxDeclarationAnnotation
+        {
+            TaxDeclarationId = targetId, AnnotationTypeId = a.AnnotationTypeId, Text = a.Text,
+            ReferenceNumber = a.ReferenceNumber, ReferenceDate = a.ReferenceDate, EffectiveDate = a.EffectiveDate,
+            CarriedFromAnnotationId = a.Id,
+        }));
     }
 
     public static void Cancel(TaxDeclaration td, Guid? userId, DateTimeOffset now, string reason)

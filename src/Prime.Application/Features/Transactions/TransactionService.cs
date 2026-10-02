@@ -418,6 +418,20 @@ public sealed class TransactionService(
                 await TaxDeclarationApproval.ApplyAsync(db, td, check.Value, userId, now, cancellationToken);
             }
 
+            // 2a. Subdivision and consolidation: every TD the transaction ends passes its unlifted annotations to each
+            // resulting TD of the same kind (land to land, building to building; records-and-forms.md §4.4).
+            if (IsRenumbering(tx.Kind))
+            {
+                var sourceIds = cancelIds.Concat(own.Select(x => x.PreviousTaxDeclarationId).OfType<Guid>()).Distinct().ToList();
+                var sources = await db.TaxDeclarations.Where(x => sourceIds.Contains(x.Id)).Select(x => new { x.Id, x.Rpu!.RpuType }).ToListAsync(cancellationToken);
+                var ownIds = own.Select(x => x.Id).ToList();
+                foreach (var target in await db.TaxDeclarations.Where(x => ownIds.Contains(x.Id)).Select(x => new { x.Id, x.Rpu!.RpuType }).ToListAsync(cancellationToken))
+                {
+                    await TaxDeclarationApproval.CarryAnnotationsAsync(db, sources.Where(s => s.RpuType == target.RpuType).Select(s => s.Id).ToList(), target.Id, cancellationToken);
+                }
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
             // 3. Transfer: end the current owners (and any unknown-owner declaration); start the new parties.
             if (tx.Kind == PropertyTransactionKind.Transfer)
             {

@@ -462,6 +462,9 @@ export interface TaxDeclarationAnnotationDto {
   liftedBy: string | null;
   liftReason: string | null;
   liftReference: string | null;
+  /** Copied from the replaced TD's annotation when this TD was approved (records-and-forms.md §4.4). */
+  carriedFromAnnotationId: string | null;
+  carriedFromTaxDeclarationNumber: string | null;
 }
 
 export interface AddTaxDeclarationAnnotationRequest {
@@ -1686,7 +1689,8 @@ export const registerKindLabel: Record<RegisterKind, string> = {
   PreTaxMapControlRoll: 'Pre-Tax Map Control Roll',
   AssessmentRollTaxable: 'Assessment Roll — Taxable',
   AssessmentRollExempt: 'Assessment Roll — Exempt',
-  OwnershipRecordCard: 'Ownership Record Card',
+  // The LAM's name (MRPAAO: Ownership Record Card); the stored kind is unchanged.
+  OwnershipRecordCard: 'Ownership Record Form',
   RecordOfAssessment: 'Record of Assessment',
 };
 
@@ -1695,6 +1699,7 @@ export interface RegisterRunDto {
   barangayId: string | null; barangayName: string | null; classificationId: string | null; classificationName: string | null;
   taxpayerId: string | null; taxpayerName: string | null; remarks: string | null; createdAt: string;
   sectionId: string | null; sectionIndexNumber: string | null;
+  includePastOwners: boolean;
 }
 
 export interface CreateRegisterRunRequest {
@@ -1702,6 +1707,8 @@ export interface CreateRegisterRunRequest {
   classificationId: string | null; taxpayerId: string | null; remarks: string | null;
   /** Tax Map Control Roll only: one tax map section (the post-TMCR); null lists the whole barangay. */
   sectionId?: string | null;
+  /** Ownership Record Form only: also list properties the owner no longer holds (records-and-forms.md §4.5). */
+  includePastOwners?: boolean;
 }
 
 // --- Sworn statements (docs/analysis/mrpaao-forms-model.md §16) ---

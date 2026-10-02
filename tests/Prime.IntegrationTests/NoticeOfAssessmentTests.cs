@@ -33,6 +33,7 @@ public class NoticeOfAssessmentTests(WebApplicationFactory<Program> factory) : I
         var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PrimeDbContext>();
         var transaction = await db.Database.BeginTransactionAsync();
+        await TestSeed.UseReferenceFormsAsync(db); // these tests assert the reference layouts
         await db.NumberingSchemes.Where(x => x.Status == WorkflowStatus.Approved)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, WorkflowStatus.Cancelled).SetProperty(x => x.ApprovedAt, (DateTimeOffset?)null));
         var seed = await BillingFlowTests.SeedPostedAssessmentAsync(scope.ServiceProvider, db, new DateOnly(2026, 1, 1));

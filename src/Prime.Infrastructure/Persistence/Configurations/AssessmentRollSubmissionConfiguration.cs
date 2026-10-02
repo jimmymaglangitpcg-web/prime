@@ -41,3 +41,23 @@ public sealed class AssessmentRollSubmissionItemConfiguration : IEntityTypeConfi
         builder.HasIndex(x => x.RegisterRunId).IsUnique();
     }
 }
+
+public sealed class AssessmentRollEntryConfiguration : IEntityTypeConfiguration<AssessmentRollEntry>
+{
+    public void Configure(EntityTypeBuilder<AssessmentRollEntry> builder)
+    {
+        builder.ToTable("AssessmentRollEntries", t =>
+        {
+            t.HasCheckConstraint("CK_AssessmentRollEntries_Kind", "\"Kind\" IN ('AssessmentRollTaxable', 'AssessmentRollExempt')");
+            t.HasCheckConstraint("CK_AssessmentRollEntries_PageLine", "\"Page\" >= 1 AND \"Line\" >= 1");
+        });
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Kind).HasConversion<string>().HasMaxLength(30);
+        builder.HasOne(x => x.IssuedForm).WithMany().HasForeignKey(x => x.IssuedFormId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.TaxDeclaration).WithMany().HasForeignKey(x => x.TaxDeclarationId).OnDelete(DeleteBehavior.Restrict);
+        // One entry per TD per issued roll, and one TD per printed line.
+        builder.HasIndex(x => new { x.IssuedFormId, x.TaxDeclarationId }).IsUnique();
+        builder.HasIndex(x => new { x.IssuedFormId, x.Page, x.Line }).IsUnique();
+        builder.HasIndex(x => x.TaxDeclarationId);
+    }
+}

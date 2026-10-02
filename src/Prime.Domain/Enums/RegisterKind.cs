@@ -12,7 +12,7 @@ public enum RegisterKind
     AssessmentRollTaxable = 1,
     /// <summary>Assessment Roll — Exempt Properties (Att. 7).</summary>
     AssessmentRollExempt = 2,
-    /// <summary>Ownership Record Card (Att. 8): one owner's properties.</summary>
+    /// <summary>Ownership Record Form (LAM; MRPAAO Att. 8 "Card"): one owner's properties. The stored name is kept.</summary>
     OwnershipRecordCard = 3,
     /// <summary>Record of Assessment (Att. 9): assessment transactions of a barangay and classification in a period.</summary>
     RecordOfAssessment = 4,

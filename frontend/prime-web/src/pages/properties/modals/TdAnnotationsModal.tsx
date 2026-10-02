@@ -10,7 +10,8 @@ const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.mes
 
 /**
  * Annotations on a Tax Declaration (e.g. a levy — LTOM §150). Never deleted:
- * lifting records who, when and why (docs/FORMS-REVISION-PLAN.md A4).
+ * lifting records who, when and why (docs/FORMS-REVISION-PLAN.md A4). One still in
+ * force when its TD is replaced is carried to the new TD and lifted there (L5-4).
  */
 export function TdAnnotationsModal({ td, propertyId, onClose }: { td: TaxDeclarationDto | null; propertyId: string; onClose: () => void }) {
   const { data = [], isLoading } = useTdAnnotations(td?.id);
@@ -31,7 +32,18 @@ export function TdAnnotationsModal({ td, propertyId, onClose }: { td: TaxDeclara
         columns={[
           { title: 'Type', dataIndex: 'annotationTypeName' },
           { title: 'Effective', dataIndex: 'effectiveDate' },
-          { title: 'Annotation', dataIndex: 'text' },
+          {
+            title: 'Annotation', render: (_, a) => (
+              <>
+                {a.text}
+                {a.carriedFromAnnotationId && (
+                  <div><Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    Carried over from TD {a.carriedFromTaxDeclarationNumber ?? '(not in your jurisdiction)'}
+                  </Typography.Text></div>
+                )}
+              </>
+            ),
+          },
           { title: 'Reference', render: (_, a) => [a.referenceNumber, a.referenceDate].filter(Boolean).join(' · ') || '—' },
           {
             title: 'Status', render: (_, a) => a.liftedAt

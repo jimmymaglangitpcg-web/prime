@@ -36,6 +36,7 @@ public class RegistersTests(WebApplicationFactory<Program> factory) : IClassFixt
         var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PrimeDbContext>();
         var transaction = await db.Database.BeginTransactionAsync();
+        await TestSeed.UseReferenceFormsAsync(db); // these tests assert the reference layouts
         var seed = await BillingFlowTests.SeedPostedAssessmentAsync(scope.ServiceProvider, db, new DateOnly(2026, 1, 1));
         var td = await db.TaxDeclarations.SingleAsync(x => x.Id == seed.TaxDeclaration.Id);
         td.AssessmentId = seed.AssessmentId;

@@ -33,6 +33,7 @@ public class PartiesAndTdLifecycleTests(WebApplicationFactory<Program> factory) 
         var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PrimeDbContext>();
         var transaction = await db.Database.BeginTransactionAsync();
+        await TestSeed.UseReferenceFormsAsync(db); // these tests assert the reference layouts
         await db.ApprovalChains.Where(x => x.Status == WorkflowStatus.Approved)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, WorkflowStatus.Cancelled).SetProperty(x => x.ApprovedAt, (DateTimeOffset?)null));
         await db.NumberingSchemes.Where(x => x.Status == WorkflowStatus.Approved)
@@ -265,5 +266,39 @@ public class PartiesAndTdLifecycleTests(WebApplicationFactory<Program> factory) 
         await tds.CancelAsync(tdId, "DEMO");
         (await tds.AddAnnotationAsync(tdId, new AddTaxDeclarationAnnotationRequest(levy.Id, "late", null, null, new DateOnly(2026, 6, 1))))
             .Code.ShouldBe("TAX_DECLARATION_NOT_ANNOTATABLE");
+    }
+
+    /// <summary>Step L5-4 (docs/analysis/records-and-forms.md §4.4): a replacing TD carries the unlifted annotations of carrying types.</summary>
+    [Fact]
+    public async Task ApprovingReplacementTd_CarriesUnliftedAnnotations_PointingBackToTheirSource()
+    {
+        var (c, tx) = await BeginAsync();
+        await using var _ = tx;
+        var levy = new AnnotationType { Code = $"AN{Guid.NewGuid():N}"[..8], Name = "DEMO Levy" };
+        var note = new AnnotationType { Code = $"AN{Guid.NewGuid():N}"[..8], Name = "DEMO Note", CarriesOver = false };
+        c.Db.AnnotationTypes.AddRange(levy, note);
+        await c.Db.SaveChangesAsync();
+        var tds = c.Services.GetRequiredService<ITaxDeclarationService>();
+        var current = c.Seed.TaxDeclaration;
+        var kept = (await tds.AddAnnotationAsync(current.Id, new AddTaxDeclarationAnnotationRequest(levy.Id, "DEMO levy in force", "WL-DEMO-2", new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 2)))).Value;
+        var lifted = (await tds.AddAnnotationAsync(current.Id, new AddTaxDeclarationAnnotationRequest(levy.Id, "DEMO levy lifted", null, null, new DateOnly(2026, 5, 3)))).Value;
+        (await tds.LiftAnnotationAsync(lifted.Id, new LiftTaxDeclarationAnnotationRequest("DEMO: paid", null))).IsSuccess.ShouldBeTrue();
+        (await tds.AddAnnotationAsync(current.Id, new AddTaxDeclarationAnnotationRequest(note.Id, "DEMO note not carried", null, null, new DateOnly(2026, 5, 4)))).IsSuccess.ShouldBeTrue();
+
+        c.User.AppUserId = c.A.Id;
+        var replacement = (await tds.CreateAsync(Td(c, previous: current.Id))).Value;
+        await tds.SubmitForReviewAsync(replacement.Id);
+        c.User.AppUserId = c.B.Id;
+        (await tds.ApproveAsync(replacement.Id)).IsSuccess.ShouldBeTrue();
+
+        var carried = (await tds.ListAnnotationsAsync(replacement.Id)).Value.ShouldHaveSingleItem();
+        (carried.Text, carried.ReferenceNumber, carried.EffectiveDate, carried.LiftedAt).ShouldBe(("DEMO levy in force", "WL-DEMO-2", new DateOnly(2026, 5, 2), (DateTimeOffset?)null));
+        carried.CarriedFromAnnotationId.ShouldBe(kept.Id);
+        carried.CarriedFromTaxDeclarationNumber.ShouldBe(current.TaxDeclarationNumber);
+        (await tds.GetByIdAsync(replacement.Id)).Value.ActiveAnnotationCount.ShouldBe(1);
+        (await tds.ListAnnotationsAsync(current.Id)).Value.Count.ShouldBe(3); // the source keeps its own
+
+        // The copy is lifted on its own TD, as any annotation.
+        (await tds.LiftAnnotationAsync(carried.Id, new LiftTaxDeclarationAnnotationRequest("DEMO: no longer applies", null))).IsSuccess.ShouldBeTrue();
     }
 }

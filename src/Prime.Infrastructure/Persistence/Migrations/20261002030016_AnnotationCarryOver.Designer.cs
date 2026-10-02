@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Prime.Infrastructure.Persistence;
 namespace Prime.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PrimeDbContext))]
-    partial class PrimeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261002030016_AnnotationCarryOver")]
+    partial class AnnotationCarryOver
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -6709,9 +6712,6 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("FromDate")
                         .HasColumnType("date");
 
-                    b.Property<bool>("IncludePastOwners")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -6747,8 +6747,6 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.ToTable("RegisterRuns", null, t =>
                         {
-                            t.HasCheckConstraint("CK_RegisterRuns_PastOwners", "NOT \"IncludePastOwners\" OR \"Kind\" = 'OwnershipRecordCard'");
-
                             t.HasCheckConstraint("CK_RegisterRuns_Period", "\"FromDate\" IS NULL OR \"FromDate\" <= \"AsOf\"");
 
                             t.HasCheckConstraint("CK_RegisterRuns_Scope", "(\"Kind\" = 'OwnershipRecordCard' AND \"TaxpayerId\" IS NOT NULL) OR (\"Kind\" <> 'OwnershipRecordCard' AND \"BarangayId\" IS NOT NULL)");

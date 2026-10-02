@@ -68,6 +68,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
     public DbSet<Prime.Domain.Entities.Registers.RegisterRun> RegisterRuns => Set<Prime.Domain.Entities.Registers.RegisterRun>();
     public DbSet<Prime.Domain.Entities.Registers.AssessmentRollSubmission> AssessmentRollSubmissions => Set<Prime.Domain.Entities.Registers.AssessmentRollSubmission>();
     public DbSet<Prime.Domain.Entities.Registers.AssessmentRollSubmissionItem> AssessmentRollSubmissionItems => Set<Prime.Domain.Entities.Registers.AssessmentRollSubmissionItem>();
+    public DbSet<Prime.Domain.Entities.Registers.AssessmentRollEntry> AssessmentRollEntries => Set<Prime.Domain.Entities.Registers.AssessmentRollEntry>();
     public DbSet<Prime.Domain.Entities.SwornStatements.SwornStatement> SwornStatements => Set<Prime.Domain.Entities.SwornStatements.SwornStatement>();
     public DbSet<Prime.Domain.Entities.SwornStatements.SwornStatementItem> SwornStatementItems => Set<Prime.Domain.Entities.SwornStatements.SwornStatementItem>();
     public DbSet<LandImprovement> LandImprovements => Set<LandImprovement>();
@@ -213,5 +214,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
             .HasQueryFilter(x => !JurisdictionRestricted || x.BarangayId == null || JurisdictionMunicipalities.Contains(x.Barangay!.MunicipalityId));
         modelBuilder.Entity<Prime.Domain.Entities.Registers.AssessmentRollSubmission>()
             .HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
+        modelBuilder.Entity<Prime.Domain.Entities.Registers.AssessmentRollEntry>()
+            .HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.TaxDeclaration!.Property!.MunicipalityId));
     }
 }

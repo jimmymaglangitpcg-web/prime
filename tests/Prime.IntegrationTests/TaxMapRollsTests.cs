@@ -42,6 +42,7 @@ public class TaxMapRollsTests(WebApplicationFactory<Program> factory) : IClassFi
         var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PrimeDbContext>();
         var transaction = await db.Database.BeginTransactionAsync();
+        await TestSeed.UseReferenceFormsAsync(db); // these tests assert the reference layouts
         // Index numbers share number spaces with the dev database's DEMO ones; clear them inside the transaction.
         await db.Provinces.ExecuteUpdateAsync(s => s.SetProperty(x => x.PinIndexNumber, (string?)null));
         await db.Municipalities.ExecuteUpdateAsync(s => s.SetProperty(x => x.PinIndexNumber, (string?)null));

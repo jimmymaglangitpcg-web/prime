@@ -15,7 +15,7 @@ public sealed class RegisterRun : AuditableEntity
 {
     public RegisterKind Kind { get; set; }
 
-    /// <summary>Every register but the Ownership Record Card: the barangay.</summary>
+    /// <summary>Every register but the Ownership Record Form: the barangay.</summary>
     public Guid? BarangayId { get; set; }
     public Barangay? Barangay { get; set; }
 
@@ -27,9 +27,15 @@ public sealed class RegisterRun : AuditableEntity
     public Guid? ClassificationId { get; set; }
     public Classification? Classification { get; set; }
 
-    /// <summary>Ownership Record Card: the owner.</summary>
+    /// <summary>Ownership Record Form (MRPAAO: Card): the owner.</summary>
     public Guid? TaxpayerId { get; set; }
     public Taxpayer? Taxpayer { get; set; }
+
+    /// <summary>
+    /// Ownership Record Form only: also list the properties the owner no longer holds, and allow a form for an
+    /// owner with nothing in force. Past owners' forms are set apart, never disposed of (records-and-forms.md §4.5, Q12).
+    /// </summary>
+    public bool IncludePastOwners { get; set; }
 
     /// <summary>
     /// Record of Assessment: the first day of the period; Assessment Roll: a

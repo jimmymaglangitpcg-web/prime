@@ -94,9 +94,15 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(Prime.Application.Features.RealPropertyUnits.UnitPinOptions.SectionName))
             .Validate(o => o.SuffixStart.Values.All(v => v > 0), "UnitPin:SuffixStart values must be positive.")
             .ValidateOnStart();
+        services.AddOptions<Prime.Application.Features.Registers.RegistersOptions>()
+            .Bind(configuration.GetSection(Prime.Application.Features.Registers.RegistersOptions.SectionName))
+            .Validate(o => o.AssessmentRollRowsPerPage >= 0, "Registers:AssessmentRollRowsPerPage cannot be negative.")
+            .ValidateOnStart();
 
         // Forms foundation (docs/FORMS-REVISION-PLAN.md): LGU branding, numbering, rendering, provisional forms.
         services.AddOptions<LguOptions>().Bind(configuration.GetSection(LguOptions.SectionName));
+        services.AddOptions<Prime.Application.Features.Forms.FormsOptions>()
+            .Bind(configuration.GetSection(Prime.Application.Features.Forms.FormsOptions.SectionName));
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IClock, LguClock>();
         services.AddScoped<INumberSequenceAllocator, NumberSequenceAllocator>();

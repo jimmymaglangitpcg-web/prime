@@ -53,7 +53,14 @@ public sealed class OwnershipType : LookupEntity;
 /// LGU-configurable: the list and wording come from the LAM
 /// (docs/FORMS-REVISION-PLAN.md §5 A4).
 /// </summary>
-public sealed class AnnotationType : LookupEntity;
+public sealed class AnnotationType : LookupEntity
+{
+    /// <summary>
+    /// Whether an unlifted annotation of this type is copied to the TD that replaces its TD
+    /// (docs/analysis/records-and-forms.md §4.4, Q7). Yes unless the office says otherwise.
+    /// </summary>
+    public bool CarriesOver { get; set; } = true;
+}
 
 /// <summary>
 /// Supports Document (§59, DOMAIN-MODEL.md §3.19a) — Title, Deed, Tax

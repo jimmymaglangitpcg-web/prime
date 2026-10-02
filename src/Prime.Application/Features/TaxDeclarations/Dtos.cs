@@ -61,4 +61,5 @@ public sealed record TaxDeclarationAnnotationDto(
     Guid Id, Guid TaxDeclarationId, Guid AnnotationTypeId, string AnnotationTypeCode, string AnnotationTypeName,
     string Text, string? ReferenceNumber, DateOnly? ReferenceDate, DateOnly EffectiveDate,
     DateTimeOffset CreatedAt, Guid? CreatedBy,
-    DateTimeOffset? LiftedAt, Guid? LiftedBy, string? LiftReason, string? LiftReference);
+    DateTimeOffset? LiftedAt, Guid? LiftedBy, string? LiftReason, string? LiftReference,
+    Guid? CarriedFromAnnotationId = null, string? CarriedFromTaxDeclarationNumber = null);
