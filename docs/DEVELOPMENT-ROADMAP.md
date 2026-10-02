@@ -1200,7 +1200,8 @@ and in a subdivision or consolidation to each resulting TD of the same kind; per
 include past owners, otherwise a run for an owner holding nothing is refused; migration `OrfPastOwners`, local
 database only). **L5-6 done** (ten LAM form templates in the untracked content pack; imported, approved and issued
 against DEMO land, building and machinery in a rolled-back transaction; layouts await the Provincial Assessor's
-review). **L5 complete.** Next per CLAUDE.md §97: L3 (assessment, listing, exemptions) — design document first. L3 design after L5. The paragraphs below are the earlier
+review). **L5 complete.** LAM forms approved in the dev database (2026-10-02). **L3 design drafted**
+(`docs/analysis/assessment-listing-exemptions.md`, Q1–Q15 awaiting decisions; no code before approval). L3 design after L5. The paragraphs below are the earlier
 history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so
