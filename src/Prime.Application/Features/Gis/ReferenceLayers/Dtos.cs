@@ -10,6 +10,8 @@ public enum ReferenceLayer
     Roads,
     /// <summary>Tax map section boundaries (docs/analysis/property-identification.md §3.7).</summary>
     Sections,
+    /// <summary>Areas in dispute, hatched on tax maps (LAM Bk II pp.50–52; docs/analysis/identification-numbering.md §4.3). Keyed by "code".</summary>
+    DisputedAreas,
 }
 
 /// <summary>

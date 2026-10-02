@@ -26,6 +26,8 @@ public sealed class Office : AuditableEntity
     public string? LguName { get; set; }
     /// <summary>The head's position title as printed, e.g. "Municipal Assessor".</summary>
     public string? HeadPosition { get; set; }
+    /// <summary>The Sanggunian whose tax ordinance the TD cites, e.g. "Sangguniang Panlalawigan" (LAM Annex I-G p.167; Q8).</summary>
+    public string? SanggunianName { get; set; }
     public string? Address { get; set; }
     public string? Contact { get; set; }
     public RecordStatus Status { get; set; } = RecordStatus.Active;

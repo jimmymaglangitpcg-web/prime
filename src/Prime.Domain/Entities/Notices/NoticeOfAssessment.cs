@@ -51,6 +51,10 @@ public sealed class NoticeOfAssessment : AuditableEntity
     /// <summary>The date the addressee received the notice — the appeal period runs from it.</summary>
     public DateOnly? ReceivedDate { get; set; }
     public string? ServedTo { get; set; }
+    /// <summary>The address an emailed notice went to.</summary>
+    public string? EmailAddress { get; set; }
+    /// <summary>The date the notice was mailed or emailed (the LAM proof of service), when not handed over in person.</summary>
+    public DateOnly? SentDate { get; set; }
     /// <summary>E.g. the registry return card number or the signed receiving copy's reference.</summary>
     public string? ProofReference { get; set; }
     public string? ServiceNotes { get; set; }

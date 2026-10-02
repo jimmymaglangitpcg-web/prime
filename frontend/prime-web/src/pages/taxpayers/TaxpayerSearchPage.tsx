@@ -4,11 +4,13 @@ import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useTaxpayerSearch } from '../../api/taxpayers';
 import type { TaxpayerDto } from '../../lib/types';
+import { TaxpayerDetailsModal } from './TaxpayerDetailsModal';
 
 export function TaxpayerSearchPage() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
+  const [editing, setEditing] = useState<TaxpayerDto | null>(null);
   const pageSize = 20;
 
   const { data, isLoading } = useTaxpayerSearch({ searchTerm: searchTerm || undefined, page, pageSize });
@@ -62,8 +64,14 @@ export function TaxpayerSearchPage() {
           { title: 'Type', dataIndex: 'taxpayerType' },
           { title: 'TIN', dataIndex: 'tin' },
           { title: 'Contact', dataIndex: 'contactNumber' },
+          { title: 'Email', dataIndex: 'email' },
+          {
+            title: '', key: 'actions', width: 110,
+            render: (_: unknown, t) => !t.limited && <Button size="small" onClick={() => setEditing(t)}>Edit details</Button>,
+          },
         ]}
       />
+      {editing && <TaxpayerDetailsModal taxpayer={editing} onClose={() => setEditing(null)} />}
     </div>
   );
 }

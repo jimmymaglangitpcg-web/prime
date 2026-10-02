@@ -4,6 +4,7 @@ import { useAppraisalRecord, useRpuAssessments } from '../../../api/assessments'
 import { useAssessmentAction, type AssessmentAction } from '../../../api/valuation';
 import { useTaxDeclarationsByRpu } from '../../../api/taxDeclarations';
 import { ValuationDrawer } from './ValueAndAssess';
+import { BackTaxModal } from './BackTaxModal';
 import { ApiRequestError } from '../../../lib/apiClient';
 import { formatMoney } from '../../../lib/format';
 import type { AppraisalRecordDto, AssessmentSummaryDto, WorkflowStatus } from '../../../lib/types';
@@ -23,12 +24,16 @@ export function AssessmentsForRpu({ rpuId }: { rpuId: string }) {
   const { data = [], isLoading } = useRpuAssessments(rpuId);
   const [selected, setSelected] = useState<string>();
   const [valuing, setValuing] = useState(false);
+  const [backTaxes, setBackTaxes] = useState(false);
   const byId = new Map(data.map((a) => [a.id, a]));
   return (
     <div style={{ padding: '8px 24px' }}>
       <Space style={{ justifyContent: 'space-between', width: '100%' }}>
         <Typography.Text strong>Assessments</Typography.Text>
-        <Button size="small" type="primary" onClick={() => setValuing(true)}>Value and assess</Button>
+        <Space size={4}>
+          <Button size="small" onClick={() => setBackTaxes(true)}>Back taxes</Button>
+          <Button size="small" type="primary" onClick={() => setValuing(true)}>Value and assess</Button>
+        </Space>
       </Space>
       <Table<AssessmentSummaryDto>
         size="small" rowKey="id" loading={isLoading} dataSource={data} pagination={false} scroll={{ x: 'max-content' }} style={{ marginTop: 8 }}
@@ -77,6 +82,7 @@ export function AssessmentsForRpu({ rpuId }: { rpuId: string }) {
       />
       {selected && <AppraisalRecordDrawer assessmentId={selected} onClose={() => setSelected(undefined)} />}
       {valuing && <ValuationDrawer rpuId={rpuId} onClose={() => setValuing(false)} />}
+      {backTaxes && <BackTaxModal rpuId={rpuId} onClose={() => setBackTaxes(false)} />}
     </div>
   );
 }
@@ -312,8 +318,20 @@ function AppraisalRecordView({ r }: { r: AppraisalRecordDto }) {
       <Table size="small" rowKey={(x) => `${x.label}-${x.signedAt}`} dataSource={r.signatures} pagination={false} locale={{ emptyText: 'Not yet signed' }}
         columns={[
           { title: 'Step', dataIndex: 'label' },
-          { title: 'Name', dataIndex: 'name' },
+          {
+            title: 'Name', dataIndex: 'name', render: (v: string, x) => (
+              <Space size={4} wrap>
+                {v}
+                {x.signedWithoutValidLicence && (
+                  <Tooltip title="This step asks for a licensed signatory; the signer had no REA licence valid on the signing date. Recorded as a warning only.">
+                    <Tag color="orange">no valid REA licence</Tag>
+                  </Tooltip>
+                )}
+              </Space>
+            ),
+          },
           { title: 'Position', dataIndex: 'position', render: dash },
+          { title: 'REA licence', dataIndex: 'licenceNumber', render: (v: string | null | undefined, x) => v ? `${v} (valid until ${x.licenceValidUntil})` : '—' },
           { title: 'Signed', dataIndex: 'signedAt', render: (v: string) => new Date(v).toLocaleString() },
         ]} />
 

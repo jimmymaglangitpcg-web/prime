@@ -34,6 +34,11 @@ public sealed class MachineryConfiguration : IEntityTypeConfiguration<Machinery>
         builder.Property(x => x.AcquisitionCurrency).HasMaxLength(3);
         builder.Property(x => x.ForeignAcquisitionCost).HasPrecision(18, 2);
         builder.Property(x => x.OriginCountry).HasMaxLength(100);
+        builder.Property(x => x.EngineeringRegistrationNumber).HasMaxLength(100);
+        builder.Property(x => x.ImportPermitNumber).HasMaxLength(100);
+        builder.Property(x => x.SupplierName).HasMaxLength(300);
+        builder.Property(x => x.SupplierAddress).HasMaxLength(500);
+        builder.Property(x => x.ReceiptNumber).HasMaxLength(100);
         builder.Property(x => x.PriceIndexSeries).HasMaxLength(30);
         builder.Property(x => x.IsInOperation).HasDefaultValue(true);
         builder.HasMany(x => x.CostItems).WithOne().HasForeignKey(x => x.MachineryId).OnDelete(DeleteBehavior.Cascade);

@@ -26,6 +26,12 @@ public sealed class TaxDeclaration : AuditableEntity
     public PropertyEntity? Property { get; set; }
 
     public string TaxDeclarationNumber { get; set; } = string.Empty;
+    /// <summary>
+    /// The sequence value the TD number was made from — the LAM's assessment count (Book I p.23) — which the
+    /// Notice of Assessment number repeats (p.24; docs/analysis/identification-numbering.md §4.1). Null when the
+    /// number was typed or assigned before counts were kept.
+    /// </summary>
+    public long? AssessmentCount { get; set; }
     public int RevisionNumber { get; set; } = 1;
     public DateOnly EffectivityDate { get; set; }
     public Taxability Taxability { get; set; } = Taxability.Taxable;

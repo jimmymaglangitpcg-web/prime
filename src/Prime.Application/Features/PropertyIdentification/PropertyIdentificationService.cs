@@ -71,7 +71,8 @@ public interface IPropertyIdentificationService
 /// entered by the LGU (decision 1); PRIME ships none. Numbers are unique and
 /// never reused: a divided barangay and a retired section keep theirs.
 /// </summary>
-public sealed partial class PropertyIdentificationService(IApplicationDbContext db, ICurrentUserService currentUser) : IPropertyIdentificationService
+public sealed partial class PropertyIdentificationService(IApplicationDbContext db, ICurrentUserService currentUser,
+    Microsoft.Extensions.Options.IOptions<PinOptions> pin) : IPropertyIdentificationService
 {
     [GeneratedRegex("^[0-9]{3}$")] private static partial Regex ThreeDigits();
     [GeneratedRegex("^[0-9]{2,3}$")] private static partial Regex TwoOrThreeDigits();
@@ -214,7 +215,8 @@ public sealed partial class PropertyIdentificationService(IApplicationDbContext 
             return Result.Failure<BarangayIndexDto>("BARANGAY_RETIRED", "A retired barangay keeps its index number; it cannot be changed.");
         }
         var number = Clean(request.IndexNumber);
-        var problem = Check(number, FourDigits(), "A barangay index number has 4 digits.")
+        var digits = pin.Value.BarangayIndexDigits;
+        var problem = Check(number, new Regex($"^[0-9]{{{digits}}}$"), $"A barangay index number has {digits} digits.")
             ?? ReasonNeeded(barangay.PinIndexNumber, number, request.Reason)
             ?? (barangay.CityDistrictId != request.CityDistrictId && barangay.CityDistrictId is not null && string.IsNullOrWhiteSpace(request.Reason)
                 ? "Give the reason for moving the barangay to another district." : null);
@@ -283,10 +285,10 @@ public sealed partial class PropertyIdentificationService(IApplicationDbContext 
         var created = new List<Barangay>();
         foreach (var successor in request.Successors)
         {
-            var number = Next(used, 4);
+            var number = Next(used, pin.Value.BarangayIndexDigits);
             if (number is null)
             {
-                return Result.Failure<IReadOnlyList<BarangayIndexDto>>("VALIDATION_FAILED", "All 4-digit barangay numbers are used.");
+                return Result.Failure<IReadOnlyList<BarangayIndexDto>>("VALIDATION_FAILED", $"All {pin.Value.BarangayIndexDigits}-digit barangay numbers are used.");
             }
             used.Add(number);
             created.Add(new Barangay

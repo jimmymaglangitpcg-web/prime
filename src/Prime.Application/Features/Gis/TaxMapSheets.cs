@@ -86,6 +86,22 @@ public sealed class TaxMapSheetService(IApplicationDbContext db, IClock clock) :
         {
             missing.Add($"Section {section.IndexNumber} was retired on {retired:yyyy-MM-dd}.");
         }
+        // Areas in dispute on the sheet, hatched, with the PINs of the section's parcels they touch (LAM Bk II pp.50–52).
+        var sheetArea = shapes.Count > 0 ? shapes[0].Geometry
+            : extent is { } e ? new GeometryFactory(new PrecisionModel(), Prime.Domain.Common.SpatialReference.StorageSrid).ToGeometry(e) : null;
+        if (sheetArea is not null)
+        {
+            var disputes = await db.DisputedAreas.AsNoTracking()
+                .Where(v => v.EffectiveDate <= date && (v.EndDate == null || v.EndDate > date) && v.Geometry.Intersects(sheetArea))
+                .ToListAsync(cancellationToken);
+            foreach (var d in disputes)
+            {
+                var pins = await db.Parcels.AsNoTracking().Where(p => p.SectionId == sectionId && p.Geometry != null && p.Geometry.Intersects(d.Geometry))
+                    .Select(p => p.Property!.PropertyIdentificationNumber).Distinct().OrderBy(x => x).ToListAsync(cancellationToken);
+                shapes.Add(new Shape(d.Id, d.Code, pins.Count == 0 ? d.Name : $"{d.Name} — PIN {string.Join(", ", pins)}".TrimStart(' ', '—'),
+                    "disputed", d.Source, d.SourceReference, d.Geometry));
+            }
+        }
         var heading = await HeadingAsync(section.BarangayId, section.IndexNumber, cancellationToken);
         return Result.Success(Sheet(TaxMapSheetKind.TaxMap, "Tax Map", date, heading, shapes, missing, extent));
     }
@@ -209,7 +225,8 @@ public sealed class TaxMapSheetService(IApplicationDbContext db, IClock clock) :
 
     private static TaxMapSheetDto Sheet(TaxMapSheetKind kind, string title, DateOnly date, List<TaxMapSheetHeading> heading, List<Shape> shapes, List<string> missing, Envelope? fallback)
     {
-        var extent = Envelope(shapes.Select(x => x.Geometry)) ?? fallback;
+        // A disputed area may reach beyond the sheet; the sheet is fitted to its own boundaries.
+        var extent = Envelope(shapes.Where(x => x.Role != "disputed").Select(x => x.Geometry)) ?? fallback;
         var features = shapes.OrderBy(x => x.Role).ThenBy(x => x.Label, StringComparer.Ordinal).Select(x => new TaxMapSheetFeature("Feature", x.Id,
             JsonSerializer.SerializeToElement(x.Geometry, GeoJsonOptions),
             new TaxMapSheetFeatureProperties(x.Label, x.Name, x.Role, x.Source, x.SourceReference))).ToList();

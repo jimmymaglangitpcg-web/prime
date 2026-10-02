@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Button, Descriptions, Empty, Input, InputNumber, Modal, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Checkbox, Descriptions, Empty, Input, InputNumber, Modal, Select, Space, Table, Tag, Typography } from 'antd';
+import { BarangayPartsPanel } from './BarangayPartsPanel';
 import { CheckOutlined } from '@ant-design/icons';
 import {
   type PinAssignmentDto, type PinKind, type TieUpStage, usePlaceInSection, usePropertyPin, useRecordTieUp, useSections,
@@ -16,7 +17,9 @@ const kindColor: Record<PinKind, string> = { Registered: 'default', Temporary: '
  * its parcel in a tax map section, which gives the permanent PIN with the next
  * parcel number in the section.
  */
-export function PinSection({ propertyId, parcels }: { propertyId: string; parcels: ParcelSummaryDto[] }) {
+export function PinSection({ propertyId, parcels, barangayId, municipalityId }: {
+  propertyId: string; parcels: ParcelSummaryDto[]; barangayId?: string; municipalityId?: string;
+}) {
   const { data, isLoading, isError, error } = usePropertyPin(propertyId);
   const [placing, setPlacing] = useState(false);
   const [tieUp, setTieUp] = useState<{ stage: TieUpStage; withdraw: boolean } | null>(null);
@@ -98,7 +101,8 @@ export function PinSection({ propertyId, parcels }: { propertyId: string; parcel
         ]}
       />
       {tieUp && <TieUpModal propertyId={propertyId} {...tieUp} onClose={() => setTieUp(null)} />}
-      {placing && <PlaceModal propertyId={propertyId} parcels={parcels.filter((p) => p.status === 'Active')} onClose={() => setPlacing(false)} />}
+      <BarangayPartsPanel propertyId={propertyId} municipalityId={municipalityId} />
+      {placing && <PlaceModal propertyId={propertyId} parcels={parcels.filter((p) => p.status === 'Active')} barangayId={barangayId} onClose={() => setPlacing(false)} />}
     </Space>
   );
 }
@@ -129,27 +133,38 @@ function TieUpModal({ propertyId, stage, withdraw, onClose }: { propertyId: stri
   );
 }
 
-function PlaceModal({ propertyId, parcels, onClose }: { propertyId: string; parcels: ParcelSummaryDto[]; onClose: () => void }) {
+const NO_PARCEL = '00000000-0000-0000-0000-000000000000';
+
+function PlaceModal({ propertyId, parcels, barangayId, onClose }: { propertyId: string; parcels: ParcelSummaryDto[]; barangayId?: string; onClose: () => void }) {
   const [parcelId, setParcelId] = useState<string | undefined>(parcels.length === 1 ? parcels[0].id : undefined);
+  const [overWater, setOverWater] = useState(false);
   const parcel = parcels.find((p) => p.id === parcelId);
-  const sections = useSections(parcel?.barangayId);
+  const sections = useSections(overWater ? barangayId : parcel?.barangayId);
   const [sectionId, setSectionId] = useState<string>();
   const [parcelNumber, setParcelNumber] = useState<number | null>(null);
   const place = usePlaceInSection(propertyId);
   return (
     <Modal open title="Place the parcel in a tax map section" okText="Give permanent PIN" onCancel={onClose} confirmLoading={place.isPending}
-      okButtonProps={{ disabled: !parcelId || !sectionId }}
-      onOk={() => parcelId && sectionId && place.mutate({ parcelId, sectionId, parcelNumber }, { onSuccess: onClose })}>
+      okButtonProps={{ disabled: !(overWater || parcelId) || !sectionId }}
+      onOk={() => sectionId && place.mutate(overWater ? { parcelId: NO_PARCEL, sectionId, parcelNumber: null, overWater: true }
+        : { parcelId: parcelId!, sectionId, parcelNumber }, { onSuccess: onClose })}>
       {place.isError && <Alert type="error" showIcon title="No PIN was given" description={errorText(place.error)} style={{ marginBottom: 12 }} />}
       <Space orientation="vertical" style={{ width: '100%' }}>
-        <Select aria-label="Parcel" placeholder="Parcel" value={parcelId} style={{ width: '100%' }}
-          options={parcels.map((p) => ({ value: p.id, label: `${p.lotNumber ? `Lot ${p.lotNumber}` : 'Parcel'} — ${p.barangayName}${p.area ? `, ${p.area} sqm` : ''}` }))}
-          onChange={(v) => { setParcelId(v); setSectionId(undefined); }} />
-        <Select aria-label="Section" placeholder="Tax map section" value={sectionId} style={{ width: '100%' }} disabled={!parcel}
+        <Checkbox checked={overWater} disabled={!barangayId} onChange={(e) => { setOverWater(e.target.checked); setSectionId(undefined); }}>
+          Structures over water, not attached to land (parcel 000; the section&apos;s structures become units of this property)
+        </Checkbox>
+        {!overWater && (
+          <Select aria-label="Parcel" placeholder="Parcel" value={parcelId} style={{ width: '100%' }}
+            options={parcels.map((p) => ({ value: p.id, label: `${p.lotNumber ? `Lot ${p.lotNumber}` : 'Parcel'} — ${p.barangayName}${p.area ? `, ${p.area} sqm` : ''}` }))}
+            onChange={(v) => { setParcelId(v); setSectionId(undefined); }} />
+        )}
+        <Select aria-label="Section" placeholder="Tax map section" value={sectionId} style={{ width: '100%' }} disabled={!overWater && !parcel}
           options={(sections.data ?? []).filter((s) => !s.retiredOn).map((s) => ({ value: s.id, label: `Section ${s.indexNumber}${s.remarks ? ` — ${s.remarks}` : ''}` }))}
           notFoundContent="No active sections in this barangay (add them under Property Identification)" onChange={setSectionId} />
-        <InputNumber<number> aria-label="Parcel number (migration only)" placeholder="next number" min={1} precision={0} style={{ width: '100%' }}
-          value={parcelNumber} onChange={setParcelNumber} />
+        {!overWater && (
+          <InputNumber<number> aria-label="Parcel number (migration only)" placeholder="next number" min={1} precision={0} style={{ width: '100%' }}
+            value={parcelNumber} onChange={setParcelNumber} />
+        )}
         <Typography.Text type="secondary">
           Leave the parcel number empty to take the next number in the section. Enter one only when carrying over an existing tax map; numbers are never reused.
         </Typography.Text>

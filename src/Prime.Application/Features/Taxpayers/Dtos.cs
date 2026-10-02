@@ -15,7 +15,14 @@ public sealed record CreateTaxpayerRequest(
     Guid? MunicipalityId,
     Guid? ProvinceId,
     string? ContactNumber,
-    string? Email);
+    string? Email,
+    Sex? Sex = null);
+
+/// <summary>
+/// Corrects a taxpayer's contact and personal details (the LAM forms print them; records-and-forms.md §4.1). The
+/// name and type are not changed here. The reason goes to the audit log with the old and new values.
+/// </summary>
+public sealed record UpdateTaxpayerDetailsRequest(string? Tin, string? Address, string? ContactNumber, string? Email, Sex? Sex, string Reason);
 
 public sealed record TaxpayerDto(
     Guid Id,
@@ -32,7 +39,8 @@ public sealed record TaxpayerDto(
     string? Email,
     RecordStatus Status,
     DateTimeOffset CreatedAt,
-    bool Limited = false);
+    bool Limited = false,
+    Sex? Sex = null);
 
 public sealed class TaxpayerSearchRequest : Common.PagedRequest
 {

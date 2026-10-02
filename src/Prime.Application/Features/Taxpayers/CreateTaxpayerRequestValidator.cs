@@ -21,6 +21,8 @@ public sealed class CreateTaxpayerRequestValidator : AbstractValidator<CreateTax
         RuleFor(x => x.Tin).MaximumLength(20);
         RuleFor(x => x.Email).EmailAddress().When(x => !string.IsNullOrWhiteSpace(x.Email));
         RuleFor(x => x.ContactNumber).MaximumLength(30);
+        RuleFor(x => x.Sex).IsInEnum().When(x => x.Sex is not null);
+        RuleFor(x => x.Sex).Null().When(x => x.TaxpayerType != TaxpayerType.Individual).WithMessage("Only an individual has a sex.");
     }
 }
 

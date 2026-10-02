@@ -34,4 +34,6 @@ public enum NoticeServiceMode
     Personal = 0,
     RegisteredMail = 1,
     ThroughPunongBarangay = 2,
+    /// <summary>By email to the declarant's address (LAM Annex I-L p.176; records-and-forms.md Q11).</summary>
+    Email = 3,
 }

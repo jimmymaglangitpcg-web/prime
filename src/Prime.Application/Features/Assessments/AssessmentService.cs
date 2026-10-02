@@ -413,6 +413,15 @@ public sealed class AssessmentService(
         {
             return Result.Failure<AssessmentDto>("ASSESSMENT_NOT_APPROVED", "Only an approved assessment can be posted.");
         }
+        // Back-tax periods are posted in order, so each period's FAAS/TD cancels the one before (valuation-foundation.md §4.8, Q15).
+        if (await db.BackTaxPeriods.Where(p => p.AssessmentId == assessment.Id).Select(p => new { p.BackTaxRunId, p.Sequence }).FirstOrDefaultAsync(cancellationToken)
+                is { } period
+            && await db.BackTaxPeriods.Where(p => p.BackTaxRunId == period.BackTaxRunId && p.Sequence < period.Sequence && p.Assessment!.Status != WorkflowStatus.Posted)
+                .OrderBy(p => p.Sequence).Select(p => (int?)p.Sequence).FirstOrDefaultAsync(cancellationToken) is { } earlier)
+        {
+            return Result.Failure<AssessmentDto>("BACK_TAX_PERIOD_ORDER",
+                $"Back-tax period {period.Sequence} is posted after the periods before it; period {earlier} is not posted yet.");
+        }
 
         assessment.Status = WorkflowStatus.Posted;
         assessment.PostedAt = clock.UtcNow; // the Record of Assessment entry (MRPAAO Att. 1–3)

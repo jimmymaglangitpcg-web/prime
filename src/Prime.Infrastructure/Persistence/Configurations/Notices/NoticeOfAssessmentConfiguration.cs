@@ -15,6 +15,7 @@ public sealed class NoticeOfAssessmentConfiguration : IEntityTypeConfiguration<N
             // A served notice has everything the appeal period depends on, and its proof.
             t.HasCheckConstraint("CK_NoticesOfAssessment_Served",
                 "(\"Status\" = 'Served') = (\"ReceivedDate\" IS NOT NULL AND \"ServiceMode\" IS NOT NULL AND \"ProofReference\" IS NOT NULL AND \"AppealDeadline\" IS NOT NULL)");
+            t.HasCheckConstraint("CK_NoticesOfAssessment_Email", "(\"ServiceMode\" = 'Email') <= (\"EmailAddress\" IS NOT NULL)");
             t.HasCheckConstraint("CK_NoticesOfAssessment_Cancelled", "(\"Status\" = 'Cancelled') = (\"CancelledAt\" IS NOT NULL)");
             t.HasCheckConstraint("CK_NoticesOfAssessment_Periods", "\"IssuePeriodDays\" > 0 AND \"AppealPeriodDays\" > 0");
         });
@@ -30,6 +31,7 @@ public sealed class NoticeOfAssessmentConfiguration : IEntityTypeConfiguration<N
         builder.Property(x => x.AddresseeNames).HasMaxLength(2000).IsRequired();
         builder.Property(x => x.AddresseeAddress).HasMaxLength(1000);
         builder.Property(x => x.ServedTo).HasMaxLength(300);
+        builder.Property(x => x.EmailAddress).HasMaxLength(320);
         builder.Property(x => x.ProofReference).HasMaxLength(200);
         builder.Property(x => x.ServiceNotes).HasMaxLength(1000);
         builder.Property(x => x.CancellationReason).HasMaxLength(1000);
@@ -41,7 +43,9 @@ public sealed class NoticeOfAssessmentConfiguration : IEntityTypeConfiguration<N
 
         // One live notice per assessment.
         builder.HasIndex(x => x.AssessmentId).IsUnique().HasFilter("\"Status\" <> 'Cancelled'").HasDatabaseName("UX_NoticesOfAssessment_Assessment_Live");
-        builder.HasIndex(x => x.NoticeNumber).IsUnique();
+        // Not unique: a LAM NOA number repeats its TD's assessment count, which restarts at each general revision
+        // (Book I p.24; docs/analysis/identification-numbering.md §4.1); the TD number keeps it apart.
+        builder.HasIndex(x => x.NoticeNumber);
         builder.HasIndex(x => new { x.PropertyId, x.Status });
     }
 }

@@ -58,6 +58,10 @@ public class OfficesController(IOfficeService offices) : ApiControllerBase
     [HttpGet("~/api/users")]
     public async Task<ActionResult<IReadOnlyList<UserSummaryDto>>> ListUsers(CancellationToken ct) => HandleResult(await offices.ListUsersAsync(ct));
 
+    [HttpPut("~/api/users/{id:guid}/licence")]
+    public async Task<ActionResult<UserSummaryDto>> UpdateUserLicence(Guid id, UpdateUserLicenceRequest request, CancellationToken ct) =>
+        HandleResult(await offices.UpdateUserLicenceAsync(id, request, ct));
+
     /// <summary>The signed-in user, their office and what it covers.</summary>
     [HttpGet("~/api/me")]
     public async Task<ActionResult<CurrentUserDto>> Me(CancellationToken ct) => HandleResult(await offices.GetCurrentAsync(ct));

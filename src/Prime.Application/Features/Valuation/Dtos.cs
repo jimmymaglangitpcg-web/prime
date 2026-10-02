@@ -19,7 +19,9 @@ public sealed record ValuationDto(
     DateTimeOffset ComputedAt,
     IReadOnlyList<ValuationLineDto>? Lines = null,
     string? SmvOrdinanceNumber = null,
-    int? SmvRevisionYear = null);
+    int? SmvRevisionYear = null,
+    /// <summary>Set when valued under the rules of another date (a back-tax period at current rules; valuation-foundation.md §4.8).</summary>
+    DateOnly? RulesAsOf = null);
 
 /// <summary>One appraisal row of a valuation, with its own calculation (docs/analysis/value-and-assess.md §2).</summary>
 public sealed record ValuationLineDto(
@@ -28,7 +30,9 @@ public sealed record ValuationLineDto(
     decimal? Quantity, string? Unit, decimal? UnitValue, Guid? SmvScheduleId, decimal MarketValue,
     IReadOnlyList<ValuationBreakdownItemDto> Breakdown,
     /// <summary>Set when the row was priced by another class and sub-class than the ones that assess it (valuation-foundation.md §4.3).</summary>
-    string? PricedClassificationName = null, string? PricedSubClassificationName = null);
+    string? PricedClassificationName = null, string? PricedSubClassificationName = null,
+    /// <summary>The independent appraisal the row was valued by (valuation-foundation.md §4.7).</summary>
+    Guid? IndependentAppraisalId = null);
 
 public sealed record ValuationBreakdownItemDto(string Key, decimal Value);
 
@@ -47,6 +51,7 @@ public static class ValuationBreakdown
     /// <summary>Listed keys in order; each extra item just before their total, each factor just before the total percent; others before MarketValue.</summary>
     private static long Position(string key) =>
         key == "MarketValue" ? long.MaxValue
+        : key.StartsWith(ValuationCalculator.InputKeyPrefix, StringComparison.Ordinal) ? 2L * Rank["AppraisedValue"] - 1
         : key.StartsWith(ValuationCalculator.ExtraItemKeyPrefix, StringComparison.Ordinal) ? 2L * Rank["AdditionalItemsCost"] - 1
         : key.StartsWith(ValuationCalculator.AdjustmentKeyPrefix, StringComparison.Ordinal) ? 2L * Rank["AdjustmentPercent"] - 1
         : Rank.TryGetValue(key, out var r) ? 2L * r : long.MaxValue - 1;

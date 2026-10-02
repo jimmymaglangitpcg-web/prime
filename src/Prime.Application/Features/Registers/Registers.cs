@@ -136,7 +136,8 @@ public sealed class RegisterService(IApplicationDbContext db, IJurisdiction juri
 /// (step 10a-4), else the PSGC codes. DOMAIN VERIFICATION REQUIRED: page
 /// numbering (barangay index + sheet).
 /// </summary>
-public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock clock, IOptions<FaasOptions> faas, IGeometryMeasurementService measurement) : IFormDataProvider
+public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock clock, IOptions<FaasOptions> faas, IGeometryMeasurementService measurement,
+    IOptions<UnitPinOptions> unitPins) : IFormDataProvider
 {
     public FormSubjectType SubjectType => FormSubjectType.Register;
 
@@ -244,9 +245,8 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
 
     /// <summary>The unit's full PIN (MRPAAO p.42): the parcel number is parenthesised when the unit has owners of its own.</summary>
     private async Task<string> UnitPinAsync(PropertyEntity p, RealPropertyUnit rpu, DateOnly asOf, CancellationToken ct) =>
-        UnitPin.Compose(p.PropertyIdentificationNumber, rpu.PinSuffix, rpu.PinSuffix is not null && await db.PropertyTaxpayers.AnyAsync(
-            x => x.RpuId == rpu.Id && x.StartDate <= asOf && (x.EndDate == null || x.EndDate > asOf), ct),
-            await UnitPin.TemporaryPostfixAsync(db, p.Id, rpu.Id, ct));
+        await UnitPin.ForUnitAsync(db, unitPins.Value, rpu, p.PropertyIdentificationNumber, await db.PropertyTaxpayers.AnyAsync(
+            x => x.RpuId == rpu.Id && x.StartDate <= asOf && (x.EndDate == null || x.EndDate > asOf), ct), ct);
 
     private string? Arp(Faas f) => faas.Value.NumberSource == FaasNumberSource.TaxDeclaration ? f.Td.TaxDeclarationNumber : f.Assessment?.FaasNumber;
 

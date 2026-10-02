@@ -69,7 +69,8 @@ export function PropertyProfilePage() {
           <Descriptions.Item label="Title">
             {[property.titleTypeName, property.titleNumber].filter(Boolean).join(' No. ') || '—'}{property.titleDate ? ` (dated ${property.titleDate})` : ''}
           </Descriptions.Item>
-          <Descriptions.Item label="Tax Map Number" span="filled">{property.taxMapNumber ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="Cadastral Number">{property.cadastralNumber ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="Tax Map Number">{property.taxMapNumber ?? '—'}</Descriptions.Item>
           <Descriptions.Item label="Boundaries" span={2}>
             {property.boundaryNorth || property.boundaryEast || property.boundarySouth || property.boundaryWest
               ? `N: ${property.boundaryNorth ?? '—'} · E: ${property.boundaryEast ?? '—'} · S: ${property.boundarySouth ?? '—'} · W: ${property.boundaryWest ?? '—'}`
@@ -82,7 +83,7 @@ export function PropertyProfilePage() {
       <Card>
         <Tabs
           items={[
-            { key: 'pin', label: 'PIN', children: <PinSection propertyId={property.id} parcels={profile.parcels} /> },
+            { key: 'pin', label: 'PIN', children: <PinSection propertyId={property.id} parcels={profile.parcels} barangayId={property.barangayId} municipalityId={property.municipalityId} /> },
             { key: 'owners', label: `Owners (${profile.owners.length})`, children: <OwnersSection propertyId={property.id} owners={profile.owners} rpus={profile.rpus} /> },
             { key: 'parcels', label: `Parcels (${profile.parcels.length})`, children: <ParcelsSection propertyId={property.id} parcels={profile.parcels} /> },
             { key: 'rpus', label: `RPUs (${profile.rpus.length})`, children: <RpuSection propertyId={property.id} rpus={profile.rpus} /> },

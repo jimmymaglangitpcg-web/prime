@@ -19,6 +19,8 @@ public enum PropertyTransactionKind
     Correction = 9,
     AdditionOfImprovement = 10,
     RemovalOfImprovement = 11,
+    /// <summary>A created LGU or a transferred territory: new PINs under new index numbers (LAM Bk II p.40; identification-numbering.md §4.3).</summary>
+    TerritorialChange = 12,
 }
 
 /// <summary>How another property takes part in a transaction.</summary>

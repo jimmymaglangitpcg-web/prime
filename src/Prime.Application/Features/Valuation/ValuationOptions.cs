@@ -32,6 +32,24 @@ public sealed class ValuationOptions
     public string? MachineryMaximumYearlyDepreciationLegalBasis { get; set; }
 
     /// <summary>
+    /// LGC §222: back taxes reach "not ... more than ten (10) years prior to the date of initial assessment".
+    /// Null: back taxes cannot be computed (docs/analysis/valuation-foundation.md §4.8).
+    /// </summary>
+    public int? BackTaxYearsLimit { get; set; }
+
+    /// <summary>Citation for <see cref="BackTaxYearsLimit"/>; required when it is set.</summary>
+    public string? BackTaxYearsLimitLegalBasis { get; set; }
+
+    /// <summary>
+    /// Which rules value a building in each back-tax period (Q14; LAM Bk III p.78 vs p.79): the current ones
+    /// (the default: the current construction cost for every period) or the period's own.
+    /// </summary>
+    public BackTaxRules BackTaxBuildingRules { get; set; } = BackTaxRules.Current;
+
+    /// <summary>Likewise for machinery; by period by default (its age and indices change).</summary>
+    public BackTaxRules BackTaxMachineryRules { get; set; } = BackTaxRules.ByPeriod;
+
+    /// <summary>
     /// The step each row's market value is rounded to (e.g. 10 = the nearest ten, as the LAM's
     /// FAAS annexes show), half away from zero. Null: no rounding — the default until the
     /// office confirms the rule ([C5]; docs/analysis/valuation-foundation.md §4.4).
@@ -40,4 +58,13 @@ public sealed class ValuationOptions
 
     /// <summary>Citation for <see cref="MarketValueRoundingStep"/>; required when a step is set.</summary>
     public string? MarketValueRoundingLegalBasis { get; set; }
+}
+
+/// <summary>Which rules value a unit in each back-tax period (docs/analysis/valuation-foundation.md §4.8, Q14). Land is always by period.</summary>
+public enum BackTaxRules
+{
+    /// <summary>The SMV, costs and tables in force at each period's start.</summary>
+    ByPeriod = 0,
+    /// <summary>Those in force at the start of the current (last) period, for every period.</summary>
+    Current = 1,
 }

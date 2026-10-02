@@ -94,13 +94,14 @@ public sealed partial class ContentPackVersionedContent(
         List<StepItem>? Steps, string? Source);
 
     private sealed record StepItem(string? StepCode, string? Label, string? SignatoryPosition, string? SignerOffice = null, string? RequiredRole = null,
-        bool? IsFinalApproval = null);
+        bool? IsFinalApproval = null, bool? RequiresLicensedSignatory = null);
 
     private sealed record FormItem(string? Code, string? Title, string? SubjectType, string? Authority, string? Template, string? LegalBasis,
         string? SourceReference, string? EffectiveDate, string? Remarks, string? Source);
 
     private sealed record OfficeItem(string? Code, string? Name, string? Kind, string? HeadPosition, string? Address, string? Contact,
-        List<string>? Municipalities, string? EffectiveDate, string? LegalBasis, string? Remarks, string? Source, string? LguName = null);
+        List<string>? Municipalities, string? EffectiveDate, string? LegalBasis, string? Remarks, string? Source, string? LguName = null,
+        string? SanggunianName = null);
 
     /// <param name="pendingMunicipalities">PSGC codes of municipalities the same pack adds; offices may cover them.</param>
     /// <param name="pendingOffices">Codes of offices an earlier file of the same pack adds; approval chains may name them.</param>
@@ -353,7 +354,7 @@ public sealed partial class ContentPackVersionedContent(
                     continue;
                 }
                 steps.Add(new ApprovalStepRequest(j + 1, Trim(s.StepCode) ?? "", Trim(s.Label) ?? "", Trim(s.SignatoryPosition),
-                    signer, Trim(s.RequiredRole), s.IsFinalApproval ?? false));
+                    signer, Trim(s.RequiredRole), s.IsFinalApproval ?? false, s.RequiresLicensedSignatory ?? false));
             }
             var request = new CreateApprovalChainRequest(Trim(x.LegalBasis) ?? "", effective, Trim(x.Remarks), subject, Trim(x.Name) ?? "", steps, officeId);
             if (!stepsValid || !await ValidAsync(chainValidator, request, result, n, ct)
@@ -497,7 +498,7 @@ public sealed partial class ContentPackVersionedContent(
                 continue;
             }
             var request = new CreateOfficeRequest(Trim(x.Code) ?? "", Trim(x.Name) ?? "", kind, Trim(x.HeadPosition), Trim(x.Address), Trim(x.Contact),
-                Trim(x.LguName));
+                Trim(x.LguName), Trim(x.SanggunianName));
             if (!await ValidAsync(officeValidator, request, result, n, ct) || !Unique(result, seen, request.Code, n, "code"))
             {
                 continue;
@@ -543,9 +544,11 @@ public sealed partial class ContentPackVersionedContent(
                 Diff(changes, "headPosition", office.HeadPosition, request.HeadPosition);
                 Diff(changes, "address", office.Address, request.Address);
                 Diff(changes, "contact", office.Contact, request.Contact);
+                Diff(changes, "sanggunianName", office.SanggunianName, request.SanggunianName);
                 if (changes.Count > 0)
                 {
-                    var update = new UpdateOfficeRequest(request.Name, request.HeadPosition, request.Address, request.Contact, office.Status, request.LguName);
+                    var update = new UpdateOfficeRequest(request.Name, request.HeadPosition, request.Address, request.Contact, office.Status, request.LguName,
+                        request.SanggunianName);
                     result.Versions.Add(new PlannedVersion(ContentFileKinds.Offices, request.Code, request.Name, n, new PackOfficeUpdate(office.Id, update),
                         changes, source, ContentImportAction.Changed));
                 }

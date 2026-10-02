@@ -10,6 +10,7 @@ public sealed class CreateParcelRequestValidator : AbstractValidator<CreateParce
         RuleFor(x => x.BarangayId).NotEmpty();
         RuleFor(x => x.Area).GreaterThan(0).When(x => x.Area.HasValue);
         RuleFor(x => x.SurveyNumber).MaximumLength(100);
+        RuleFor(x => x.CadastralNumber).MaximumLength(100);
         RuleFor(x => x.LotNumber).MaximumLength(50);
         RuleFor(x => x.BlockNumber).MaximumLength(50);
     }

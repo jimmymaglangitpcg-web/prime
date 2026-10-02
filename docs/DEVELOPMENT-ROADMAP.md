@@ -934,11 +934,11 @@ is **LAM alignment** (CLAUDE.md §97):
 10a  Real Property Identification System (MRPAAO)   done (d70a501)
 L0   Governance & groundwork                          done (L0-4 questions sent; answers pending)
 LP   Province-wide operation (CLAUDE.md §117)         done (LP-1 to LP-6)
-L1   Valuation foundation                         in progress (L1-1 to L1-6 done)
-L2   Identification & numbering (LAM deltas)
+L1   Valuation foundation                         done (L1-1 to L1-8; exit criteria met)
+L2   Identification & numbering (LAM deltas)      done (L2-1 to L2-3)
 L3   Assessment, listing, exemptions
 L4   Condominium                                      deferred
-L5   Records & forms
+L5   Records & forms                              in progress (L5-1 done)
 L6   SMV preparation & general revision
 L7   Assessment appeals
 L8   Treasury interface
@@ -1119,8 +1119,20 @@ or a general revision allows a new one; building-table pack files; migration
 `BuildingCostTables` on the local database only). **L1-6 done** (exchange rates and price indices;
 machine currency, series, installation date, in-operation status and cost items; replacement cost
 derived from them with the 5 % yearly cap and the minimum only while in operation; rate and index
-pack files; migration `MachineryDerivedCost` on the local database only). Next: L1-7 (independent
-appraisal). The paragraphs below are the earlier
+pack files; migration `MachineryDerivedCost` on the local database only). **L1-7 done** (independent
+appraisals of land, buildings, extra items and machines with approach, basis, evidence and inputs,
+replacing the SMV value in valuation; migration `IndependentAppraisals` on the local database only).
+**L1-8 done** (back-tax
+runs: periods cut at SMV effectivity dates within the 10-year limit, one valuation and Draft assessment
+per period, buildings at current rules by setting, posting in order with a FAAS/TD per period; migration
+`BackTaxes` on the local database only). **L1 complete.** Next (CLAUDE.md §97 order): L2, L3 and L5
+(each starts with its design document). **L2 done** (`docs/analysis/identification-numbering.md`: LAM TD/NOA numbering tokens,
+structured unit PINs with parcel 000 and mineral rights, territorial-change job, barangay parts, disputed-area
+layer; migrations `LamNumbering`, `StructuredUnitPins`, `TerritorialChanges` on the local database only).
+**L5 decisions recorded** (`docs/analysis/records-and-forms.md`, Q1–Q16 accepted). **L5-1 done** (owner's sex,
+cadastral numbers, machinery acquisition documents, NOA by email with the date sent, office Sanggunian, signatory REA
+licence frozen on approval records with a warn-only licensed-signatory step; migration `LamRecords` on the local
+database only). Next: L5-2 (`lam` form data). L3 design after L5. The paragraphs below are the earlier
 history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so

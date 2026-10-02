@@ -21,6 +21,7 @@ public sealed class TaxpayerConfiguration : IEntityTypeConfiguration<Taxpayer>
         builder.Property(x => x.Address).HasMaxLength(500);
         builder.Property(x => x.ContactNumber).HasMaxLength(30);
         builder.Property(x => x.Email).HasMaxLength(320);
+        builder.Property(x => x.Sex).HasConversion<string>().HasMaxLength(10);
 
         // Search indexes (CLAUDE.md §56). TIN is intentionally NOT unique —
         // see docs/DATABASE.md §13 open question re: multi-LGU TIN reuse.

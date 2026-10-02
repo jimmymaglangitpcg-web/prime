@@ -69,3 +69,16 @@ public sealed class RoadSegmentConfiguration : IEntityTypeConfiguration<RoadSegm
         builder.HasIndex(x => x.Code).IsUnique().HasFilter("\"EndDate\" IS NULL").HasDatabaseName("UX_RoadSegments_Current");
     }
 }
+
+/// <summary>Disputed areas (identification-numbering.md §4.3): one current version per code.</summary>
+public sealed class DisputedAreaConfiguration : IEntityTypeConfiguration<DisputedArea>
+{
+    public void Configure(EntityTypeBuilder<DisputedArea> builder)
+    {
+        SpatialLayerMapping.ConfigureCommon(builder, "DisputedAreas", "MultiPolygon");
+        builder.Property(x => x.Code).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Name).HasMaxLength(200);
+        builder.HasIndex(x => new { x.Code, x.EffectiveDate });
+        builder.HasIndex(x => x.Code).IsUnique().HasFilter("\"EndDate\" IS NULL").HasDatabaseName("UX_DisputedAreas_Current");
+    }
+}

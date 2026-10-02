@@ -30,7 +30,7 @@ public sealed class TaxpayerService(
         !jurisdiction.Restricted || await FullyVisible(db.Taxpayers).AnyAsync(t => t.Id == taxpayerId, ct);
 
     /// <summary>Name and TIN only, so an existing owner is linked rather than registered twice (Q5; CLAUDE.md §61, §68).</summary>
-    private static TaxpayerDto Limited(TaxpayerDto dto) => dto with { Address = null, ContactNumber = null, Email = null, Limited = true };
+    private static TaxpayerDto Limited(TaxpayerDto dto) => dto with { Address = null, ContactNumber = null, Email = null, Sex = null, Limited = true };
 
     public async Task<Result<TaxpayerDto>> CreateAsync(CreateTaxpayerRequest request, CancellationToken cancellationToken = default)
     {
@@ -55,12 +55,48 @@ public sealed class TaxpayerService(
             ProvinceId = request.ProvinceId,
             ContactNumber = request.ContactNumber,
             Email = request.Email,
+            Sex = request.Sex,
             Status = RecordStatus.Active,
         };
 
         db.Taxpayers.Add(taxpayer);
         await db.SaveChangesAsync(cancellationToken);
 
+        return Result.Success(ProjectToDto(taxpayer));
+    }
+
+    public async Task<Result<TaxpayerDto>> UpdateDetailsAsync(Guid taxpayerId, UpdateTaxpayerDetailsRequest request, CancellationToken cancellationToken = default)
+    {
+        static string? Clean(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+        var email = Clean(request.Email);
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 1000 || Clean(request.Tin)?.Length > 20
+            || Clean(request.Address)?.Length > 500 || Clean(request.ContactNumber)?.Length > 30
+            || (email is not null && (email.Length > 320 || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(email)))
+            || (request.Sex is { } s && !Enum.IsDefined(s)))
+        {
+            return Result.Failure<TaxpayerDto>("VALIDATION_FAILED",
+                "A reason (max 1000) is required; TIN max 20, address max 500, contact max 30, a valid email (max 320).");
+        }
+        var taxpayer = await db.Taxpayers.FirstOrDefaultAsync(t => t.Id == taxpayerId, cancellationToken);
+        if (taxpayer is null)
+        {
+            return Result.Failure<TaxpayerDto>("TAXPAYER_NOT_FOUND", "No taxpayer was found with the given id.");
+        }
+        if (!await IsFullyVisibleAsync(taxpayerId, cancellationToken))
+        {
+            return Result.Failure<TaxpayerDto>("TAXPAYER_NOT_FOUND", "No taxpayer was found with the given id.");
+        }
+        if (request.Sex is not null && taxpayer.TaxpayerType != TaxpayerType.Individual)
+        {
+            return Result.Failure<TaxpayerDto>("VALIDATION_FAILED", "Only an individual has a sex.");
+        }
+        taxpayer.Tin = Clean(request.Tin);
+        taxpayer.Address = Clean(request.Address);
+        taxpayer.ContactNumber = Clean(request.ContactNumber);
+        taxpayer.Email = email;
+        taxpayer.Sex = request.Sex;
+        currentUser.Reason = request.Reason.Trim();
+        await db.SaveChangesAsync(cancellationToken);
         return Result.Success(ProjectToDto(taxpayer));
     }
 
@@ -268,5 +304,6 @@ public sealed class TaxpayerService(
         t.ContactNumber,
         t.Email,
         t.Status,
-        t.CreatedAt);
+        t.CreatedAt,
+        Sex: t.Sex);
 }

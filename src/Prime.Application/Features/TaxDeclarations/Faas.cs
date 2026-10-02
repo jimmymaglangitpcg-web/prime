@@ -134,8 +134,8 @@ internal static class FaasTaxDeclarations
         var level = await db.AssessmentLines.Where(x => x.AssessmentId == assessment.Id)
             .OrderByDescending(x => x.MarketValue).ThenBy(x => x.Sequence)
             .Select(x => new { x.ClassificationId, x.ActualUseId }).FirstAsync(ct);
-        var context = await NumberContexts.ForPropertyAsync(db, assessment.PropertyId, assessment.EffectiveDate.Year, ct, today);
-        var number = await numbering.GenerateIfConfiguredAsync(NumberedDocumentKind.TaxDeclaration, context, today, ct);
+        var context = await NumberContexts.ForPropertyAsync(db, assessment.PropertyId, assessment.EffectiveDate.Year, ct, assessment.EffectiveDate);
+        var number = await numbering.GenerateNumberIfConfiguredAsync(NumberedDocumentKind.TaxDeclaration, context, today, ct);
         if (number.IsFailure)
         {
             return number.Message;
@@ -145,13 +145,25 @@ internal static class FaasTaxDeclarations
             return "No Tax Declaration numbering scheme is in force.";
         }
         var (code, rank) = await TransactionCodes.FromAssessmentAsync(db, options, assessment, today, ct);
+        var remarks = $"Prepared on posting of the {assessment.AssessmentYear} assessment effective {assessment.EffectiveDate:yyyy-MM-dd}.";
+        // A back-tax period's FAAS/TD; the current (last) one lists the back-tax years (valuation-foundation.md §4.8, Q15).
+        var period = await db.BackTaxPeriods.Where(p => p.AssessmentId == assessment.Id).Select(p => new { p.BackTaxRunId, p.Sequence, p.EndDate })
+            .FirstOrDefaultAsync(ct);
+        if (period is not null)
+        {
+            var run = await db.BackTaxRuns.Include(r => r.Periods).FirstAsync(r => r.Id == period.BackTaxRunId, ct);
+            remarks += period.EndDate is { } end
+                ? $" Back-tax period {period.Sequence} of {run.Periods.Count}, to {end:yyyy-MM-dd}."
+                : $" Current period of the back taxes from {run.DeclaredFromYear} (periods from {string.Join(", ", run.Periods.OrderBy(p => p.Sequence).Select(p => p.StartDate.ToString("yyyy-MM-dd")))}).";
+        }
         db.TaxDeclarations.Add(new TaxDeclaration
         {
             TransactionCode = code,
             TransactionRank = rank,
             RpuId = assessment.RpuId,
             PropertyId = assessment.PropertyId,
-            TaxDeclarationNumber = number.Value,
+            TaxDeclarationNumber = number.Value.Value,
+            AssessmentCount = number.Value.Sequence,
             RevisionNumber = current.RevisionNumber + 1,
             EffectivityDate = assessment.EffectiveDate,
             Taxability = current.Taxability,
@@ -161,7 +173,7 @@ internal static class FaasTaxDeclarations
             AssessmentYear = assessment.AssessmentYear,
             PreviousTaxDeclarationId = current.Id,
             AssessmentId = assessment.Id,
-            Remarks = $"Prepared on posting of the {assessment.AssessmentYear} assessment effective {assessment.EffectiveDate:yyyy-MM-dd}.",
+            Remarks = remarks,
             Status = WorkflowStatus.Draft,
         });
         return null;

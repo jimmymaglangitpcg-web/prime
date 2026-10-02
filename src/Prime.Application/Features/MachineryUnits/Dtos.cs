@@ -82,4 +82,10 @@ public sealed record MachineryDto(
     string? PriceIndexSeries = null,
     DateOnly? DateInstalled = null,
     bool IsInOperation = true,
-    IReadOnlyList<MachineryCostItemDto>? CostItems = null);
+    IReadOnlyList<MachineryCostItemDto>? CostItems = null,
+    MachineryDocumentsDto? Documents = null);
+
+/// <summary>The acquisition documents of the LAM machinery FAAS (docs/analysis/records-and-forms.md Q14).</summary>
+public sealed record MachineryDocumentsDto(
+    string? EngineeringRegistrationNumber, DateOnly? EngineeringRegistrationDate, string? ImportPermitNumber, DateOnly? ImportPermitDate,
+    string? SupplierName, string? SupplierAddress, string? ReceiptNumber, DateOnly? ReceiptDate);

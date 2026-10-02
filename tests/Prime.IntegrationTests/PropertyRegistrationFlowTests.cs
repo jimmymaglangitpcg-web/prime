@@ -163,7 +163,8 @@ public class PropertyRegistrationFlowTests(WebApplicationFactory<Program> factor
             unitOwnerResponse.StatusCode.ShouldBe(HttpStatusCode.OK, await unitOwnerResponse.Content.ReadAsStringAsync());
             (await unitOwnerResponse.Content.ReadFromJsonAsync<PropertyOwnerDto>(JsonOptions)).ShouldNotBeNull().RpuId.ShouldBe(building.Id);
             var units = await client.GetFromJsonAsync<List<RpuDto>>($"/api/properties/{property.Id}/rpus", JsonOptions);
-            units.ShouldNotBeNull().Single(u => u.Id == building.Id).UnitPin.ShouldBe($"TEST-PIN-({testId})-1001");
+            // LAM convention (identification-numbering.md Q6): no parentheses for a building owned apart from the land.
+            units.ShouldNotBeNull().Single(u => u.Id == building.Id).UnitPin.ShouldBe($"TEST-PIN-{testId}-1001");
 
             // Verify: Property Profile shows everything
             var profileResponse = await client.GetAsync($"/api/properties/{property.Id}");

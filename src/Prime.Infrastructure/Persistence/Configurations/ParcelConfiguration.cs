@@ -19,6 +19,7 @@ public sealed class ParcelConfiguration : IEntityTypeConfiguration<Parcel>
 
         builder.Property(x => x.Area).HasPrecision(14, 4);
         builder.Property(x => x.SurveyNumber).HasMaxLength(100);
+        builder.Property(x => x.CadastralNumber).HasMaxLength(100);
         builder.Property(x => x.LotNumber).HasMaxLength(50);
         builder.Property(x => x.BlockNumber).HasMaxLength(50);
 

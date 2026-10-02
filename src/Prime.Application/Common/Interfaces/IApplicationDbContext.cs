@@ -54,6 +54,13 @@ public interface IApplicationDbContext
     DbSet<MachineryCostItem> MachineryCostItems { get; }
     DbSet<ExchangeRate> ExchangeRates { get; }
     DbSet<PriceIndex> PriceIndices { get; }
+    DbSet<IndependentAppraisal> IndependentAppraisals { get; }
+    DbSet<BackTaxRun> BackTaxRuns { get; }
+    DbSet<BackTaxPeriod> BackTaxPeriods { get; }
+    DbSet<TerritorialChangeJob> TerritorialChangeJobs { get; }
+    DbSet<TerritorialChangeItem> TerritorialChangeItems { get; }
+    DbSet<PropertyBarangayPart> PropertyBarangayParts { get; }
+    DbSet<Prime.Domain.Entities.Gis.DisputedArea> DisputedAreas { get; }
     DbSet<TaxRate> TaxRates { get; }
     DbSet<PaymentSchedule> PaymentSchedules { get; }
     DbSet<DiscountRule> DiscountRules { get; }
@@ -142,6 +149,9 @@ public interface IApplicationDbContext
     DbSet<GeneralRevisionJob> GeneralRevisionJobs { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Forgets every tracked change (e.g. after a rolled-back unit of work in a batch job), so nothing of it is saved later.</summary>
+    void ClearChangeTracker();
 
     /// <summary>
     /// Change-tracking access, needed to set a client-supplied concurrency

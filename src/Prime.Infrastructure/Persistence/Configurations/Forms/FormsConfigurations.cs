@@ -146,6 +146,7 @@ public sealed class ApprovalRecordConfiguration : IEntityTypeConfiguration<Appro
         builder.Property(x => x.SignatoryName).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Remarks).HasMaxLength(1000);
         builder.Property(x => x.UnderDelegation).HasMaxLength(600);
+        builder.Property(x => x.SignatoryLicenceNumber).HasMaxLength(50);
         builder.HasOne<Prime.Domain.Entities.Offices.ApprovalDelegation>().WithMany().HasForeignKey(x => x.DelegationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ApprovalChain>().WithMany().HasForeignKey(x => x.ApprovalChainId).OnDelete(DeleteBehavior.Restrict);
         // Each step is signed once per record; concurrent signers of the same step conflict here.

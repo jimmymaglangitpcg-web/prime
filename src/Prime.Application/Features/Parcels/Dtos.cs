@@ -11,7 +11,8 @@ public sealed record CreateParcelRequest(
     decimal? Area,
     string? SurveyNumber,
     string? LotNumber,
-    string? BlockNumber);
+    string? BlockNumber,
+    string? CadastralNumber = null);
 
 public sealed record ParcelDto(
     Guid Id,
@@ -32,7 +33,8 @@ public sealed record ParcelDto(
     RecordStatus Status,
     DateTimeOffset CreatedAt,
     /// <summary>Concurrency token; send back unchanged on updates.</summary>
-    uint Version);
+    uint Version,
+    string? CadastralNumber = null);
 
 /// <summary>
 /// Sets or replaces a parcel's boundary. <see cref="Reason"/> is required

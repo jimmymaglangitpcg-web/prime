@@ -7,6 +7,7 @@ public interface ITaxpayerService
 {
     Task<Result<TaxpayerDto>> CreateAsync(CreateTaxpayerRequest request, CancellationToken cancellationToken = default);
     Task<Result<TaxpayerDto>> GetByIdAsync(Guid taxpayerId, CancellationToken cancellationToken = default);
+    Task<Result<TaxpayerDto>> UpdateDetailsAsync(Guid taxpayerId, UpdateTaxpayerDetailsRequest request, CancellationToken cancellationToken = default);
     Task<Result<PagedResult<TaxpayerDto>>> SearchAsync(TaxpayerSearchRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>

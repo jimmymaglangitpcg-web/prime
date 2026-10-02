@@ -120,6 +120,7 @@ function GenerateNoticeModal({ propertyId, rpus, open, onClose }: { propertyId: 
 function RecordServiceModal({ propertyId, notice, onClose }: { propertyId: string; notice: NoticeDto | null; onClose: () => void }) {
   const record = useRecordNoticeService(propertyId);
   const [form] = Form.useForm();
+  const mode = Form.useWatch('serviceMode', form) as NoticeServiceMode | undefined;
   return (
     <Modal title={notice ? `Record service — ${notice.noticeNumber ?? 'notice'}` : ''} open={notice !== null} footer={null} destroyOnHidden
       onCancel={() => { record.reset(); onClose(); }}>
@@ -131,11 +132,21 @@ function RecordServiceModal({ propertyId, notice, onClose }: { propertyId: strin
         onFinish={(v) => notice && record.mutate({
           id: notice.id, serviceMode: v.serviceMode, receivedDate: v.receivedDate.format('YYYY-MM-DD'),
           servedTo: v.servedTo, proofReference: v.proofReference, notes: v.notes,
+          emailAddress: v.serviceMode === 'Email' ? v.emailAddress : null, sentDate: v.sentDate ? v.sentDate.format('YYYY-MM-DD') : null,
         }, { onSuccess: () => { form.resetFields(); onClose(); } })}>
-        <Form.Item name="serviceMode" label="Mode of service (LGC §223)" rules={[{ required: true }]}>
+        <Form.Item name="serviceMode" label="Mode of service (LGC §223; email: LAM Annex I-L)" rules={[{ required: true }]}>
           <Select options={(Object.keys(serviceModeLabel) as NoticeServiceMode[]).map((m) => ({ value: m, label: serviceModeLabel[m] }))} />
         </Form.Item>
-        <Form.Item name="receivedDate" label="Date received" rules={[{ required: true }]}><DatePicker /></Form.Item>
+        {mode === 'Email' && (
+          <Form.Item name="emailAddress" label="Emailed to" rules={[{ required: true, message: 'The address it was sent to is required' }, { type: 'email' }, { max: 320 }]}>
+            <Input />
+          </Form.Item>
+        )}
+        {mode && mode !== 'Personal' && (
+          <Form.Item name="sentDate" label={mode === 'Email' ? 'Date emailed' : 'Date mailed / sent'}><DatePicker /></Form.Item>
+        )}
+        <Form.Item name="receivedDate" label="Date received" rules={[{ required: true }]}
+          extra={mode === 'Email' ? 'The appeal period counts from this date, not the date emailed.' : undefined}><DatePicker /></Form.Item>
         <Form.Item name="servedTo" label="Received by" rules={[{ required: true }, { max: 300 }]}><Input /></Form.Item>
         <Form.Item name="proofReference" label="Proof of service" rules={[{ required: true }, { max: 200 }]}
           extra="E.g. registry return card no., or the reference of the signed receiving copy.">

@@ -28,6 +28,10 @@ public sealed class RealPropertyUnitConfiguration : IEntityTypeConfiguration<Rea
         builder.HasOne(x => x.HostRpu).WithMany().HasForeignKey(x => x.HostRpuId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => x.LandRpuId);
         builder.HasIndex(x => x.HostRpuId);
+        // A leasing property's units: one per floor and unit number (identification-numbering.md §4.2).
+        builder.Property(x => x.FloorPrefix).HasMaxLength(1);
+        builder.HasIndex(x => new { x.HostRpuId, x.FloorPrefix, x.FloorNumber, x.UnitNumber }).IsUnique().HasFilter("\"UnitNumber\" IS NOT NULL")
+            .HasDatabaseName("UX_RealPropertyUnit_LeasingUnit");
         // A postscript is never reused within the property (MRPAAO p.42–43: retired numbers keep history unique).
         builder.HasIndex(x => new { x.PropertyId, x.PinSuffix }).IsUnique().HasFilter("\"PinSuffix\" IS NOT NULL")
             .HasDatabaseName("UX_RealPropertyUnit_Property_PinSuffix");

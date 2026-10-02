@@ -236,5 +236,6 @@ public sealed class PropertyService(IApplicationDbContext db, IValidator<CreateP
         p.BoundaryNorth,
         p.BoundaryEast,
         p.BoundarySouth,
-        p.BoundaryWest);
+        p.BoundaryWest,
+        p.CadastralNumber);
 }

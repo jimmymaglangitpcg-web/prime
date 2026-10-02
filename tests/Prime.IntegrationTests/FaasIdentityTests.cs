@@ -183,7 +183,7 @@ public class FaasIdentityTests(WebApplicationFactory<Program> factory) : IClassF
     }
 
     [Fact]
-    public async Task UnitOwners_HaveTheirOwnShares_ParenthesiseTheParcel_AndTransferWithoutTheLand()
+    public async Task UnitOwners_HaveTheirOwnShares_KeepTheirUnitPin_AndTransferWithoutTheLand()
     {
         var (c, tx) = await BeginAsync();
         await using var _ = tx;
@@ -209,8 +209,9 @@ public class FaasIdentityTests(WebApplicationFactory<Program> factory) : IClassF
 
         var reloaded = (await c.Rpus.GetByIdAsync(building.Id)).Value;
         reloaded.OwnedSeparately.ShouldBeTrue();
-        reloaded.UnitPin.ShouldContain("-(");
-        reloaded.UnitPin.ShouldEndWith(")-1001");
+        // The LAM's convention (identification-numbering.md Q6) parenthesises only a leasing-property number.
+        reloaded.UnitPin.ShouldNotContain("(");
+        reloaded.UnitPin.ShouldEndWith("-1001");
         async Task<string[]> NamesAsync(Guid rpuId) => (await PropertyParties.ProjectAsync(
                 await PropertyParties.ScopeAsync(c.Db, c.Seed.PropertyId, rpuId, x => x.IsCurrent, CancellationToken.None), CancellationToken.None))
             .Select(o => o.TaxpayerDisplayName).ToArray();

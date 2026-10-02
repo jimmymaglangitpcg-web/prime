@@ -114,6 +114,27 @@ public class NoticeOfAssessmentTests(WebApplicationFactory<Program> factory) : I
     }
 
     [Fact]
+    public async Task EmailedNotice_NeedsTheAddress_AndKeepsTheDateSent()
+    {
+        var (c, tx) = await BeginAsync();
+        await using var _ = tx;
+        var n = (await c.Notices.GenerateAsync(new GenerateNoticeRequest(c.Seed.AssessmentId))).Value;
+        (await c.Notices.IssueAsync(n.Id)).IsSuccess.ShouldBeTrue();
+
+        (await c.Notices.RecordServiceAsync(n.Id, new RecordNoticeServiceRequest(NoticeServiceMode.Email, c.Today, "DEMO_Owner", "DEMO-EMAIL-1", null)))
+            .Code.ShouldBe("VALIDATION_FAILED");
+        (await c.Notices.RecordServiceAsync(n.Id, new RecordNoticeServiceRequest(NoticeServiceMode.Email, c.Today, "DEMO_Owner", "DEMO-EMAIL-1", null,
+            "demo-owner@example.invalid", c.Today.AddDays(1)))).Code.ShouldBe("NOTICE_SENT_DATE_INVALID"); // sent after receipt
+
+        var served = (await c.Notices.RecordServiceAsync(n.Id, new RecordNoticeServiceRequest(NoticeServiceMode.Email, c.Today, "DEMO_Owner", "DEMO-EMAIL-1",
+            null, " demo-owner@example.invalid ", c.Today))).Value;
+        served.ServiceMode.ShouldBe(NoticeServiceMode.Email);
+        served.EmailAddress.ShouldBe("demo-owner@example.invalid");
+        served.SentDate.ShouldBe(c.Today);
+        served.AppealDeadline.ShouldBe(c.Today.AddDays(60)); // still counted from the receipt
+    }
+
+    [Fact]
     public async Task Reassessment_Notice_StatesIncreaseOrDecrease_AndIsNotRequiredWhenUnchanged()
     {
         var (c, tx) = await BeginAsync();

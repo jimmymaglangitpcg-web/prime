@@ -25,6 +25,7 @@ public sealed class PropertyConfiguration : IEntityTypeConfiguration<PropertyEnt
         builder.Property(x => x.LotNumber).HasMaxLength(50);
         builder.Property(x => x.BlockNumber).HasMaxLength(50);
         builder.Property(x => x.SurveyNumber).HasMaxLength(100);
+        builder.Property(x => x.CadastralNumber).HasMaxLength(100);
         builder.Property(x => x.TitleNumber).HasMaxLength(100);
         builder.Property(x => x.TaxMapNumber).HasMaxLength(100);
 

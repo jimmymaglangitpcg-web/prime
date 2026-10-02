@@ -11,6 +11,7 @@ import { AddTaxDeclarationModal } from '../modals/AddTaxDeclarationModal';
 import { PrintFormButton } from '../../../components/PrintFormButton';
 import { PropertyDetailForRpu } from './PropertyDetailForRpu';
 import { AssessmentsForRpu } from './AssessmentsForRpu';
+import { IndependentAppraisalsForRpu } from './IndependentAppraisalsForRpu';
 
 const workflowStatusColor: Record<string, string> = {
   Draft: 'default',
@@ -171,6 +172,7 @@ export function RpuSection({ propertyId, rpus }: { propertyId: string; rpus: Rpu
             <>
               <PropertyDetailForRpu propertyId={propertyId} rpu={rpu} />
               <TaxDeclarationsForRpu propertyId={propertyId} rpuId={rpu.id} rpuType={rpu.rpuType} />
+              <IndependentAppraisalsForRpu rpu={rpu} />
               <AssessmentsForRpu rpuId={rpu.id} />
             </>
           ),

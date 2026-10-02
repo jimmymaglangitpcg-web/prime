@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
+using Prime.Domain.Entities.Identity;
 using Prime.Domain.Entities.Offices;
 using Prime.Domain.Enums;
 
@@ -10,15 +11,16 @@ namespace Prime.Application.Features.Offices;
 // --- Requests and DTOs (docs/analysis/province-wide-operation.md §3.1–§3.2) ---
 
 /// <param name="LguName">The local government printed above the office on its letterhead (§3.6).</param>
+/// <param name="SanggunianName">The Sanggunian whose tax ordinance the office's TDs cite (records-and-forms.md Q8).</param>
 public sealed record CreateOfficeRequest(string Code, string Name, OfficeKind Kind, string? HeadPosition, string? Address, string? Contact,
-    string? LguName = null);
+    string? LguName = null, string? SanggunianName = null);
 
 /// <summary>The code and kind never change; everything else may.</summary>
 public sealed record UpdateOfficeRequest(string Name, string? HeadPosition, string? Address, string? Contact, RecordStatus Status,
-    string? LguName = null);
+    string? LguName = null, string? SanggunianName = null);
 
 public sealed record OfficeDto(Guid Id, string Code, string Name, OfficeKind Kind, string? HeadPosition, string? Address, string? Contact, RecordStatus Status,
-    string? LguName);
+    string? LguName, string? SanggunianName = null);
 
 public sealed record CreateOfficeJurisdictionRequest(Guid OfficeId, Guid MunicipalityId, DateOnly EffectiveDate, string LegalBasis, string? Remarks);
 
@@ -40,7 +42,14 @@ public sealed record OfficeAssignmentDto(
 public sealed record RoleDto(string Code, string Name);
 
 /// <summary>A user with their assignment in force today, if any.</summary>
-public sealed record UserSummaryDto(Guid Id, string DisplayName, string Email, RecordStatus Status, string? OfficeCode, bool ProvinceWide, IReadOnlyList<string> Roles);
+public sealed record UserSummaryDto(Guid Id, string DisplayName, string Email, RecordStatus Status, string? OfficeCode, bool ProvinceWide, IReadOnlyList<string> Roles,
+    string? ReaLicenceNumber = null, DateOnly? ReaLicenceValidUntil = null);
+
+/// <summary>
+/// A user's Real Estate Appraiser licence, printed with their signature (LAM Bk I p.9; records-and-forms.md §4.1, Q10).
+/// Both blank clears it. Changed with a reason (audited).
+/// </summary>
+public sealed record UpdateUserLicenceRequest(string? ReaLicenceNumber, DateOnly? ReaLicenceValidUntil, string Reason);
 
 /// <summary>The signed-in user and their office scope.</summary>
 public sealed record CurrentUserDto(
@@ -56,6 +65,7 @@ public sealed class CreateOfficeRequestValidator : AbstractValidator<CreateOffic
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Kind).IsInEnum();
         RuleFor(x => x.LguName).MaximumLength(200);
+        RuleFor(x => x.SanggunianName).MaximumLength(200);
         RuleFor(x => x.HeadPosition).MaximumLength(200);
         RuleFor(x => x.Address).MaximumLength(500);
         RuleFor(x => x.Contact).MaximumLength(200);
@@ -68,6 +78,7 @@ public sealed class UpdateOfficeRequestValidator : AbstractValidator<UpdateOffic
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.LguName).MaximumLength(200);
+        RuleFor(x => x.SanggunianName).MaximumLength(200);
         RuleFor(x => x.HeadPosition).MaximumLength(200);
         RuleFor(x => x.Address).MaximumLength(500);
         RuleFor(x => x.Contact).MaximumLength(200);
@@ -115,6 +126,7 @@ public interface IOfficeService
 
     Task<Result<IReadOnlyList<RoleDto>>> ListRolesAsync(CancellationToken cancellationToken = default);
     Task<Result<IReadOnlyList<UserSummaryDto>>> ListUsersAsync(CancellationToken cancellationToken = default);
+    Task<Result<UserSummaryDto>> UpdateUserLicenceAsync(Guid userId, UpdateUserLicenceRequest request, CancellationToken cancellationToken = default);
     Task<Result<CurrentUserDto>> GetCurrentAsync(CancellationToken cancellationToken = default);
 }
 
@@ -165,7 +177,7 @@ public sealed class OfficeService(
         {
             Code = request.Code, Name = request.Name.Trim(), Kind = request.Kind,
             HeadPosition = Clean(request.HeadPosition), Address = Clean(request.Address), Contact = Clean(request.Contact),
-            LguName = Clean(request.LguName),
+            LguName = Clean(request.LguName), SanggunianName = Clean(request.SanggunianName),
         };
         db.Offices.Add(office);
         await db.SaveChangesAsync(cancellationToken);
@@ -198,6 +210,7 @@ public sealed class OfficeService(
         office.Address = Clean(request.Address);
         office.Contact = Clean(request.Contact);
         office.LguName = Clean(request.LguName);
+        office.SanggunianName = Clean(request.SanggunianName);
         office.Status = request.Status;
         await db.SaveChangesAsync(cancellationToken);
         return Result.Success(ToDto(office));
@@ -389,10 +402,34 @@ public sealed class OfficeService(
         return Result.Success<IReadOnlyList<UserSummaryDto>>(users.Select(u =>
         {
             var a = current.GetValueOrDefault(u.Id);
-            return new UserSummaryDto(u.Id, u.DisplayName, u.Email, u.Status, a?.Office?.Code,
-                a is not null && (a.Office is null || a.Office.Kind == OfficeKind.Provincial), RoleCodesOf(a));
+            return ToSummary(u, a);
         }).ToList());
     }
+
+    public async Task<Result<UserSummaryDto>> UpdateUserLicenceAsync(Guid userId, UpdateUserLicenceRequest request, CancellationToken cancellationToken = default)
+    {
+        var number = Clean(request.ReaLicenceNumber);
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Length > 1000 || number?.Length > 50
+            || (number is null) != (request.ReaLicenceValidUntil is null))
+        {
+            return Result.Failure<UserSummaryDto>("VALIDATION_FAILED",
+                "A reason (max 1000) is required; give the licence number (max 50) and its validity together, or neither.");
+        }
+        var user = await db.AppUsers.FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+        if (user is null)
+        {
+            return Result.Failure<UserSummaryDto>("USER_NOT_FOUND", "No user was found with the given id.");
+        }
+        user.ReaLicenceNumber = number;
+        user.ReaLicenceValidUntil = request.ReaLicenceValidUntil;
+        currentUser.Reason = request.Reason.Trim();
+        await db.SaveChangesAsync(cancellationToken);
+        var assignment = await AssignmentQuery().InForce(clock.Today).FirstOrDefaultAsync(a => a.AppUserId == userId, cancellationToken);
+        return Result.Success(ToSummary(user, assignment));
+    }
+
+    private static UserSummaryDto ToSummary(AppUser u, OfficeAssignment? a) => new(u.Id, u.DisplayName, u.Email, u.Status, a?.Office?.Code,
+        a is not null && (a.Office is null || a.Office.Kind == OfficeKind.Provincial), RoleCodesOf(a), u.ReaLicenceNumber, u.ReaLicenceValidUntil);
 
     public async Task<Result<CurrentUserDto>> GetCurrentAsync(CancellationToken cancellationToken = default)
     {
@@ -417,7 +454,7 @@ public sealed class OfficeService(
     private static IReadOnlyList<string> RoleCodesOf(OfficeAssignment? a) =>
         a?.Roles.Select(r => r.Role!.Code).Order(StringComparer.Ordinal).ToList() ?? [];
 
-    private static OfficeDto ToDto(Office x) => new(x.Id, x.Code, x.Name, x.Kind, x.HeadPosition, x.Address, x.Contact, x.Status, x.LguName);
+    private static OfficeDto ToDto(Office x) => new(x.Id, x.Code, x.Name, x.Kind, x.HeadPosition, x.Address, x.Contact, x.Status, x.LguName, x.SanggunianName);
 
     private static OfficeJurisdictionDto ToDto(OfficeJurisdiction x) => new(
         x.Id, x.OfficeId, x.Office!.Code, x.MunicipalityId, x.Municipality!.Name, x.Municipality.PsgcCode,

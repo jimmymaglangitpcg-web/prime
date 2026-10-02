@@ -33,11 +33,36 @@ const KINDS: TaxMapSheetRoute[] = ['tax-map', 'section-index', 'barangay-index']
 
 const UNIT_COLOR = '#be123c';
 
+/** Diagonal hatching for areas in dispute (LAM Book II pp.50–52). */
+function hatch(): CanvasPattern | string {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 10;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return 'rgba(0,0,0,0.15)';
+  ctx.strokeStyle = '#7c2d12';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(0, 10); ctx.lineTo(10, 0);
+  ctx.stroke();
+  return ctx.createPattern(canvas, 'repeat') ?? 'rgba(0,0,0,0.15)';
+}
+
 function sheetStyle(kind: TaxMapSheetRoute) {
   const area = new Style({ stroke: new Stroke({ color: '#000', width: 3 }) });
+  const disputedFill = hatch();
   return (feature: FeatureLike) => {
     if (feature.get('role') === 'area') {
       return area;
+    }
+    if (feature.get('role') === 'disputed') {
+      return new Style({
+        stroke: new Stroke({ color: '#7c2d12', width: 2 }),
+        fill: new Fill({ color: disputedFill }),
+        text: new Text({
+          text: [feature.get('label'), feature.get('name')].filter(Boolean).join('\n'),
+          font: '600 12px system-ui, sans-serif', fill: new Fill({ color: '#7c2d12' }), stroke: new Stroke({ color: '#fff', width: 3 }), overflow: true,
+        }),
+      });
     }
     // Index maps: each section or barangay outlined and labelled with its index number.
     const name = feature.get('name') as string | null;
@@ -194,6 +219,10 @@ function Sheet({ kind, data }: { kind: TaxMapSheetRoute; data: TaxMapSheetDto })
               <div style={{ fontWeight: 600, marginBottom: 2 }}>Legend</div>
               {data.features.some((f) => f.properties.role === 'area') && (
                 <div><span aria-hidden style={{ display: 'inline-block', width: 18, borderTop: '3px solid #000', verticalAlign: 'middle' }} /> {kind === 'tax-map' ? 'Section boundary' : 'Barangay boundary'}</div>
+              )}
+              {data.features.some((f) => f.properties.role === 'disputed') && (
+                <div><span aria-hidden style={{ display: 'inline-block', width: 18, height: 10, verticalAlign: 'middle', border: '2px solid #7c2d12',
+                  background: 'repeating-linear-gradient(135deg, #7c2d12 0 1px, transparent 1px 5px)' }} /> Area in dispute (with the PINs it touches)</div>
               )}
               {kind !== 'tax-map' && <div><LegendSwatch name={kind === 'section-index' ? 'sections' : 'barangays'} /> {kind === 'section-index' ? 'Section (index no.)' : 'Barangay (index no.)'}</div>}
               {withParcels && <div><LegendSwatch name="parcels" /> Parcel (parcel no.){parcelsHidden && <em> — not shown at this scale</em>}</div>}

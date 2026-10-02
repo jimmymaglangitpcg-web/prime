@@ -81,4 +81,17 @@ public class MachineryDerivationTests
 
         ValuationCalculator.CalculateMachinery(machine, Law).MarketValue.ShouldBe(530_000m);
     }
+
+    [Fact]
+    public void IndependentAppraisal_KeepsItsValueShareAndInputs_ComputingNothingFromThem()
+    {
+        var result = ValuationCalculator.FromIndependentAppraisal(1_000_000m, 0.25m, 250_000m, [("Net income", 80_000m), ("Capitalisation rate", 8m)]);
+
+        result.Method.ShouldBe(ValuationMethod.IndependentAppraisal);
+        result.MarketValue.ShouldBe(250_000m);
+        result.Breakdown["AppraisedValue"].ShouldBe(1_000_000m);
+        result.Breakdown["Share"].ShouldBe(0.25m);
+        result.Breakdown["Input:Net income"].ShouldBe(80_000m);
+        ValuationCalculator.FromIndependentAppraisal(5m, 1m, 5m, []).Breakdown.ContainsKey("Share").ShouldBeFalse();
+    }
 }

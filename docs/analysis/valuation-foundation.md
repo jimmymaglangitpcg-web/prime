@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Date | 2026-10-01 |
-| Status | **Approved 2026-10-01: all recommendations Q1–Q16 accepted (§8).** L1-1 to L1-6 done (§9); L1-7 next |
+| Status | **Approved 2026-10-01: all recommendations Q1–Q16 accepted (§8).** **L1 complete** — L1-1 to L1-8 done (§9); exit criteria met (§7) |
 | Rules | CLAUDE.md §5–§7, §28–§32, §65, §75–§77, §97 (L1), §118 |
 | Sources | LAM 2025 Book III Ch. II (appraisal, pp.69–80), Ch. III §4–§6 (assessment cases and effectivity, pp.84–85); Book IV Ch. I §2 (SMV contents, pp.107–110), Ch. III (certification and publication); RA 7160 §§219–225; RA 12001 |
 | Commit status | Cites and paraphrases the LAM; reproduces none of its tables or figures. May be committed (§118) |
@@ -740,3 +740,118 @@ under an SMV without construction costs keeps the older rate method rather than 
   2020-03-01, freight, insurance, installation); valued as of 2026-01-01 at 1,079,400 with the full
   breakdown. Machinery indices tab without sideways scroll at 390 px; no script errors. These stay in
   the dev database.
+
+### L1-7 — independent appraisal (2026-10-02)
+
+**Built**
+- **`IndependentAppraisal`** (G-9, Q13): a unit's subject — its land (the strips), its building, one
+  additional item of its building, or one machine — with the approach (market, income or cost), the
+  value, the date appraised, the basis, the evidence (references) and up to 30 named inputs
+  (`IndependentAppraisalInput`: name, value, unit). One current appraisal per subject (filtered unique
+  index); recording a new one ends the current one ("Replaced by the appraisal of …"); a withdrawal
+  needs a reason (audited). Nothing is deleted. `POST /api/independent-appraisals`,
+  `POST /api/independent-appraisals/{id}/withdraw`, `GET /api/rpus/{id}/independent-appraisals`.
+- **In valuation:** the current appraisal of a subject replaces its SMV value in the next valuation
+  (method `IndependentAppraisal`, line description "Independent appraisal, <approach> approach",
+  `ValuationLine.IndependentAppraisalId`, breakdown `AppraisedValue`, `Share` and each
+  `Input:<name (unit)>`):
+  - land: the value is shared over the strips by area, each strip keeping its classification and use
+    for the level; trees and plants keep their SMV rates;
+  - building: shared over the use portions by floor area (whatever the SMV says, so special-purpose
+    buildings can be valued);
+  - extra item: its appraised value takes the place of the SMV cost (construction-cost path) or the
+    entered cost (older rate path);
+  - machine: the appraised value, before any other machinery method.
+  PRIME computes nothing from the inputs; the review is the assessment's maker-checker approval.
+  The current appraisal is used whatever the valuation date.
+- `ValuationMethod.ReplacementCost` stays the entered replacement cost (the design's
+  `EnteredReplacementCost`); no rename.
+- **Screens:** under each land, building and machinery unit, an "Independent appraisals" panel lists
+  current and ended appraisals (inputs on expanding a row), with "Record appraisal" (subject chosen
+  from the unit's land, building, additional items or machines) and "Withdraw" (with a reason); the
+  breakdown labels inputs and shows the share as a percent.
+- Migration `IndependentAppraisals`, additive, **local database only**.
+
+**Known limit:** breakdowns are stored as JSON objects without key order, so several inputs are listed
+alphabetically, not in the order entered; the appraisal itself keeps their order.
+
+**Verified**
+- 1 unit test (`FromIndependentAppraisal`: value, share, inputs, no share when whole).
+- 5 integration tests (`IndependentAppraisalTests` ×4, `BuildingCostValuationTests` ×1; DEMO figures):
+  land appraised at 640,000 with two inputs, replaced by 700,000, withdrawn with a reason (audited) so
+  the SMV value 500,000 returns; a building outside the SMV shared 75/25 (750,000 and 250,000); a
+  machine without inputs valued at its appraisal; subject and field checks; a carved gate outside the
+  SMV appraised at 70,000 added to the construction cost (1,100,000 less 25 % = 825,000).
+- Full suite: 572 tests pass (210 domain, 56 application, 306 integration). `npm run build` and
+  `npm run lint` clean.
+- Browser (Playwright, API :5231, dev server :5174): on DEMO-MACH-L16 an income-approach appraisal of
+  1,200,000 (net income 96,000/yr, rate 8 %) recorded; valued as of 2026-01-01 at 1,200,000 with the
+  inputs in the breakdown; withdrawn with a reason; valued again at the derived 1,079,400. No script
+  errors. The ended appraisal stays in the dev database.
+
+### L1-8 — back taxes (2026-10-02)
+
+**Built**
+- **Periods (G-1; LAM Bk III pp.78–80; LGC §222):** the appraiser gives the year the unit should have
+  been declared from, with its basis, and the year of initial assessment (default this year, not later).
+  The start may be at most `Valuation:BackTaxYearsLimit` (10, with its legal basis, LGC §222) years
+  before the initial year. The range from 1 January of the start to the end of the initial year (not
+  after today) is cut at each effectivity date of an approved SMV covering the property; the last period
+  stays current (pure `BackTaxPeriods.StartProblem` / `Split`).
+- **Run:** `BackTaxRun` (unit, start year, basis, initial year, optional transaction type) with a
+  `BackTaxPeriod` per period naming its valuation and assessment. Creating it values the unit as of each
+  period's start and creates a Draft assessment effective then (assessment year = that year, the levels
+  in force then), all in one database transaction: if any period cannot be valued or assessed, nothing is
+  written and the refusal names the period. Refused for a unit that already has an approved or posted
+  assessment (`BACK_TAX_ALREADY_ASSESSED`) and for a transaction type whose effectivity rule would move
+  the period dates (`BACK_TAX_TRANSACTION_RULE`; Periods or Fixed only). `POST /api/back-taxes/preview`,
+  `POST /api/back-taxes`, `GET /api/rpus/{id}/back-taxes`.
+- **Buildings and machinery (Q14):** `Valuation:BackTaxBuildingRules` = `Current` (default: the
+  construction costs and tables in force at the current period's start, for every period) or
+  `ByPeriod`; `Valuation:BackTaxMachineryRules` = `ByPeriod` (default) or `Current`. Land is always by
+  period. The valuation engine takes a rules date apart from the valuation date (`ComputeForRpuAsync`
+  `buildingRulesAsOf` / `machineryRulesAsOf`): rules and indices are read as of it, while age and years
+  of use still count to the period's own date; the valuation records it (`Valuation.RulesAsOf`).
+- **Records (Q15):** the period assessments go through the normal approval and must be posted in period
+  order (`BACK_TAX_PERIOD_ORDER`). Each posting prepares that period's Draft FAAS/TD through the existing
+  posting flow, replacing the unit's current TD; its remarks say "Back-tax period n of N, to <date>", and
+  the current period's TD lists the back-tax periods. The first period's TD replaces the TD the unit was
+  first declared with. PRIME gives the assessed value per period; the tax stays with the treasury.
+- **Screen:** "Back taxes" next to "Value and assess" opens a dialog: start year, initial year, optional
+  transaction, basis; "Preview periods" (dates and the SMV(s) in force at each start) and "Create the
+  period assessments" (then market and assessed value per period); earlier runs of the unit are listed.
+- Migration `BackTaxes`, additive (runs, periods, `Valuations.RulesAsOf`), **local database only**.
+
+**Verified**
+- 7 unit tests (`BackTaxPeriodsTests`: the limit at 9, 10 and 11 years, the initial year and after;
+  cuts, duplicates, dates outside the range; one period without cuts).
+- 3 integration tests (`BackTaxTests`, DEMO figures; exit criterion 1): a 500 sqm land declared from 2016
+  and first assessed in 2025, five DEMO SMVs (2014, 2017, 2019, 2021, 2024 at 100–400/sqm) and one 20 %
+  level → five periods (2016, 2017–2018, 2019–2020, 2021–2023, 2024–) assessed at 10,000, 15,000,
+  20,000, 30,000 and 40,000, each naming its SMV; a preview writes nothing. Posting out of order refused;
+  posting period 1 prepares its TD ("Back-tax period 1 of 2, to 2023-12-31"), which is approved; posting
+  period 2 prepares the current TD replacing it and listing the periods. Start limit, basis, transaction
+  rule and already-assessed refusals.
+- Full suite: 579 tests (217 domain, 56 application, 309 integration) pass, except the intermittent
+  `EndToEndFlowTests.CreatePropertyToVerifiedBalance`: when the three test assemblies run in parallel
+  its two payments, made at the same moment, are sometimes listed in the other order on the statement.
+  That is the frozen treasury code's ordering (CLAUDE.md §0), left unchanged; integration-only runs pass.
+  `npm run build` and `npm run lint` clean.
+- Browser (Playwright, API :5231, dev server :5174): a DEMO SMV DEMO-L18-2023 and a new DEMO land unit
+  DEMO-LAND-L18 (200 sqm) set up through the API; in the dialog, from 2023 the preview shows two periods
+  (2023–2025 under DEMO-L18-2023, 2026– with "57 SMVs effective 2026-01-01" from leftover test data);
+  creating is refused — period 1 has no 2023 level — and nothing is written; from 2026 one Draft
+  assessment (200,000, assessed 40,000) is created. Dialog fits at 390 px; no script errors. These stay
+  in the dev database.
+
+### L1 exit criteria (§7) — status 2026-10-02
+1. Back-tax case with the LAM example's structure (five SMV periods, one level, ten-year limit), DEMO
+   figures: **met** (`BackTaxTests.FivePeriods_…`).
+2. A depreciated building produces the FAAS figures: **met** (L1-5, `BuildingCostValuationTests`).
+3. A general revision run before the new SMV's effectivity values under the new SMV: **met** (L1-1).
+4. Every existing DEMO valuation still values; posted history unchanged: **met** (the full suite, with
+   the older rate paths kept in L1-4 to L1-7).
+
+**Open for the province ([C1]–[C6]):** the SMV coverage, the depreciation table reading, the machinery
+price index (ratio vs. trending factor) and untrended expenses, rounding, and the use-portion levels stay
+configuration with the defaults above until the Provincial Assessor confirms them.

@@ -42,7 +42,8 @@ public sealed record PropertyDto(
     string? BoundaryNorth = null,
     string? BoundaryEast = null,
     string? BoundarySouth = null,
-    string? BoundaryWest = null);
+    string? BoundaryWest = null,
+    string? CadastralNumber = null);
 
 /// <summary>
 /// CLAUDE.md §50 Property Profile — sections that have real data by Phase

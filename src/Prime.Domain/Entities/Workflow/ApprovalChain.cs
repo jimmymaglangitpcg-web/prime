@@ -46,6 +46,13 @@ public sealed class ApprovalChainStep : Entity
     /// signing date, that office's ASSESSOR signs it instead.
     /// </summary>
     public bool IsFinalApproval { get; set; }
+
+    /// <summary>
+    /// The signer should hold a valid Real Estate Appraiser licence (LAM Bk I p.9). A signer without one is
+    /// warned and the warning is kept on the approval record; nothing is blocked until the province confirms
+    /// the rule (docs/analysis/records-and-forms.md Q10, LEGAL / DOMAIN VERIFICATION REQUIRED).
+    /// </summary>
+    public bool RequiresLicensedSignatory { get; set; }
 }
 
 /// <summary>
@@ -75,4 +82,11 @@ public sealed class ApprovalRecord : Entity
 
     /// <summary>The delegation as printed, frozen: instrument, date and delegating official.</summary>
     public string? UnderDelegation { get; set; }
+
+    /// <summary>The signer's REA licence number and validity when they signed, frozen for printing.</summary>
+    public string? SignatoryLicenceNumber { get; set; }
+    public DateOnly? SignatoryLicenceValidUntil { get; set; }
+
+    /// <summary>The step asked for a licensed signatory and the signer had no licence valid on the signing date.</summary>
+    public bool SignedWithoutValidLicence { get; set; }
 }

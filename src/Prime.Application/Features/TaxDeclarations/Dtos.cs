@@ -46,7 +46,9 @@ public sealed record TaxDeclarationDto(
     Guid? AssessmentId,
     string? FaasNumber,
     string? TransactionCode = null,
-    int? TransactionRank = null);
+    int? TransactionRank = null,
+    /// <summary>The assessment count the TD number was made from (identification-numbering.md §4.1).</summary>
+    long? AssessmentCount = null);
 
 public sealed record TaxDeclarationReasonRequest(string Reason);
 

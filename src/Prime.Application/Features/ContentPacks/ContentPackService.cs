@@ -45,7 +45,8 @@ public interface IContentPackService
 /// ever cleared or removed by a pack (decision Q4).
 /// </summary>
 public sealed partial class ContentPackService(IApplicationDbContext db, IContentPackSource source, ICurrentUserService currentUser,
-    ContentPackVersionedContent versioned, IReferenceLayerService layers) : IContentPackService
+    ContentPackVersionedContent versioned, IReferenceLayerService layers,
+    Microsoft.Extensions.Options.IOptions<PropertyIdentification.PinOptions> pin) : IContentPackService
 {
     public const string ManifestFile = "manifest.json";
     public const int ChangeListLimit = 200;
@@ -533,7 +534,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
             foreach (var row in brgyFile.Table.Rows)
             {
                 if (!CheckPsgc(brgyFile, row, "psgc_code", out var psgc) || !CheckName(brgyFile, row, out var name)
-                    || !CheckIndex(brgyFile, row, FourDigits(), "A barangay index number has 4 digits.", out var index) || !CheckSource(brgyFile, row))
+                    || !CheckIndex(brgyFile, row, new Regex($"^[0-9]{{{pin.Value.BarangayIndexDigits}}}$"), $"A barangay index number has {pin.Value.BarangayIndexDigits} digits.", out var index) || !CheckSource(brgyFile, row))
                 {
                     continue;
                 }

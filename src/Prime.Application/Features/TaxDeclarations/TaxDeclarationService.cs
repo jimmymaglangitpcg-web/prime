@@ -113,12 +113,14 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         var today = clock.Today;
         var ownsTransaction = db.Database.CurrentTransaction is null;
         await using var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
-        var context = await NumberContexts.ForPropertyAsync(db, rpu.PropertyId, request.EffectivityDate.Year, cancellationToken, clock.Today);
-        var number = await numbering.AssignAsync(NumberedDocumentKind.TaxDeclaration, context, request.TaxDeclarationNumber, today, cancellationToken);
-        if (number.IsFailure)
+        // {GRYEAR}/{REV}: the general revision in force on the TD's effectivity (identification-numbering.md §4.1).
+        var context = await NumberContexts.ForPropertyAsync(db, rpu.PropertyId, request.EffectivityDate.Year, cancellationToken, request.EffectivityDate);
+        var assigned = await numbering.AssignNumberAsync(NumberedDocumentKind.TaxDeclaration, context, request.TaxDeclarationNumber, today, cancellationToken);
+        if (assigned.IsFailure)
         {
-            return Result.Failure<TaxDeclarationDto>(number.Code!, number.Message!);
+            return Result.Failure<TaxDeclarationDto>(assigned.Code!, assigned.Message!);
         }
+        var number = Result.Success(assigned.Value.Value);
         // TD numbers are unique across the province, whoever's jurisdiction holds them.
         if (await db.TaxDeclarations.IgnoreQueryFilters().AnyAsync(td => td.TaxDeclarationNumber == number.Value, cancellationToken))
         {
@@ -130,6 +132,7 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
             RpuId = request.RpuId,
             PropertyId = rpu.PropertyId,
             TaxDeclarationNumber = number.Value,
+            AssessmentCount = assigned.Value.Sequence,
             RevisionNumber = revisionNumber,
             EffectivityDate = request.EffectivityDate,
             Taxability = request.Taxability,
@@ -444,7 +447,8 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         td.AssessmentId,
         FaasNumber(td),
         td.TransactionCode,
-        td.TransactionRank);
+        td.TransactionRank,
+        td.AssessmentCount);
 
     /// <summary>A TD is a FAAS once it declares an assessment; its number follows <see cref="FaasOptions.NumberSource"/>.</summary>
     private string? FaasNumber(TaxDeclaration td) => td.AssessmentId is null

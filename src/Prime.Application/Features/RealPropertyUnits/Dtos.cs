@@ -9,7 +9,11 @@ public sealed record CreateRpuRequest(
     DateOnly EffectivityDate,
     Guid? PreviousRpuId,
     Guid? LandRpuId = null,
-    Guid? HostRpuId = null);
+    Guid? HostRpuId = null,
+    bool IsLeasingProperty = false,
+    string? FloorPrefix = null,
+    int? FloorNumber = null,
+    int? UnitNumber = null);
 
 public sealed record RpuDto(
     Guid Id,
@@ -25,4 +29,8 @@ public sealed record RpuDto(
     string UnitPin,
     bool OwnedSeparately,
     Guid? LandRpuId,
-    Guid? HostRpuId);
+    Guid? HostRpuId,
+    bool IsLeasingProperty = false,
+    string? FloorPrefix = null,
+    int? FloorNumber = null,
+    int? UnitNumber = null);

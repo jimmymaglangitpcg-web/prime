@@ -21,7 +21,8 @@ public sealed record NumberContext(
     string? MunicipalityIndex = null,
     string? BarangayIndex = null,
     string? SectionIndex = null,
-    int? RevisionYear = null);
+    int? RevisionYear = null,
+    long? TdCount = null);
 
 /// <summary>
 /// Parses and applies <c>NumberingScheme</c> patterns
@@ -29,8 +30,12 @@ public sealed record NumberContext(
 /// <c>{YEAR}</c>, <c>{PROV}</c>, <c>{MUN}</c>, <c>{BRGY}</c> (PSGC codes),
 /// <c>{LGUIDX}</c>, <c>{MUNIDX}</c>, <c>{BRGYIDX}</c>, <c>{SECT}</c> (the
 /// assessor's index numbers), <c>{REV}</c> (the general revision in force: it is
-/// not printed, but restarts the sequence at each general revision) and exactly
-/// one <c>{SEQ}</c> or <c>{SEQ:n}</c> (zero-padded to n digits, 1–12).
+/// not printed, but restarts the sequence at each general revision), <c>{GRYEAR}</c>
+/// (the same year, printed: the LAM's TD number, Book I p.23), <c>{TDCOUNT}</c> or
+/// <c>{TDCOUNT:n}</c> (the assessment count of the document's TD: the LAM's NOA number,
+/// Book I p.24) and exactly one <c>{SEQ}</c> or <c>{SEQ:n}</c> (zero-padded to n digits,
+/// 1–12). A pattern with <c>{TDCOUNT}</c> takes its number from the TD and has no
+/// <c>{SEQ}</c> (docs/analysis/identification-numbering.md §4.1).
 /// Examples: <c>TD-{MUN}-{YEAR}-{SEQ:5}</c> → <c>TD-0402-2026-00017</c>;
 /// the MRPAAO PIN <c>{LGUIDX}-{MUNIDX}-{BRGYIDX}-{SECT}-{SEQ:2}</c> →
 /// <c>020-15-0005-002-05</c>, where the sequence is the parcel number; the
@@ -47,7 +52,10 @@ public static partial class NumberPattern
     [GeneratedRegex(@"\{([A-Z]+)(?::(\d+))?\}")]
     private static partial Regex TokenRegex();
 
-    private static readonly string[] ContextTokens = ["YEAR", "PROV", "MUN", "BRGY", "LGUIDX", "MUNIDX", "BRGYIDX", "SECT", "REV"];
+    private static readonly string[] ContextTokens = ["YEAR", "PROV", "MUN", "BRGY", "LGUIDX", "MUNIDX", "BRGYIDX", "SECT", "REV", "GRYEAR", "TDCOUNT"];
+
+    /// <summary>Tokens that take a width, like <c>{SEQ:n}</c>.</summary>
+    private static readonly string[] PaddedTokens = ["SEQ", "TDCOUNT"];
 
     /// <summary>Tokens that scope the sequence but are not printed in the number.</summary>
     private static readonly string[] ScopeOnlyTokens = ["REV"];
@@ -60,23 +68,29 @@ public static partial class NumberPattern
             return "pattern is required";
         }
         var sequences = 0;
+        var tdCounts = 0;
         foreach (Match m in TokenRegex().Matches(pattern))
         {
             var name = m.Groups[1].Value;
-            if (name == "SEQ")
+            if (PaddedTokens.Contains(name))
             {
-                sequences++;
+                sequences += name == "SEQ" ? 1 : 0;
+                tdCounts += name == "TDCOUNT" ? 1 : 0;
                 if (m.Groups[2].Success && int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture) is < 1 or > 12)
                 {
-                    return "{SEQ:n} padding must be between 1 and 12";
+                    return $"{{{name}:n}} padding must be between 1 and 12";
                 }
             }
             else if (!ContextTokens.Contains(name) || m.Groups[2].Success)
             {
-                return $"unknown token {m.Value}; allowed: {{YEAR}} {{PROV}} {{MUN}} {{BRGY}} {{LGUIDX}} {{MUNIDX}} {{BRGYIDX}} {{SECT}} {{REV}} {{SEQ}} {{SEQ:n}}";
+                return $"unknown token {m.Value}; allowed: {{YEAR}} {{PROV}} {{MUN}} {{BRGY}} {{LGUIDX}} {{MUNIDX}} {{BRGYIDX}} {{SECT}} {{REV}} {{GRYEAR}} {{TDCOUNT}} {{TDCOUNT:n}} {{SEQ}} {{SEQ:n}}";
             }
         }
-        if (sequences != 1)
+        if (tdCounts > 1 || tdCounts == 1 && sequences != 0)
+        {
+            return "a pattern with {TDCOUNT} takes its number from the TD: use it once and without {SEQ}";
+        }
+        if (tdCounts == 0 && sequences != 1)
         {
             return "pattern must contain exactly one {SEQ} or {SEQ:n}";
         }
@@ -87,6 +101,16 @@ public static partial class NumberPattern
         }
         return null;
     }
+
+    /// <summary>Whether the pattern takes its number from the TD (<c>{TDCOUNT}</c>) instead of a sequence of its own.</summary>
+    public static bool IsDerived(string pattern) => TokenRegex().Matches(pattern).Any(m => m.Groups[1].Value == "TDCOUNT");
+
+    /// <summary>The pattern with its sequence printed as zeros: the LAM's parcel 000 for structures over water (Book II p.38).</summary>
+    public static string FormatZero(string pattern, NumberContext context) => Render(pattern, context, sequence: 0);
+
+    /// <summary>A derived pattern's number (no sequence is allocated).</summary>
+    public static string FormatDerived(string pattern, NumberContext context) =>
+        IsDerived(pattern) ? Render(pattern, context, sequence: 0) : throw new ArgumentException("The pattern has a sequence of its own.", nameof(pattern));
 
     /// <summary>Context values the pattern needs but <paramref name="context"/> lacks, e.g. ["{BRGY}"]; empty when complete.</summary>
     public static IReadOnlyList<string> MissingValues(string pattern, NumberContext context) =>
@@ -144,7 +168,12 @@ public static partial class NumberPattern
             else if (sequence is null || !ScopeOnlyTokens.Contains(name))
             {
                 // The scope key carries every token; a printed number leaves out the scope-only ones.
-                result.Append(ScopeOnlyTokens.Contains(name) ? $"[{name}:{Value(name, context)}]" : Value(name, context));
+                var value = Value(name, context);
+                if (name == "TDCOUNT" && m.Groups[2].Success)
+                {
+                    value = value?.PadLeft(int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture), '0');
+                }
+                result.Append(ScopeOnlyTokens.Contains(name) ? $"[{name}:{value}]" : value);
             }
             last = m.Index + m.Length;
         }
@@ -162,7 +191,8 @@ public static partial class NumberPattern
         "MUNIDX" => context.MunicipalityIndex,
         "BRGYIDX" => context.BarangayIndex,
         "SECT" => context.SectionIndex,
-        "REV" => context.RevisionYear?.ToString("D4", CultureInfo.InvariantCulture),
+        "REV" or "GRYEAR" => context.RevisionYear?.ToString("D4", CultureInfo.InvariantCulture),
+        "TDCOUNT" => context.TdCount?.ToString(CultureInfo.InvariantCulture),
         _ => null,
     };
 }

@@ -79,6 +79,15 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
     public DbSet<MachineryCostItem> MachineryCostItems => Set<MachineryCostItem>();
     public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
     public DbSet<PriceIndex> PriceIndices => Set<PriceIndex>();
+    public DbSet<IndependentAppraisal> IndependentAppraisals => Set<IndependentAppraisal>();
+    public DbSet<BackTaxRun> BackTaxRuns => Set<BackTaxRun>();
+
+    public void ClearChangeTracker() => ChangeTracker.Clear();
+    public DbSet<BackTaxPeriod> BackTaxPeriods => Set<BackTaxPeriod>();
+    public DbSet<TerritorialChangeJob> TerritorialChangeJobs => Set<TerritorialChangeJob>();
+    public DbSet<TerritorialChangeItem> TerritorialChangeItems => Set<TerritorialChangeItem>();
+    public DbSet<PropertyBarangayPart> PropertyBarangayParts => Set<PropertyBarangayPart>();
+    public DbSet<Prime.Domain.Entities.Gis.DisputedArea> DisputedAreas => Set<Prime.Domain.Entities.Gis.DisputedArea>();
     public DbSet<TaxRate> TaxRates => Set<TaxRate>();
     public DbSet<PaymentSchedule> PaymentSchedules => Set<PaymentSchedule>();
     public DbSet<DiscountRule> DiscountRules => Set<DiscountRule>();
@@ -189,6 +198,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
         modelBuilder.Entity<Machinery>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
         modelBuilder.Entity<PropertyTaxpayer>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
         modelBuilder.Entity<PinAssignment>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<PropertyBarangayPart>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
         modelBuilder.Entity<Valuation>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
         modelBuilder.Entity<Assessment>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
         modelBuilder.Entity<TaxDeclaration>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));

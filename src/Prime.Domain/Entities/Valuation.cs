@@ -38,6 +38,12 @@ public sealed class Valuation : AuditableEntity
     public Guid? TransactionTypeId { get; set; }
 
     /// <summary>
+    /// Set when the unit was valued under the rules in force on another date than <see cref="EffectiveDate"/>:
+    /// a back-tax period valued at the current construction cost (docs/analysis/valuation-foundation.md §4.8, Q14).
+    /// </summary>
+    public DateOnly? RulesAsOf { get; set; }
+
+    /// <summary>
     /// JSON snapshot of the calculator's input/intermediate values (area,
     /// rate, depreciation, etc.) — same <c>System.Text.Json</c> approach
     /// <c>AuditSaveChangesInterceptor</c> already uses for its snapshots.
@@ -89,6 +95,9 @@ public sealed class ValuationLine : Entity
     public SubClassification? PricedSubClassification { get; set; }
 
     /// <summary>Area, floor area or count; with <see cref="Unit"/> and <see cref="UnitValue"/> when the row is rate-based.</summary>
+    /// <summary>The independent appraisal the row was valued by, if any (valuation-foundation.md §4.7).</summary>
+    public Guid? IndependentAppraisalId { get; set; }
+
     public decimal? Quantity { get; set; }
     public string? Unit { get; set; }
     public decimal? UnitValue { get; set; }

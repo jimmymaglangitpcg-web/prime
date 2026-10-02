@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiGet, apiPost } from '../lib/apiClient';
+import { apiGet, apiPost, apiPut } from '../lib/apiClient';
 import type {
   AddOwnerRequest,
   CreateTaxpayerRequest,
@@ -7,6 +7,7 @@ import type {
   PropertyOwnerDto,
   TaxpayerDto,
   TaxpayerSearchParams,
+  UpdateTaxpayerDetailsRequest,
 } from '../lib/types';
 
 export function useTaxpayerSearch(params: TaxpayerSearchParams, options?: { enabled?: boolean }) {
@@ -29,6 +30,17 @@ export function useCreateTaxpayer() {
     mutationFn: (request: CreateTaxpayerRequest) => apiPost<TaxpayerDto>('/api/taxpayers', request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['taxpayers', 'search'] });
+    },
+  });
+}
+
+export function useUpdateTaxpayerDetails(taxpayerId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: UpdateTaxpayerDetailsRequest) => apiPut<TaxpayerDto>(`/api/taxpayers/${taxpayerId}/details`, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['taxpayers'] });
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
     },
   });
 }

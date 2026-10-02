@@ -12,7 +12,8 @@ public sealed class PinAssignmentConfiguration : IEntityTypeConfiguration<PinAss
         {
             t.HasCheckConstraint("CK_PinAssignments_Retired", "(\"RetiredAt\" IS NULL) = (\"RetirementReason\" IS NULL)");
             t.HasCheckConstraint("CK_PinAssignments_Permanent",
-                "\"Kind\" <> 'Permanent' OR (\"ParcelId\" IS NOT NULL AND \"SectionId\" IS NOT NULL AND \"ParcelNumber\" IS NOT NULL)");
+                // Parcel 000 (structures over water) names no parcel (identification-numbering.md §4.2).
+                "\"Kind\" <> 'Permanent' OR (\"SectionId\" IS NOT NULL AND \"ParcelNumber\" IS NOT NULL AND (\"ParcelId\" IS NOT NULL OR \"ParcelNumber\" = 0))");
             // Tie-up marks belong to a temporary PIN; the field confirms what the office tied up (step 10a-5).
             t.HasCheckConstraint("CK_PinAssignments_TieUp",
                 "(\"OfficeTieUpAt\" IS NULL OR \"Kind\" = 'Temporary') AND (\"FieldConfirmedAt\" IS NULL OR \"OfficeTieUpAt\" IS NOT NULL)");

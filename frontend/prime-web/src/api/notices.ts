@@ -36,7 +36,8 @@ export const useIssueNotice = (propertyId: string) =>
   useNoticeMutation(propertyId, (id: string) => apiPost<NoticeDto>(`/api/notices/${id}/issue`, {}));
 
 export const useRecordNoticeService = (propertyId: string) =>
-  useNoticeMutation(propertyId, ({ id, ...body }: { id: string; serviceMode: NoticeServiceMode; receivedDate: string; servedTo: string; proofReference: string; notes?: string }) =>
+  useNoticeMutation(propertyId, ({ id, ...body }: { id: string; serviceMode: NoticeServiceMode; receivedDate: string; servedTo: string; proofReference: string; notes?: string;
+    emailAddress?: string | null; sentDate?: string | null }) =>
     apiPost<NoticeDto>(`/api/notices/${id}/service`, body));
 
 export const useCancelNotice = (propertyId: string) =>

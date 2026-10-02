@@ -31,6 +31,7 @@ public static class ValuationCalculator
     public static readonly IReadOnlyList<string> BreakdownOrder =
     [
         "Area", "TotalFloorArea", "FloorArea", "Quantity", "Rate", "LocationFactor", "CompletionPercentage",
+        "AppraisedValue", "Share",
         "IsBrandNew", "AcquisitionCost", "InstallationCost", "OtherCost", "CostItems", "TotalAcquisitionCost",
         "CostInsuranceFreight", "ExchangeRateAtAcquisition", "ExchangeRateAtValuation", "PriceIndexAtAcquisition", "PriceIndexAtValuation",
         "PriceIndexFactor", "OtherExpenses",
@@ -171,6 +172,29 @@ public static class ValuationCalculator
         };
         AddClampBoundsIfPresent(breakdown, schedule.MinimumValue, schedule.MaximumValue);
         return new ValuationCalculationResult(ValuationMethod.SmvBased, marketValue, breakdown);
+    }
+
+    /// <summary>Breakdown key prefix for one named input of an independent appraisal, e.g. "Input:Gross income".</summary>
+    public const string InputKeyPrefix = "Input:";
+
+    /// <summary>
+    /// A row valued by an independent appraisal (valuation-foundation.md §4.7): its share of the appraised
+    /// value (1 for the whole; a floor-area or land-area share when the value covers several rows), with the
+    /// appraisal's named inputs kept for the record. Nothing is computed from the inputs (Q13).
+    /// </summary>
+    public static ValuationCalculationResult FromIndependentAppraisal(decimal appraisedValue, decimal share, decimal value,
+        IReadOnlyList<(string Name, decimal Value)> inputs)
+    {
+        var breakdown = new Dictionary<string, decimal> { ["AppraisedValue"] = appraisedValue, ["MarketValue"] = value };
+        if (share != 1m)
+        {
+            breakdown["Share"] = share;
+        }
+        foreach (var (name, v) in inputs)
+        {
+            breakdown[InputKeyPrefix + name] = v;
+        }
+        return new ValuationCalculationResult(ValuationMethod.IndependentAppraisal, value, breakdown);
     }
 
     /// <summary>Breakdown key prefix for one extra item's cost, e.g. "ExtraItem:FENCE".</summary>

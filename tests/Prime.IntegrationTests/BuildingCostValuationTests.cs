@@ -235,6 +235,30 @@ public class BuildingCostValuationTests(WebApplicationFactory<Program> factory) 
     }
 
     [Fact]
+    public async Task AnExtraItemOutsideTheSmv_IsValuedByItsIndependentAppraisal()
+    {
+        var (c, tx) = await BeginAsync();
+        await using var _ = tx;
+        var gate = new BuildingComponentType { Code = $"CT{Guid.NewGuid():N}"[..8], Name = "DEMO_Carved gate" };
+        c.Db.Add(gate);
+        await c.Db.SaveChangesAsync();
+        var building = (await c.Buildings.AddComponentAsync(c.BuildingId, new AddBuildingComponentRequest(gate.Id, "DEMO heritage gate", 1m, null, null, true, null))).Value;
+        (await c.Valuation.ComputeForRpuAsync(c.RpuId, asOf: Jan2026)).Code.ShouldBe("EXTRA_ITEM_COST_NOT_FOUND");
+
+        var item = building.Components.Single(x => x.ComponentTypeId == gate.Id);
+        var appraisal = await c.Services.GetRequiredService<IIndependentAppraisalService>().CreateAsync(new CreateIndependentAppraisalRequest(
+            c.RpuId, IndependentAppraisalSubject.BuildingComponent, item.Id, AppraisalApproach.Cost, 70_000m, Jan2026, "DEMO craftsman's quote", "DEMO quote Q-1", null));
+        appraisal.IsSuccess.ShouldBeTrue(appraisal.IsSuccess ? null : appraisal.Message);
+        var valued = await c.Valuation.ComputeForRpuAsync(c.RpuId, asOf: Jan2026);
+
+        valued.IsSuccess.ShouldBeTrue(valued.IsSuccess ? null : valued.Message);
+        var b = valued.Value.Lines.Single().B();
+        b["AdditionalItemsCost"].ShouldBe(100_000m);      // 30,000 of fence (SMV) + 70,000 appraised
+        b["TotalConstructionCost"].ShouldBe(1_100_000m);
+        b["MarketValue"].ShouldBe(825_000m);              // less 25 %
+    }
+
+    [Fact]
     public async Task CumulativeTable_IsCappedByTheRemainingValue()
     {
         var (c, tx) = await BeginAsync(withTables: false);

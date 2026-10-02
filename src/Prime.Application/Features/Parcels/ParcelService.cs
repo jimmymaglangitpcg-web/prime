@@ -54,6 +54,7 @@ public sealed class ParcelService(
             Geometry = geometry,
             Area = request.Area,
             SurveyNumber = request.SurveyNumber,
+            CadastralNumber = string.IsNullOrWhiteSpace(request.CadastralNumber) ? null : request.CadastralNumber.Trim(),
             LotNumber = request.LotNumber,
             BlockNumber = request.BlockNumber,
             Status = RecordStatus.Active,
@@ -208,5 +209,6 @@ public sealed class ParcelService(
         p.BlockNumber,
         p.Status,
         p.CreatedAt,
-        p.Version);
+        p.Version,
+        p.CadastralNumber);
 }

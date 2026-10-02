@@ -17,6 +17,7 @@ public sealed class AppUserConfiguration : IEntityTypeConfiguration<AppUser>
         builder.HasIndex(x => x.SupabaseUserId).IsUnique();
 
         builder.Property(x => x.DisplayName).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.ReaLicenceNumber).HasMaxLength(50);
         builder.Property(x => x.Email).HasMaxLength(320).IsRequired();
         builder.HasIndex(x => x.Email);
 

@@ -1,11 +1,11 @@
-import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space } from 'antd';
+import { Alert, Button, DatePicker, Divider, Form, Input, InputNumber, Modal, Select, Space } from 'antd';
 import dayjs from 'dayjs';
 import {
   useSetTaxClearance, useUpdateBuildingDescription, useUpdateMachineryDescription, useUpdatePropertyDescription,
 } from '../../../api/descriptions';
 import { useTitleTypes } from '../../../api/referenceData';
 import { ApiRequestError } from '../../../lib/apiClient';
-import type { BuildingDto, MachineryDto, PropertyDto, TransferTaxClearanceDto } from '../../../lib/types';
+import type { BuildingDto, MachineryDocumentsDto, MachineryDto, PropertyDto, TransferTaxClearanceDto } from '../../../lib/types';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error)?.message);
 const toDay = (v: string | null | undefined) => (v ? dayjs(v) : undefined);
@@ -31,7 +31,7 @@ export function PropertyDescriptionModal({ property, onClose }: { property: Prop
           street: v.street ?? null, sitio: v.sitio ?? null, lotNumber: v.lotNumber ?? null, blockNumber: v.blockNumber ?? null,
           surveyNumber: v.surveyNumber ?? null, titleNumber: v.titleNumber ?? null, titleTypeId: v.titleTypeId ?? null, titleDate: fromDay(v.titleDate),
           taxMapNumber: v.taxMapNumber ?? null, boundaryNorth: v.boundaryNorth ?? null, boundaryEast: v.boundaryEast ?? null,
-          boundarySouth: v.boundarySouth ?? null, boundaryWest: v.boundaryWest ?? null, reason: v.reason,
+          boundarySouth: v.boundarySouth ?? null, boundaryWest: v.boundaryWest ?? null, cadastralNumber: v.cadastralNumber ?? null, reason: v.reason,
         }, { onSuccess: onClose })}>
         <Space wrap>
           <Form.Item name="street" label="Street"><Input maxLength={100} /></Form.Item>
@@ -39,6 +39,7 @@ export function PropertyDescriptionModal({ property, onClose }: { property: Prop
           <Form.Item name="lotNumber" label="Lot No."><Input maxLength={100} /></Form.Item>
           <Form.Item name="blockNumber" label="Block No."><Input maxLength={100} /></Form.Item>
           <Form.Item name="surveyNumber" label="Survey No."><Input maxLength={100} /></Form.Item>
+          <Form.Item name="cadastralNumber" label="Cadastral No."><Input maxLength={100} /></Form.Item>
           <Form.Item name="taxMapNumber" label="Tax Map No."><Input maxLength={100} /></Form.Item>
         </Space>
         <Space wrap>
@@ -103,17 +104,29 @@ export function BuildingDescriptionModal({ building, rpuId, onClose }: { buildin
   );
 }
 
-/** A machine's descriptive fields (MRPAAO Att. 3). Costs and lives are valued inputs and are not edited here. */
+/**
+ * A machine's descriptive fields (MRPAAO Att. 3) and acquisition documents (LAM machinery FAAS; records-and-forms.md Q14).
+ * Costs and lives are valued inputs and are not edited here.
+ */
 export function MachineryDescriptionModal({ machine, rpuId, onClose }: { machine: MachineryDto; rpuId: string; onClose: () => void }) {
   const save = useUpdateMachineryDescription(rpuId);
+  const docs: Partial<MachineryDocumentsDto> = machine.documents ?? {};
   return (
-    <Modal open title="Edit machine description" footer={null} onCancel={onClose} width={640} destroyOnHidden>
+    <Modal open title="Edit machine description" footer={null} onCancel={onClose} width={720} destroyOnHidden>
       {save.isError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Could not save" description={errorText(save.error)} />}
-      <Form layout="vertical" initialValues={machine}
+      <Form layout="vertical"
+        initialValues={{
+          ...machine, ...docs, engineeringRegistrationDate: toDay(docs.engineeringRegistrationDate), importPermitDate: toDay(docs.importPermitDate),
+          receiptDate: toDay(docs.receiptDate),
+        }}
         onFinish={(v) => save.mutate({
           id: machine.id, description: v.description ?? null, brand: v.brand ?? null, model: v.model ?? null, serialNumber: v.serialNumber ?? null,
           capacity: v.capacity ?? null, capacityUnit: v.capacityUnit ?? null, yearInstalled: v.yearInstalled ?? null,
-          yearOfInitialOperation: v.yearOfInitialOperation ?? null, conversionFactor: v.conversionFactor ?? null, reason: v.reason,
+          yearOfInitialOperation: v.yearOfInitialOperation ?? null, conversionFactor: v.conversionFactor ?? null,
+          engineeringRegistrationNumber: v.engineeringRegistrationNumber ?? null, engineeringRegistrationDate: fromDay(v.engineeringRegistrationDate),
+          importPermitNumber: v.importPermitNumber ?? null, importPermitDate: fromDay(v.importPermitDate),
+          supplierName: v.supplierName ?? null, supplierAddress: v.supplierAddress ?? null,
+          receiptNumber: v.receiptNumber ?? null, receiptDate: fromDay(v.receiptDate), reason: v.reason,
         }, { onSuccess: onClose })}>
         <Space wrap>
           <Form.Item name="brand" label="Brand"><Input maxLength={200} /></Form.Item>
@@ -129,6 +142,21 @@ export function MachineryDescriptionModal({ machine, rpuId, onClose }: { machine
           <Form.Item name="conversionFactor" label="Conversion factor" extra="Printed on the FAAS; the replacement cost stays as entered.">
             <InputNumber<number> min={0.000001} />
           </Form.Item>
+        </Space>
+        <Divider plain>Acquisition documents</Divider>
+        <Space wrap>
+          <Form.Item name="engineeringRegistrationNumber" label="Engineering registration No."><Input maxLength={100} /></Form.Item>
+          <Form.Item name="engineeringRegistrationDate" label="Registered"><DatePicker /></Form.Item>
+          <Form.Item name="importPermitNumber" label="Importation permit No."><Input maxLength={100} /></Form.Item>
+          <Form.Item name="importPermitDate" label="Permit dated"><DatePicker /></Form.Item>
+        </Space>
+        <Space wrap>
+          <Form.Item name="supplierName" label="Supplier"><Input maxLength={300} style={{ width: 260 }} /></Form.Item>
+          <Form.Item name="supplierAddress" label="Supplier's address"><Input maxLength={500} style={{ width: 360 }} /></Form.Item>
+        </Space>
+        <Space wrap>
+          <Form.Item name="receiptNumber" label="Official receipt No."><Input maxLength={100} /></Form.Item>
+          <Form.Item name="receiptDate" label="Receipt dated"><DatePicker /></Form.Item>
         </Space>
         <ReasonItem />
         <Button type="primary" htmlType="submit" loading={save.isPending}>Save</Button>

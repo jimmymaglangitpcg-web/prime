@@ -133,7 +133,7 @@ public sealed class TaxBillFormDataProvider(IApplicationDbContext db) : IFormDat
 /// Tax Declaration. Shows the latest posted assessment of its RPU and the
 /// signatories frozen in that assessment's approval records (§4.5).
 /// </summary>
-public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : IFormDataProvider
+public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db, IOptions<RealPropertyUnits.UnitPinOptions> unitPins) : IFormDataProvider
 {
     public FormSubjectType SubjectType => FormSubjectType.TaxDeclaration;
 
@@ -227,16 +227,20 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
             mrpaao = new
             {
                 // The unit's PIN with its postscript, parenthesised when the unit is owned apart from the land.
-                pin = RealPropertyUnits.UnitPin.Compose(
+                pin = await RealPropertyUnits.UnitPin.ForUnitAsync(db, unitPins.Value, td.Rpu,
                     await db.Properties.Where(p => p.Id == td.PropertyId).Select(p => p.PropertyIdentificationNumber).FirstAsync(cancellationToken),
-                    td.Rpu.PinSuffix,
                     await db.PropertyTaxpayers.AnyAsync(x => x.RpuId == td.RpuId && x.IsCurrent
                         && (x.Role == PropertyPartyRole.Owner || x.Role == PropertyPartyRole.UnknownOwner), cancellationToken),
-                    await RealPropertyUnits.UnitPin.TemporaryPostfixAsync(db, td.PropertyId, td.RpuId, cancellationToken)),
+                    cancellationToken),
                 effectivityQuarter = (td.EffectivityDate.Month - 1) / 3 + 1,
                 effectivityYear = td.EffectivityDate.Year,
                 transactionCode = td.TransactionCode,
                 kind = await KindAsync(td, cancellationToken),
+                // A parcel crossed by a barangay line: each part's barangay, area and assessed-value share (LAM Bk II p.59;
+                // identification-numbering.md §4.3), for the annotation.
+                barangayParts = await db.PropertyBarangayParts.Where(x => x.PropertyId == td.PropertyId).OrderBy(x => x.Sequence)
+                    .Select(x => new { barangay = x.Barangay!.Name, index = x.Barangay.PinIndexNumber, area = x.Area, assessedValueShare = x.AssessedValueShare })
+                    .ToListAsync(cancellationToken),
                 cancels = td.PreviousTaxDeclaration is { } previous ? new
                 {
                     number = previous.TaxDeclarationNumber,
@@ -324,7 +328,7 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db) : I
 /// issued as a form; a draft is previewed. Its <c>items</c> are the MRPAAO
 /// Att. 10 rows: ARPN, TDN, PIN, location, classification, MV, AV.
 /// </summary>
-public sealed class NoticeFormDataProvider(IApplicationDbContext db, IOptions<FaasOptions> faas) : IFormDataProvider
+public sealed class NoticeFormDataProvider(IApplicationDbContext db, IOptions<FaasOptions> faas, IOptions<RealPropertyUnits.UnitPinOptions> unitPins) : IFormDataProvider
 {
     public FormSubjectType SubjectType => FormSubjectType.NoticeOfAssessment;
 
@@ -385,7 +389,8 @@ public sealed class NoticeFormDataProvider(IApplicationDbContext db, IOptions<Fa
             var property = await db.Properties.AsNoTracking().Where(p => p.Id == i.PropertyId)
                 .Select(p => new { p.PropertyIdentificationNumber, p.Street, Barangay = p.Barangay!.Name, Municipality = p.Municipality!.Name, Province = p.Province!.Name })
                 .FirstAsync(ct);
-            var suffix = await db.RealPropertyUnits.Where(r => r.Id == i.RpuId).Select(r => r.PinSuffix).FirstAsync(ct);
+            var unit = await db.RealPropertyUnits.AsNoTracking().FirstAsync(r => r.Id == i.RpuId, ct);
+            var unitPin = await RealPropertyUnits.UnitPin.ForUnitAsync(db, unitPins.Value, unit, property.PropertyIdentificationNumber, false, ct);
             var td = i.TaxDeclarationId is { } tdId
                 ? await db.TaxDeclarations.AsNoTracking().Where(x => x.Id == tdId).Select(x => new { x.TaxDeclarationNumber, x.AssessmentId }).FirstOrDefaultAsync(ct)
                 : null;
@@ -397,8 +402,7 @@ public sealed class NoticeFormDataProvider(IApplicationDbContext db, IOptions<Fa
                 sequence = i.Sequence,
                 arpNumber = faas.Value.NumberSource == FaasNumberSource.TaxDeclaration ? td?.TaxDeclarationNumber : faasNumber,
                 tdNumber = td?.TaxDeclarationNumber,
-                pin = RealPropertyUnits.UnitPin.Compose(property.PropertyIdentificationNumber, suffix, false,
-                    await RealPropertyUnits.UnitPin.TemporaryPostfixAsync(db, i.PropertyId, i.RpuId, ct)),
+                pin = unitPin,
                 location = string.Join(", ", new[] { property.Street, property.Barangay }.Where(x => !string.IsNullOrWhiteSpace(x))),
                 municipality = property.Municipality,
                 province = property.Province,

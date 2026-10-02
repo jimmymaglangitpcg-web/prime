@@ -72,6 +72,17 @@ public sealed class Machinery : AuditableEntity
     public DateOnly? DateInstalled { get; set; }
     /// <summary>LGC §225: the minimum remaining value holds only while the machine is useful and in operation (Q12).</summary>
     public bool IsInOperation { get; set; } = true;
+
+    // Acquisition documents the LAM machinery FAAS prints (Annex I-F pp.157–163; records-and-forms.md §4.1, Q14).
+    public string? EngineeringRegistrationNumber { get; set; }
+    public DateOnly? EngineeringRegistrationDate { get; set; }
+    public string? ImportPermitNumber { get; set; }
+    public DateOnly? ImportPermitDate { get; set; }
+    public string? SupplierName { get; set; }
+    public string? SupplierAddress { get; set; }
+    /// <summary>The official receipt of the purchase.</summary>
+    public string? ReceiptNumber { get; set; }
+    public DateOnly? ReceiptDate { get; set; }
     /// <summary>The acquisition cost items: freight, insurance, duties, installation … (LAM Bk III p.75).</summary>
     public List<MachineryCostItem> CostItems { get; set; } = [];
 

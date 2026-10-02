@@ -103,4 +103,17 @@ public class NumberPatternTests
         NumberPattern.ScopeKey(arpn, gr2029).ShouldNotBe(NumberPattern.ScopeKey(arpn, gr2026));
         NumberPattern.MissingValues(arpn, gr2026 with { RevisionYear = null }).ShouldBe(["{REV}"]);
     }
+
+    [Fact]
+    public void GrYear_PrintsTheRevisionYear_AndTdCount_IsPadded()
+    {
+        var context = new NumberContext(2026, MunicipalityIndex: "15", BarangayIndex: "0005", RevisionYear: 2025, TdCount: 17);
+
+        NumberPattern.Format("{GRYEAR}{MUNIDX}{BRGYIDX}{SEQ:5}", context, 3).ShouldBe("2025150005" + "00003");
+        NumberPattern.ScopeKey("{GRYEAR}{MUNIDX}{BRGYIDX}{SEQ:5}", context).ShouldBe("2025150005#");
+        NumberPattern.IsDerived("{MUNIDX}{BRGYIDX}{TDCOUNT:5}").ShouldBeTrue();
+        NumberPattern.FormatDerived("{MUNIDX}{BRGYIDX}{TDCOUNT:5}", context).ShouldBe("150005" + "00017");
+        NumberPattern.MissingValues("{MUNIDX}{TDCOUNT:5}", context with { TdCount = null }).ShouldBe(["{TDCOUNT}"]);
+        Should.Throw<ArgumentException>(() => NumberPattern.FormatDerived("{SEQ}", context));
+    }
 }

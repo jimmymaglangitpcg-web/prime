@@ -109,7 +109,7 @@ function NumberingTab() {
           </Form.Item>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="pattern" label="Pattern" rules={[{ required: true }]}
-            extra="Tokens: {YEAR} {PROV} {MUN} {BRGY} (PSGC codes), {LGUIDX} {MUNIDX} {BRGYIDX} {SECT} (index numbers), {REV} (the general revision in force: not printed, restarts the sequence) and exactly one {SEQ} or {SEQ:n}. Examples: TD-{MUN}-{YEAR}-{SEQ:5}; MRPAAO PIN {LGUIDX}-{MUNIDX}-{BRGYIDX}-{SECT}-{SEQ:2}; ARPN for an LGU without tax maps {MUNIDX}-{BRGYIDX}-{REV}{SEQ:5}">
+            extra="Tokens: {YEAR} {PROV} {MUN} {BRGY} (PSGC codes), {LGUIDX} {MUNIDX} {BRGYIDX} {SECT} (index numbers), {REV} (the general revision in force: not printed, restarts the sequence), {GRYEAR} (the same year, printed), {TDCOUNT} or {TDCOUNT:n} (the TD's assessment count; such a pattern has no sequence of its own) and otherwise exactly one {SEQ} or {SEQ:n}. Examples: LAM TD {GRYEAR}{MUNIDX}{BRGYIDX}{SEQ:5}; LAM NOA {MUNIDX}{BRGYIDX}{TDCOUNT:5}; LAM PIN {LGUIDX}-{MUNIDX}-{BRGYIDX}-{SECT}-{SEQ:3}; MRPAAO PIN {LGUIDX}-{MUNIDX}-{BRGYIDX}-{SECT}-{SEQ:2}; ARPN {MUNIDX}-{BRGYIDX}-{REV}{SEQ:5}">
             <Input />
           </Form.Item>
           <Form.Item name="validationRegex" label="Format check for typed numbers (regular expression, optional)"><Input /></Form.Item>
@@ -247,6 +247,7 @@ function ChainsTab() {
                     {s.signerOffice !== 'Any' && <Tag style={{ marginInlineStart: 6 }}>{signerLabel[s.signerOffice]}</Tag>}
                     {s.requiredRole && <Tag>{s.requiredRole}</Tag>}
                     {s.isFinalApproval && <Tag color="green">final</Tag>}
+                    {s.requiresLicensedSignatory && <Tag color="gold">licensed signatory</Tag>}
                   </li>
                 ))}
               </ol>
@@ -300,6 +301,10 @@ function ChainsTab() {
                     </Form.Item>
                     <Form.Item name={[field.name, 'requiredRole']}>
                       <Select allowClear style={{ width: 170 }} placeholder="Role (optional)" options={(roles.data ?? []).map((r) => ({ value: r.code, label: r.name }))} />
+                    </Form.Item>
+                    <Form.Item name={[field.name, 'requiresLicensedSignatory']} valuePropName="checked"
+                      tooltip="Warns, without blocking, when the signer has no valid REA licence (until the province confirms the rule).">
+                      <Checkbox>Licensed signatory</Checkbox>
                     </Form.Item>
                     {i === fields.length - 1 && (
                       <Form.Item name={[field.name, 'isFinalApproval']} valuePropName="checked"><Checkbox>Final approval</Checkbox></Form.Item>

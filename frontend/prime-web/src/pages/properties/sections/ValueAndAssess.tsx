@@ -127,14 +127,17 @@ const breakdownLabels: Record<string, string> = {
   DepreciationCarriedOver: 'Depreciation carried over',
   DepreciationCapped: 'Depreciation at its limit',
   BaseValue: 'Base value (core)',
+  Share: 'Share of the appraised value',
 };
 
 /** One row's calculation, inputs first and the market value last (the order the valuation stored). */
 function Breakdown({ line }: { line: ValuationLineDto }) {
-  const label = (key: string) => breakdownLabels[key] ?? (key.startsWith('ExtraItem:') ? `Extra item ${key.slice(10)}` : humanize(key));
+  const label = (key: string) => breakdownLabels[key]
+    ?? (key.startsWith('ExtraItem:') ? `Extra item ${key.slice(10)}` : key.startsWith('Input:') ? `Input: ${key.slice(6)}` : humanize(key));
   const value = (key: string, v: number) =>
     key === 'MarketValue' ? <b>{formatMoney(v)}</b>
       : breakdownFlags.has(key) ? (v ? 'Yes' : 'No')
+        : key === 'Share' ? `${plain.format(v * 100)}%`
         : key.endsWith('Percent') || key === 'CompletionPercentage' ? `${plain.format(v)}%` : plain.format(v);
   return (
     <Descriptions size="small" column={{ xs: 1, md: 3 }}>

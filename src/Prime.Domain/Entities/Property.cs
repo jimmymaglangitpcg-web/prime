@@ -28,8 +28,17 @@ public sealed class PropertyEntity : AuditableEntity
     public string? LotNumber { get; set; }
     public string? BlockNumber { get; set; }
     public string? SurveyNumber { get; set; }
+    /// <summary>The cadastral survey's lot number, printed on the LAM TMCR (Annex I-C; records-and-forms.md §4.1).</summary>
+    public string? CadastralNumber { get; set; }
     public string? TitleNumber { get; set; }
     public string? TaxMapNumber { get; set; }
+
+    /// <summary>
+    /// The structures over a body of water, not attached to land, in one tax map section: their PIN takes parcel
+    /// number 000 and they are recorded as building units of this property (LAM Bk II pp.38–39;
+    /// docs/analysis/identification-numbering.md §4.2).
+    /// </summary>
+    public bool IsOverWater { get; set; }
 
     /// <summary>The kind of title (OCT, TCT, CLOA, CCT …) and its date of entry (MRPAAO Att. 1, 4).</summary>
     public Guid? TitleTypeId { get; set; }

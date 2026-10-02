@@ -16,7 +16,8 @@ namespace Prime.Application.Features.Forms;
 /// office. Once an office is found, the letterhead is that office's own fields
 /// only; the <c>Lgu:</c> settings are the fallback when no office applies (a
 /// deployment without offices, and the frozen treasury forms, CLAUDE.md §0).
-/// The province's name and legislature stay settings.
+/// The province's name stays a setting; the legislature is the office's,
+/// else the setting.
 /// </summary>
 public static class FormLetterhead
 {
@@ -37,12 +38,13 @@ public static class FormLetterhead
             : FormData.ToJson(new
             {
                 name = office.LguName, office = office.Name, province = settings.Province, address = office.Address,
-                contact = office.Contact, sanggunianName = settings.SanggunianName,
+                // The office's Sanggunian (records-and-forms.md Q8), else the deployment's.
+                contact = office.Contact, sanggunianName = office.SanggunianName ?? settings.SanggunianName,
             });
         var officeJson = office is null ? null : FormData.ToJson(new
         {
             code = office.Code, name = office.Name, kind = office.Kind, lguName = office.LguName, headPosition = office.HeadPosition,
-            address = office.Address, contact = office.Contact,
+            address = office.Address, contact = office.Contact, sanggunianName = office.SanggunianName ?? settings.SanggunianName,
         });
         return (lgu, officeJson);
     }

@@ -10,7 +10,7 @@ namespace Prime.Application.Features.Descriptions;
 public sealed record UpdatePropertyDescriptionRequest(
     string? Street, string? Sitio, string? LotNumber, string? BlockNumber, string? SurveyNumber, string? TitleNumber,
     Guid? TitleTypeId, DateOnly? TitleDate, string? TaxMapNumber,
-    string? BoundaryNorth, string? BoundaryEast, string? BoundarySouth, string? BoundaryWest, string Reason);
+    string? BoundaryNorth, string? BoundaryEast, string? BoundarySouth, string? BoundaryWest, string Reason, string? CadastralNumber = null);
 
 public sealed record UpdateBuildingDescriptionRequest(
     int? NumberOfStoreys, int? YearConstructed, int? YearCompleted, string? BuildingPermitNumber, DateOnly? BuildingPermitDate,
@@ -23,7 +23,11 @@ public sealed record AddBuildingMaterialRequest(Guid StructuralPartId, Guid? Str
 
 public sealed record UpdateMachineryDescriptionRequest(
     string? Description, string? Brand, string? Model, string? SerialNumber, decimal? Capacity, string? CapacityUnit,
-    int? YearInstalled, int? YearOfInitialOperation, decimal? ConversionFactor, string Reason);
+    int? YearInstalled, int? YearOfInitialOperation, decimal? ConversionFactor, string Reason,
+    // The acquisition documents of the LAM machinery FAAS (records-and-forms.md Q14).
+    string? EngineeringRegistrationNumber = null, DateOnly? EngineeringRegistrationDate = null, string? ImportPermitNumber = null,
+    DateOnly? ImportPermitDate = null, string? SupplierName = null, string? SupplierAddress = null, string? ReceiptNumber = null,
+    DateOnly? ReceiptDate = null);
 
 public sealed record SetTransferTaxClearanceRequest(
     string? CarNumber, DateOnly? CarDate, string? TransferorName, string? TransferorTin, string? TransfereeTin,
@@ -53,7 +57,7 @@ public sealed class DescriptionService(IApplicationDbContext db, ICurrentUserSer
     public async Task<Result> UpdatePropertyAsync(Guid propertyId, UpdatePropertyDescriptionRequest r, CancellationToken cancellationToken = default)
     {
         if ((ReasonProblem(r.Reason) ?? TooLong(500, r.BoundaryNorth, r.BoundaryEast, r.BoundarySouth, r.BoundaryWest)
-            ?? TooLong(100, r.Street, r.Sitio, r.LotNumber, r.BlockNumber, r.SurveyNumber, r.TitleNumber, r.TaxMapNumber)) is { } problem)
+            ?? TooLong(100, r.Street, r.Sitio, r.LotNumber, r.BlockNumber, r.SurveyNumber, r.TitleNumber, r.TaxMapNumber, r.CadastralNumber)) is { } problem)
         {
             return Result.Failure("VALIDATION_FAILED", problem);
         }
@@ -71,6 +75,7 @@ public sealed class DescriptionService(IApplicationDbContext db, ICurrentUserSer
         property.LotNumber = Clean(r.LotNumber);
         property.BlockNumber = Clean(r.BlockNumber);
         property.SurveyNumber = Clean(r.SurveyNumber);
+        property.CadastralNumber = Clean(r.CadastralNumber);
         property.TitleNumber = Clean(r.TitleNumber);
         property.TitleTypeId = r.TitleTypeId;
         property.TitleDate = r.TitleDate;
@@ -167,7 +172,8 @@ public sealed class DescriptionService(IApplicationDbContext db, ICurrentUserSer
 
     public async Task<Result> UpdateMachineryAsync(Guid machineryId, UpdateMachineryDescriptionRequest r, CancellationToken cancellationToken = default)
     {
-        if ((ReasonProblem(r.Reason) ?? TooLong(200, r.Brand, r.Model, r.SerialNumber, r.CapacityUnit) ?? TooLong(500, r.Description)) is { } problem)
+        if ((ReasonProblem(r.Reason) ?? TooLong(200, r.Brand, r.Model, r.SerialNumber, r.CapacityUnit) ?? TooLong(500, r.Description, r.SupplierAddress)
+            ?? TooLong(100, r.EngineeringRegistrationNumber, r.ImportPermitNumber, r.ReceiptNumber) ?? TooLong(300, r.SupplierName)) is { } problem)
         {
             return Result.Failure("VALIDATION_FAILED", problem);
         }
@@ -189,6 +195,14 @@ public sealed class DescriptionService(IApplicationDbContext db, ICurrentUserSer
         machinery.YearInstalled = r.YearInstalled;
         machinery.YearOfInitialOperation = r.YearOfInitialOperation;
         machinery.ConversionFactor = r.ConversionFactor;
+        machinery.EngineeringRegistrationNumber = Clean(r.EngineeringRegistrationNumber);
+        machinery.EngineeringRegistrationDate = r.EngineeringRegistrationDate;
+        machinery.ImportPermitNumber = Clean(r.ImportPermitNumber);
+        machinery.ImportPermitDate = r.ImportPermitDate;
+        machinery.SupplierName = Clean(r.SupplierName);
+        machinery.SupplierAddress = Clean(r.SupplierAddress);
+        machinery.ReceiptNumber = Clean(r.ReceiptNumber);
+        machinery.ReceiptDate = r.ReceiptDate;
         return await SaveAsync(r.Reason, cancellationToken);
     }
 

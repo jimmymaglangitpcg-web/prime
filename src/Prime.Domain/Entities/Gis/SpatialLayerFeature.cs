@@ -70,3 +70,14 @@ public sealed class RoadSegment : SpatialLayerFeature
     public RoadType? RoadType { get; set; }
     public MultiLineString Geometry { get; set; } = null!;
 }
+
+/// <summary>
+/// An area in dispute between LGUs or barangays (LAM Bk II pp.50–52), drawn hatched on tax-map sheets with the PINs
+/// of the parcels it touches. Effective-dated like the other reference layers; keyed by its <see cref="Code"/>.
+/// </summary>
+public sealed class DisputedArea : SpatialLayerFeature
+{
+    public string Code { get; set; } = string.Empty;
+    public string? Name { get; set; }
+    public MultiPolygon Geometry { get; set; } = null!;
+}

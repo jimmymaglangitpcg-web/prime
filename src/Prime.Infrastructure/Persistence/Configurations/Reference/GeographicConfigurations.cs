@@ -63,7 +63,7 @@ public sealed class BarangayConfiguration : IEntityTypeConfiguration<Barangay>
         builder.Property(x => x.RetirementReason).HasMaxLength(1000);
         builder.ToTable(t =>
         {
-            t.HasCheckConstraint("CK_Barangay_PinIndexNumber", "\"PinIndexNumber\" ~ '^[0-9]{4}$'");
+            t.HasCheckConstraint("CK_Barangay_PinIndexNumber", "\"PinIndexNumber\" ~ '^[0-9]{3,4}$'"); // width per Pin:BarangayIndexDigits
             t.HasCheckConstraint("CK_Barangay_Retired", "(\"RetiredOn\" IS NULL) = (\"RetirementReason\" IS NULL)");
         });
         // Never reused within the municipality or district — retired numbers included (§1 D.5).

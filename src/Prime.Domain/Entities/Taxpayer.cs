@@ -30,5 +30,8 @@ public sealed class Taxpayer : AuditableEntity
     public string? ContactNumber { get; set; }
     public string? Email { get; set; }
 
+    /// <summary>Individuals only, optional (docs/analysis/records-and-forms.md §4.1).</summary>
+    public Sex? Sex { get; set; }
+
     public RecordStatus Status { get; set; } = RecordStatus.Active;
 }

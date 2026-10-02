@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Form, Input, Radio } from 'antd';
 import { LocationSelect } from './LocationSelect';
+import { SexItem } from './SexItem';
 import { useCreateTaxpayer } from '../api/taxpayers';
 import type { CreateTaxpayerRequest, TaxpayerDto } from '../lib/types';
 import { ApiRequestError } from '../lib/apiClient';
@@ -63,6 +64,7 @@ export function TaxpayerForm({ onSuccess }: { onSuccess: (taxpayer: TaxpayerDto)
             <Form.Item name="suffix" label="Suffix">
               <Input placeholder="e.g. Jr., III" style={{ maxWidth: 150 }} />
             </Form.Item>
+            <SexItem />
           </>
         ) : (
           <Form.Item name="corporateName" label="Corporate/Entity Name" rules={[{ required: true, message: 'Name is required' }]}>

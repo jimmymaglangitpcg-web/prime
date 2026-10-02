@@ -18,5 +18,9 @@ public sealed class AppUser : AuditableEntity
     public string Email { get; set; } = string.Empty;
     public RecordStatus Status { get; set; } = RecordStatus.Active;
 
+    /// <summary>Real Estate Appraiser licence (PRC), printed with the signature (LAM Bk I p.9; records-and-forms.md §4.1, Q10).</summary>
+    public string? ReaLicenceNumber { get; set; }
+    public DateOnly? ReaLicenceValidUntil { get; set; }
+
     public ICollection<UserRole> UserRoles { get; set; } = [];
 }

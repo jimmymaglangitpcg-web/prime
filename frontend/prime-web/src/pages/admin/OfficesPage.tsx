@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Alert, Button, DatePicker, Form, Input, Modal, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
-import type { Dayjs } from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import {
   useApproveAssignment, useApproveJurisdiction, useCreateAssignment, useCreateJurisdiction, useCreateOffice, useEndAssignment,
-  useOfficeAssignments, useOfficeJurisdictions, useOffices, useRoles, useUpdateOffice, useUsers,
-  type OfficeAssignmentDto, type OfficeDto, type OfficeJurisdictionDto, type OfficeKind, type WorkflowStatus,
+  useOfficeAssignments, useOfficeJurisdictions, useOffices, useRoles, useUpdateOffice, useUpdateUserLicence, useUsers,
+  type OfficeAssignmentDto, type OfficeDto, type OfficeJurisdictionDto, type OfficeKind, type UserSummaryDto, type WorkflowStatus,
 } from '../../api/offices';
 import { useMunicipalities, useProvinces } from '../../api/referenceData';
 import { ApiRequestError } from '../../lib/apiClient';
@@ -42,6 +42,7 @@ export function OfficesPage() {
         { key: 'jurisdictions', label: 'Coverage', children: <JurisdictionsTab /> },
         { key: 'assignments', label: 'Staff', children: <AssignmentsTab /> },
         { key: 'delegations', label: 'Delegations', children: <DelegationsTab /> },
+        { key: 'licences', label: 'Signatory licences', children: <LicencesTab /> },
       ]} />
     </Space>
   );
@@ -93,6 +94,10 @@ function OfficesTab() {
             <Input />
           </Form.Item>
           <Form.Item name="headPosition" label="Head's position (as printed)"><Input /></Form.Item>
+          <Form.Item name="sanggunianName" label="Sanggunian cited on its Tax Declarations"
+            extra="E.g. the Sangguniang Panlalawigan or Bayan whose tax ordinance the TD note cites. Blank uses the deployment's setting.">
+            <Input maxLength={200} />
+          </Form.Item>
           <Form.Item name="address" label="Address" extra="Printed on the office's forms."><Input /></Form.Item>
           <Form.Item name="contact" label="Contact"><Input /></Form.Item>
           {editing !== 'new' && (
@@ -237,6 +242,68 @@ function AssignmentsTab() {
         <Form form={endForm} layout="vertical">
           <Form.Item name="endDate" label="Last day" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>
           <Form.Item name="reason" label="Reason" rules={[{ required: true }]}><Input /></Form.Item>
+        </Form>
+      </Modal>
+    </Space>
+  );
+}
+
+/**
+ * Each user's Real Estate Appraiser licence (LAM Bk I p.9; docs/analysis/records-and-forms.md Q10). It is printed with
+ * their signature, frozen on each approval they sign; a step marked "licensed signatory" warns when it is missing or
+ * expired, and does not block, until the province confirms the rule.
+ */
+function LicencesTab() {
+  const users = useUsers();
+  const update = useUpdateUserLicence();
+  const { context, ok, fail } = useToast();
+  const [editing, setEditing] = useState<UserSummaryDto | null>(null);
+  const [form] = Form.useForm();
+  const today = dayjs().format('YYYY-MM-DD');
+
+  const save = async () => {
+    if (!editing) return;
+    const v = await form.validateFields();
+    const number = v.reaLicenceNumber?.trim() || null;
+    update.mutate({ id: editing.id, reaLicenceNumber: number, reaLicenceValidUntil: number ? day(v.reaLicenceValidUntil) : null, reason: v.reason },
+      { onSuccess: () => { ok('Licence saved.'); setEditing(null); }, onError: fail });
+  };
+
+  return (
+    <Space orientation="vertical" style={{ width: '100%' }}>
+      {context}
+      <Table<UserSummaryDto> rowKey="id" size="small" loading={users.isLoading} dataSource={users.data ?? []} pagination={{ pageSize: 20 }} scroll={{ x: true }}
+        columns={[
+          { title: 'User', render: (_, u) => u.email ? `${u.displayName} (${u.email})` : u.displayName },
+          { title: 'Office', render: (_, u) => u.provinceWide ? 'Province-wide' : u.officeCode ?? '—' },
+          { title: 'REA licence', dataIndex: 'reaLicenceNumber', render: (v: string | null) => v ?? '—' },
+          {
+            title: 'Valid until', dataIndex: 'reaLicenceValidUntil',
+            render: (v: string | null) => v ? <Space size={4}>{v}{v < today && <Tag color="red">expired</Tag>}</Space> : '—',
+          },
+          { title: '', render: (_, u) => <Button size="small" onClick={() => setEditing(u)}>Edit</Button> },
+        ]} />
+      <Modal title={editing ? `REA licence — ${editing.displayName}` : ''} open={editing !== null} onCancel={() => setEditing(null)} onOk={save}
+        confirmLoading={update.isPending} okText="Save" destroyOnHidden>
+        <Form form={form} layout="vertical" preserve={false}
+          initialValues={editing ? {
+            reaLicenceNumber: editing.reaLicenceNumber, reaLicenceValidUntil: editing.reaLicenceValidUntil ? dayjs(editing.reaLicenceValidUntil) : undefined,
+          } : undefined}>
+          <Form.Item name="reaLicenceNumber" label="Licence number" rules={[{ max: 50 }]} extra="Blank clears the licence.">
+            <Input />
+          </Form.Item>
+          <Form.Item noStyle dependencies={['reaLicenceNumber']}>
+            {({ getFieldValue }) => (
+              <Form.Item name="reaLicenceValidUntil" label="Valid until"
+                rules={[{ required: !!getFieldValue('reaLicenceNumber')?.trim(), message: 'Give the validity with the number' }]}>
+                <DatePicker disabled={!getFieldValue('reaLicenceNumber')?.trim()} />
+              </Form.Item>
+            )}
+          </Form.Item>
+          <Form.Item name="reason" label="Reason" rules={[{ required: true, message: 'A reason is required' }, { max: 1000 }]}
+            extra="Kept in the audit log. Approvals already signed keep the licence they printed.">
+            <Input.TextArea rows={2} />
+          </Form.Item>
         </Form>
       </Modal>
     </Space>

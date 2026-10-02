@@ -11,8 +11,10 @@ namespace Prime.Application.Features.Approvals;
 /// <param name="SignerOffice">Whose staff signs the step (docs/analysis/province-wide-operation.md §3.4); Any by default.</param>
 /// <param name="RequiredRole">A role code the signer must hold in their office, e.g. ASSESSOR.</param>
 /// <param name="IsFinalApproval">The step that makes the record final; only the last step may be.</param>
+/// <param name="RequiresLicensedSignatory">Warn when the signer has no valid REA licence (records-and-forms.md Q10).</param>
 public sealed record ApprovalStepRequest(int Sequence, string StepCode, string Label, string? SignatoryPosition,
-    ApprovalSigner SignerOffice = ApprovalSigner.Any, string? RequiredRole = null, bool IsFinalApproval = false);
+    ApprovalSigner SignerOffice = ApprovalSigner.Any, string? RequiredRole = null, bool IsFinalApproval = false,
+    bool RequiresLicensedSignatory = false);
 
 /// <param name="OfficeId">The municipal office the chain is for; null for the provincial default.</param>
 public sealed record CreateApprovalChainRequest(
@@ -20,7 +22,7 @@ public sealed record CreateApprovalChainRequest(
     ApprovalSubjectType SubjectType, string Name, IReadOnlyList<ApprovalStepRequest> Steps, Guid? OfficeId = null);
 
 public sealed record ApprovalStepDto(int Sequence, string StepCode, string Label, string? SignatoryPosition,
-    ApprovalSigner SignerOffice, string? RequiredRole, bool IsFinalApproval);
+    ApprovalSigner SignerOffice, string? RequiredRole, bool IsFinalApproval, bool RequiresLicensedSignatory = false);
 
 public sealed record ApprovalChainDto(
     Guid Id, ApprovalSubjectType SubjectType, string Name, IReadOnlyList<ApprovalStepDto> Steps,
@@ -31,7 +33,8 @@ public sealed record ApprovalChainDto(
 public sealed record ApprovalRecordDto(
     Guid Id, ApprovalSubjectType SubjectType, Guid SubjectId, Guid ApprovalChainId, int StepSequence, string StepCode,
     string Label, string? SignatoryPosition, Guid? UserId, string SignatoryName, DateTimeOffset SignedAt, string? Remarks,
-    Guid? SignerOfficeId = null, Guid? DelegationId = null, string? UnderDelegation = null);
+    Guid? SignerOfficeId = null, Guid? DelegationId = null, string? UnderDelegation = null,
+    string? SignatoryLicenceNumber = null, DateOnly? SignatoryLicenceValidUntil = null, bool SignedWithoutValidLicence = false);
 
 public sealed class CreateApprovalChainRequestValidator : AbstractValidator<CreateApprovalChainRequest>
 {
@@ -147,7 +150,7 @@ public sealed class ApprovalChainService(
                 Sequence = s.Sequence, StepCode = s.StepCode, Label = s.Label,
                 SignatoryPosition = string.IsNullOrWhiteSpace(s.SignatoryPosition) ? null : s.SignatoryPosition,
                 SignerOffice = s.SignerOffice, RequiredRole = string.IsNullOrWhiteSpace(s.RequiredRole) ? null : s.RequiredRole,
-                IsFinalApproval = s.IsFinalApproval,
+                IsFinalApproval = s.IsFinalApproval, RequiresLicensedSignatory = s.RequiresLicensedSignatory,
             }).ToList(),
         };
         db.ApprovalChains.Add(chain);
@@ -203,7 +206,10 @@ public sealed class ApprovalChainService(
         }
 
         var userId = currentUser.AppUserId;
-        var name = userId is null ? null : await db.AppUsers.Where(u => u.Id == userId).Select(u => u.DisplayName).FirstOrDefaultAsync(cancellationToken);
+        var signer = userId is null ? null : await db.AppUsers.Where(u => u.Id == userId)
+            .Select(u => new { u.DisplayName, u.ReaLicenceNumber, u.ReaLicenceValidUntil }).FirstOrDefaultAsync(cancellationToken);
+        var name = signer?.DisplayName;
+        var licensed = signer?.ReaLicenceNumber is not null && signer.ReaLicenceValidUntil >= asOf;
         var record = new ApprovalRecord
         {
             SubjectType = subjectType, SubjectId = subjectId, ApprovalChainId = p.Chain.Id,
@@ -217,6 +223,9 @@ public sealed class ApprovalChainService(
             UnderDelegation = p.Delegation is { } d
                 ? $"{d.InstrumentReference} dated {d.InstrumentDate:yyyy-MM-dd} of {d.DelegatingOfficialName}, {d.DelegatingOfficialPosition}"
                 : null,
+            SignatoryLicenceNumber = licensed ? signer!.ReaLicenceNumber : null,
+            SignatoryLicenceValidUntil = licensed ? signer!.ReaLicenceValidUntil : null,
+            SignedWithoutValidLicence = p.Step.RequiresLicensedSignatory && !licensed,
         };
         db.ApprovalRecords.Add(record);
         return Result.Success(new ApprovalStepOutcome(true, p.IsLast, record));
@@ -393,11 +402,12 @@ public sealed class ApprovalChainService(
     private static ApprovalChainDto ToDto(ApprovalChain x) => new(
         x.Id, x.SubjectType, x.Name,
         x.Steps.OrderBy(s => s.Sequence).Select(s => new ApprovalStepDto(s.Sequence, s.StepCode, s.Label, s.SignatoryPosition,
-            s.SignerOffice, s.RequiredRole, s.IsFinalApproval)).ToList(),
+            s.SignerOffice, s.RequiredRole, s.IsFinalApproval, s.RequiresLicensedSignatory)).ToList(),
         x.LegalBasis, x.EffectiveDate, x.EndDate, x.Status, x.CreatedBy, x.CreatedAt, x.ApprovedBy, x.ApprovedAt, x.Remarks,
         x.OfficeId, x.Office?.Code);
 
     internal static ApprovalRecordDto ToDto(ApprovalRecord x) => new(
         x.Id, x.SubjectType, x.SubjectId, x.ApprovalChainId, x.StepSequence, x.StepCode, x.Label, x.SignatoryPosition,
-        x.UserId, x.SignatoryName, x.SignedAt, x.Remarks, x.SignerOfficeId, x.DelegationId, x.UnderDelegation);
+        x.UserId, x.SignatoryName, x.SignedAt, x.Remarks, x.SignerOfficeId, x.DelegationId, x.UnderDelegation,
+        x.SignatoryLicenceNumber, x.SignatoryLicenceValidUntil, x.SignedWithoutValidLicence);
 }

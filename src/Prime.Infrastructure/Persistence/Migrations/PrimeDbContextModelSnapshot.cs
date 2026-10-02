@@ -505,6 +505,93 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.ToTable("AuditLogs");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.BackTaxPeriod", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssessmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BackTaxRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("ValuationId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssessmentId")
+                        .IsUnique();
+
+                    b.HasIndex("ValuationId");
+
+                    b.HasIndex("BackTaxRunId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("BackTaxPeriods", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_BackTaxPeriods_Dates", "\"EndDate\" IS NULL OR \"EndDate\" >= \"StartDate\"");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.BackTaxRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DeclaredFromYear")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("InitialAssessmentYear")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("RpuId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("TransactionTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RpuId");
+
+                    b.HasIndex("TransactionTypeId");
+
+                    b.ToTable("BackTaxRuns", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_BackTaxRuns_Years", "\"DeclaredFromYear\" <= \"InitialAssessmentYear\"");
+                        });
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Billing.DiscountRule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3015,6 +3102,76 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.Gis.DisputedArea", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<MultiPolygon>("Geometry")
+                        .IsRequired()
+                        .HasColumnType("geometry(MultiPolygon,4326)");
+
+                    b.Property<Guid>("ImportBatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("SourceReference")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DisputedAreas_Current")
+                        .HasFilter("\"EndDate\" IS NULL");
+
+                    b.HasIndex("Geometry");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Geometry"), "GIST");
+
+                    b.HasIndex("ImportBatchId");
+
+                    b.HasIndex("Code", "EffectiveDate");
+
+                    b.ToTable("DisputedAreas", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_DisputedAreas_EndDate", "\"EndDate\" IS NULL OR \"EndDate\" > \"EffectiveDate\"");
+                        });
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Gis.RoadSegment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3240,6 +3397,13 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(320)
                         .HasColumnType("character varying(320)");
 
+                    b.Property<string>("ReaLicenceNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateOnly?>("ReaLicenceValidUntil")
+                        .HasColumnType("date");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -3381,6 +3545,112 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("RoleId");
 
                     b.ToTable("UserRoles");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.IndependentAppraisal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("AppraisedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Approach")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EndReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Evidence")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<bool>("IsCurrent")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("RpuId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RpuId");
+
+                    b.HasIndex("Subject", "SubjectId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_IndependentAppraisals_Current")
+                        .HasFilter("\"IsCurrent\"");
+
+                    b.ToTable("IndependentAppraisals", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_IndependentAppraisals_Value", "\"Value\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.IndependentAppraisalInput", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("IndependentAppraisalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IndependentAppraisalId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("IndependentAppraisalInputs", (string)null);
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.Land", b =>
@@ -3742,9 +4012,23 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<int?>("EconomicLifeYears")
                         .HasColumnType("integer");
 
+                    b.Property<DateOnly?>("EngineeringRegistrationDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("EngineeringRegistrationNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<decimal?>("ForeignAcquisitionCost")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateOnly?>("ImportPermitDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("ImportPermitNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<decimal?>("InstallationCost")
                         .HasPrecision(18, 2)
@@ -3787,6 +4071,13 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("PropertyId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateOnly?>("ReceiptDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("ReceiptNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<int?>("RemainingLifeYears")
                         .HasColumnType("integer");
 
@@ -3805,6 +4096,14 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SupplierAddress")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("SupplierName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -3929,6 +4228,10 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("EmailAddress")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
                     b.Property<DateOnly>("IssueDueDate")
                         .HasColumnType("date");
 
@@ -3971,6 +4274,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RpuId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateOnly?>("SentDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("ServedTo")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
@@ -4012,8 +4318,7 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("UX_NoticesOfAssessment_Assessment_Live")
                         .HasFilter("\"Status\" <> 'Cancelled'");
 
-                    b.HasIndex("NoticeNumber")
-                        .IsUnique();
+                    b.HasIndex("NoticeNumber");
 
                     b.HasIndex("RpuId");
 
@@ -4024,6 +4329,8 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.ToTable("NoticesOfAssessment", null, t =>
                         {
                             t.HasCheckConstraint("CK_NoticesOfAssessment_Cancelled", "(\"Status\" = 'Cancelled') = (\"CancelledAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_NoticesOfAssessment_Email", "(\"ServiceMode\" = 'Email') <= (\"EmailAddress\" IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_NoticesOfAssessment_Issued", "(\"Status\" IN ('Issued', 'Served')) <= (\"IssuedAt\" IS NOT NULL)");
 
@@ -4244,6 +4551,10 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("SanggunianName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -4445,6 +4756,10 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<string>("CadastralNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -4612,7 +4927,7 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.ToTable("PinAssignments", null, t =>
                         {
-                            t.HasCheckConstraint("CK_PinAssignments_Permanent", "\"Kind\" <> 'Permanent' OR (\"ParcelId\" IS NOT NULL AND \"SectionId\" IS NOT NULL AND \"ParcelNumber\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_PinAssignments_Permanent", "\"Kind\" <> 'Permanent' OR (\"SectionId\" IS NOT NULL AND \"ParcelNumber\" IS NOT NULL AND (\"ParcelId\" IS NOT NULL OR \"ParcelNumber\" = 0))");
 
                             t.HasCheckConstraint("CK_PinAssignments_Retired", "(\"RetiredAt\" IS NULL) = (\"RetirementReason\" IS NULL)");
 
@@ -4685,6 +5000,44 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.PropertyBarangayPart", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Area")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal>("AssessedValueShare")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
+                    b.Property<Guid>("BarangayId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PropertyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BarangayId");
+
+                    b.HasIndex("PropertyId", "BarangayId")
+                        .IsUnique();
+
+                    b.ToTable("PropertyBarangayParts", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PropertyBarangayParts_Area", "\"Area\" > 0");
+
+                            t.HasCheckConstraint("CK_PropertyBarangayParts_Share", "\"AssessedValueShare\" >= 0 AND \"AssessedValueShare\" <= 100");
+                        });
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.PropertyEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4714,11 +5067,18 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("CadastralNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("IsOverWater")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("LotNumber")
                         .HasMaxLength(50)
@@ -4920,8 +5280,18 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("EndDate")
                         .HasColumnType("date");
 
+                    b.Property<int?>("FloorNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FloorPrefix")
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)");
+
                     b.Property<Guid?>("HostRpuId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("IsLeasingProperty")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid?>("LandRpuId")
                         .HasColumnType("uuid");
@@ -4950,6 +5320,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<int?>("UnitNumber")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -4973,6 +5346,11 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_RealPropertyUnit_Property_PinSuffix")
                         .HasFilter("\"PinSuffix\" IS NOT NULL");
+
+                    b.HasIndex("HostRpuId", "FloorPrefix", "FloorNumber", "UnitNumber")
+                        .IsUnique()
+                        .HasDatabaseName("UX_RealPropertyUnit_LeasingUnit")
+                        .HasFilter("\"UnitNumber\" IS NOT NULL");
 
                     b.ToTable("RealPropertyUnit", null, t =>
                         {
@@ -5147,7 +5525,7 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Barangays", t =>
                         {
-                            t.HasCheckConstraint("CK_Barangay_PinIndexNumber", "\"PinIndexNumber\" ~ '^[0-9]{4}$'");
+                            t.HasCheckConstraint("CK_Barangay_PinIndexNumber", "\"PinIndexNumber\" ~ '^[0-9]{3,4}$'");
 
                             t.HasCheckConstraint("CK_Barangay_Retired", "(\"RetiredOn\" IS NULL) = (\"RetirementReason\" IS NULL)");
                         });
@@ -7164,6 +7542,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ApprovedBy")
                         .HasColumnType("uuid");
 
+                    b.Property<long?>("AssessmentCount")
+                        .HasColumnType("bigint");
+
                     b.Property<Guid?>("AssessmentId")
                         .HasColumnType("uuid");
 
@@ -7397,6 +7778,10 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ProvinceId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Sex")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -7436,6 +7821,154 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("Tin");
 
                     b.ToTable("Taxpayers");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.TerritorialChangeItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("NewPin")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("OldPin")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PropertyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("TerritorialChangeJobId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PropertyId");
+
+                    b.HasIndex("TerritorialChangeJobId", "PropertyId")
+                        .IsUnique();
+
+                    b.ToTable("TerritorialChangeItems", (string)null);
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.TerritorialChangeJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("FailedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("LegalBasis")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("PinMode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<int>("ProcessedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("RunStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("TotalCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("TerritorialChangeJobs", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TerritorialChangeJobs_Approval", "(\"Status\" = 'Approved') = (\"ApprovedAt\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.TerritorialChangeMapping", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SourceBarangayId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TargetBarangayId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TerritorialChangeJobId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceBarangayId");
+
+                    b.HasIndex("TargetBarangayId");
+
+                    b.HasIndex("TerritorialChangeJobId", "SourceBarangayId")
+                        .IsUnique();
+
+                    b.ToTable("TerritorialChangeMappings", (string)null);
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.Transactions.PropertyTransaction", b =>
@@ -7934,6 +8467,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RpuId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateOnly?>("RulesAsOf")
+                        .HasColumnType("date");
+
                     b.Property<Guid?>("SmvId")
                         .HasColumnType("uuid");
 
@@ -7999,6 +8535,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<Guid?>("IndependentAppraisalId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("MarketValue")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -8046,6 +8585,8 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("ActualUseId");
 
                     b.HasIndex("ClassificationId");
+
+                    b.HasIndex("IndependentAppraisalId");
 
                     b.HasIndex("PricedClassificationId");
 
@@ -8165,6 +8706,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<bool>("RequiresLicensedSignatory")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("Sequence")
                         .HasColumnType("integer");
 
@@ -8216,6 +8760,13 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<string>("SignatoryLicenceNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateOnly?>("SignatoryLicenceValidUntil")
+                        .HasColumnType("date");
+
                     b.Property<string>("SignatoryName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -8227,6 +8778,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset>("SignedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("SignedWithoutValidLicence")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid?>("SignerOfficeId")
                         .HasColumnType("uuid");
@@ -8417,6 +8971,47 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Classification");
 
                     b.Navigation("PropertyType");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.BackTaxPeriod", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Assessment", "Assessment")
+                        .WithMany()
+                        .HasForeignKey("AssessmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.BackTaxRun", null)
+                        .WithMany("Periods")
+                        .HasForeignKey("BackTaxRunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Valuation", "Valuation")
+                        .WithMany()
+                        .HasForeignKey("ValuationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Assessment");
+
+                    b.Navigation("Valuation");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.BackTaxRun", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.RealPropertyUnit", "Rpu")
+                        .WithMany()
+                        .HasForeignKey("RpuId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Transactions.TransactionType", null)
+                        .WithMany()
+                        .HasForeignKey("TransactionTypeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Rpu");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.Billing.DiscountRule", b =>
@@ -9011,6 +9606,26 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.IndependentAppraisal", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.RealPropertyUnit", "Rpu")
+                        .WithMany()
+                        .HasForeignKey("RpuId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Rpu");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.IndependentAppraisalInput", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.IndependentAppraisal", null)
+                        .WithMany("Inputs")
+                        .HasForeignKey("IndependentAppraisalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Land", b =>
                 {
                     b.HasOne("Prime.Domain.Entities.Reference.ActualUse", "ActualUse")
@@ -9421,6 +10036,25 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Property");
 
                     b.Navigation("Section");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.PropertyBarangayPart", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.Barangay", "Barangay")
+                        .WithMany()
+                        .HasForeignKey("BarangayId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.PropertyEntity", "Property")
+                        .WithMany()
+                        .HasForeignKey("PropertyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Barangay");
+
+                    b.Navigation("Property");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.PropertyEntity", b =>
@@ -10033,6 +10667,46 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Province");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.TerritorialChangeItem", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.PropertyEntity", null)
+                        .WithMany()
+                        .HasForeignKey("PropertyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.TerritorialChangeJob", null)
+                        .WithMany("Items")
+                        .HasForeignKey("TerritorialChangeJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.TerritorialChangeMapping", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.Barangay", "SourceBarangay")
+                        .WithMany()
+                        .HasForeignKey("SourceBarangayId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Barangay", "TargetBarangay")
+                        .WithMany()
+                        .HasForeignKey("TargetBarangayId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.TerritorialChangeJob", null)
+                        .WithMany("Mappings")
+                        .HasForeignKey("TerritorialChangeJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SourceBarangay");
+
+                    b.Navigation("TargetBarangay");
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Transactions.PropertyTransaction", b =>
                 {
                     b.HasOne("Prime.Domain.Entities.PropertyEntity", "Property")
@@ -10189,6 +10863,11 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ClassificationId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Prime.Domain.Entities.IndependentAppraisal", null)
+                        .WithMany()
+                        .HasForeignKey("IndependentAppraisalId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Prime.Domain.Entities.Reference.Classification", "PricedClassification")
                         .WithMany()
                         .HasForeignKey("PricedClassificationId")
@@ -10271,6 +10950,11 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Lines");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.BackTaxRun", b =>
+                {
+                    b.Navigation("Periods");
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Billing.PaymentSchedule", b =>
                 {
                     b.Navigation("Installments");
@@ -10339,6 +11023,11 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("UserRoles");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.IndependentAppraisal", b =>
+                {
+                    b.Navigation("Inputs");
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Land", b =>
                 {
                     b.Navigation("Adjustments");
@@ -10386,6 +11075,13 @@ namespace Prime.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Prime.Domain.Entities.TaxDeclaration", b =>
                 {
                     b.Navigation("Annotations");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.TerritorialChangeJob", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("Mappings");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.Transactions.PropertyTransaction", b =>

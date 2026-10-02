@@ -47,7 +47,12 @@ public sealed record NoticeItemDto(
     int Sequence, Guid PropertyId, Guid RpuId, Guid AssessmentId, Guid? TaxDeclarationId, NoticeReason Reason,
     decimal? PreviousAssessedValue, decimal AssessedValue, decimal MarketValue, int AssessmentYear, DateOnly AssessmentEffectiveDate);
 
-public sealed record RecordNoticeServiceRequest(NoticeServiceMode ServiceMode, DateOnly ReceivedDate, string ServedTo, string ProofReference, string? Notes);
+/// <summary>
+/// <paramref name="EmailAddress"/> is required for an emailed notice; <paramref name="SentDate"/> is the date it was mailed
+/// or emailed, on or before the receipt (LAM Annex I-L proof of service; records-and-forms.md Q11).
+/// </summary>
+public sealed record RecordNoticeServiceRequest(NoticeServiceMode ServiceMode, DateOnly ReceivedDate, string ServedTo, string ProofReference, string? Notes,
+    string? EmailAddress = null, DateOnly? SentDate = null);
 
 public sealed record NoticeReasonRequest(string Reason);
 
@@ -59,7 +64,7 @@ public sealed record NoticeDto(
     NoticeStatus Status, DateTimeOffset CreatedAt, DateTimeOffset? IssuedAt,
     NoticeServiceMode? ServiceMode, DateOnly? ReceivedDate, string? ServedTo, string? ProofReference, string? ServiceNotes,
     DateOnly? AppealDeadline, DateTimeOffset? CancelledAt, string? CancellationReason,
-    Guid? AddresseeTaxpayerId = null, IReadOnlyList<NoticeItemDto>? Items = null);
+    Guid? AddresseeTaxpayerId = null, IReadOnlyList<NoticeItemDto>? Items = null, string? EmailAddress = null, DateOnly? SentDate = null);
 
 public interface INoticeService
 {
@@ -290,7 +295,13 @@ public sealed class NoticeService(
         }
         var ownsTransaction = db.Database.CurrentTransaction is null;
         await using var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
-        var context = await NumberContexts.ForPropertyAsync(db, notice.PropertyId, clock.Today.Year, cancellationToken, clock.Today);
+        // A LAM NOA number repeats its TD's assessment count; a notice of several TDs takes its first TD's (identification-numbering.md §4.1, Q5).
+        var firstTdId = notice.TaxDeclarationId ?? await db.NoticeOfAssessmentItems.Where(x => x.NoticeOfAssessmentId == notice.Id && x.TaxDeclarationId != null)
+            .OrderBy(x => x.Sequence).Select(x => x.TaxDeclarationId).FirstOrDefaultAsync(cancellationToken);
+        var tdCount = firstTdId is { } tdId
+            ? await db.TaxDeclarations.Where(x => x.Id == tdId).Select(x => x.AssessmentCount).FirstOrDefaultAsync(cancellationToken)
+            : null;
+        var context = await NumberContexts.ForPropertyAsync(db, notice.PropertyId, clock.Today.Year, cancellationToken, clock.Today) with { TdCount = tdCount };
         var number = await numbering.GenerateIfConfiguredAsync(NumberedDocumentKind.NoticeOfAssessment, context, clock.Today, cancellationToken);
         if (number.IsFailure)
         {
@@ -330,6 +341,18 @@ public sealed class NoticeService(
         {
             return Fail("NOTICE_RECEIVED_DATE_INVALID", $"The receipt date must be between the issue date ({issuedOn:yyyy-MM-dd}) and today.");
         }
+        var email = string.IsNullOrWhiteSpace(request.EmailAddress) ? null : request.EmailAddress.Trim();
+        if (request.ServiceMode == NoticeServiceMode.Email
+            && (email is null || email.Length > 320 || !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(email)))
+        {
+            return Fail("VALIDATION_FAILED", "An emailed notice needs the email address it was sent to.");
+        }
+        if (request.SentDate is { } sent && (sent < issuedOn || sent > request.ReceivedDate))
+        {
+            return Fail("NOTICE_SENT_DATE_INVALID", $"The date sent must be between the issue date ({issuedOn:yyyy-MM-dd}) and the receipt date.");
+        }
+        notice.EmailAddress = request.ServiceMode == NoticeServiceMode.Email ? email : null;
+        notice.SentDate = request.SentDate;
         notice.ServiceMode = request.ServiceMode;
         notice.ReceivedDate = request.ReceivedDate;
         notice.ServedTo = request.ServedTo.Trim();
@@ -387,7 +410,8 @@ public sealed class NoticeService(
         x.ServiceMode, x.ReceivedDate, x.ServedTo, x.ProofReference, x.ServiceNotes, x.AppealDeadline, x.CancelledAt, x.CancellationReason,
         x.AddresseeTaxpayerId,
         x.Items.OrderBy(i => i.Sequence).Select(i => new NoticeItemDto(i.Sequence, i.PropertyId, i.RpuId, i.AssessmentId, i.TaxDeclarationId,
-            i.Reason, i.PreviousAssessedValue, i.AssessedValue, i.MarketValue, i.AssessmentYear, i.AssessmentEffectiveDate)).ToList());
+            i.Reason, i.PreviousAssessedValue, i.AssessedValue, i.MarketValue, i.AssessmentYear, i.AssessmentEffectiveDate)).ToList(),
+        x.EmailAddress, x.SentDate);
 
     private static Result<NoticeDto> NotFound() => Fail("NOTICE_NOT_FOUND", "No Notice of Assessment was found with the given id.");
 

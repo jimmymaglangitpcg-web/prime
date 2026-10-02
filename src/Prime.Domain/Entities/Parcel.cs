@@ -20,6 +20,8 @@ public sealed class Parcel : AuditableEntity
     public decimal? Area { get; set; }
 
     public string? SurveyNumber { get; set; }
+    /// <summary>Overrides the property's cadastral number for this parcel (records-and-forms.md Q16).</summary>
+    public string? CadastralNumber { get; set; }
     public string? LotNumber { get; set; }
     public string? BlockNumber { get; set; }
 

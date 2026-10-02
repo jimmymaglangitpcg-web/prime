@@ -166,7 +166,7 @@ export function useRecordTieUp(propertyId: string) {
 export function usePlaceInSection(propertyId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (request: { parcelId: string; sectionId: string; parcelNumber: number | null }) =>
+    mutationFn: (request: { parcelId: string; sectionId: string; parcelNumber: number | null; overWater?: boolean }) =>
       apiPost<PropertyPinDto>(`/api/properties/${propertyId}/pin/place-in-section`, request),
     onSuccess: () => Promise.all([
       queryClient.invalidateQueries({ queryKey: ['properties', propertyId] }),

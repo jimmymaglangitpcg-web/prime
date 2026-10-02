@@ -275,4 +275,53 @@ public class FormsFoundationFlowTests(WebApplicationFactory<Program> factory) : 
         html.ShouldContain("DEMO Signer C");
         html.ShouldContain("DEMO Assessor");
     }
+
+    [Fact]
+    public async Task LicensedSignatoryStep_WarnsWithoutAValidLicence_AndFreezesTheLicence()
+    {
+        var (s, tx) = await BeginAsync();
+        await using var _ = tx;
+        var chains = s.Services.GetRequiredService<IApprovalChainService>();
+        s.User.AppUserId = s.A.Id;
+        var chain = (await chains.CreateAsync(new CreateApprovalChainRequest("DEMO — not the LAM chain", Today, null, ApprovalSubjectType.Assessment,
+            "DEMO licensed chain", [
+                new ApprovalStepRequest(1, "APPRAISED_BY", "DEMO Appraised by", null, RequiresLicensedSignatory: true),
+                new ApprovalStepRequest(2, "APPROVED_BY", "DEMO Approved by", null, RequiresLicensedSignatory: true),
+            ]))).Value;
+        chain.Steps.ShouldAllBe(x => x.RequiresLicensedSignatory);
+        s.User.AppUserId = s.B.Id;
+        (await chains.ApproveAsync(chain.Id)).IsSuccess.ShouldBeTrue();
+
+        // B's licence expired yesterday; C's is valid. DEMO numbers.
+        s.B.ReaLicenceNumber = "DEMO-REA-B";
+        s.B.ReaLicenceValidUntil = Today.AddDays(-1);
+        s.C.ReaLicenceNumber = "DEMO-REA-C";
+        s.C.ReaLicenceValidUntil = Today.AddYears(1);
+        await s.Db.SaveChangesAsync();
+
+        s.User.AppUserId = null;
+        var seeded = await BillingFlowTests.SeedPostedAssessmentAsync(s.Services, s.Db, new DateOnly(2026, 1, 1), post: false);
+        var valuationId = (await s.Db.Assessments.SingleAsync(x => x.Id == seeded.AssessmentId)).ValuationId;
+        var assessments = s.Services.GetRequiredService<IAssessmentService>();
+        s.User.AppUserId = s.A.Id;
+        var created = (await assessments.CreateAsync(new CreateAssessmentRequest(valuationId, 2026, new DateOnly(2026, 1, 1), null, null, "DEMO"))).Value;
+        (await assessments.SubmitForReviewAsync(created.Id)).IsSuccess.ShouldBeTrue();
+
+        s.User.AppUserId = s.B.Id;
+        (await assessments.ApproveAsync(created.Id)).Value.Status.ShouldBe(WorkflowStatus.PendingReview); // warned, not blocked
+        s.User.AppUserId = s.C.Id;
+        (await assessments.ApproveAsync(created.Id)).Value.Status.ShouldBe(WorkflowStatus.Approved);
+
+        var records = (await chains.ListRecordsAsync(ApprovalSubjectType.Assessment, created.Id)).Value;
+        records[0].SignedWithoutValidLicence.ShouldBeTrue();
+        records[0].SignatoryLicenceNumber.ShouldBeNull();
+        records[1].SignedWithoutValidLicence.ShouldBeFalse();
+        records[1].SignatoryLicenceNumber.ShouldBe("DEMO-REA-C");
+        records[1].SignatoryLicenceValidUntil.ShouldBe(Today.AddYears(1));
+
+        // Frozen: a later change to the user's licence leaves the record as signed.
+        s.C.ReaLicenceNumber = "DEMO-REA-C2";
+        await s.Db.SaveChangesAsync();
+        (await chains.ListRecordsAsync(ApprovalSubjectType.Assessment, created.Id)).Value[1].SignatoryLicenceNumber.ShouldBe("DEMO-REA-C");
+    }
 }

@@ -17,7 +17,8 @@ namespace Prime.Application.Features.Forms;
 /// forms print is prepared here from recorded values — templates only lay them
 /// out, and compute nothing.
 /// </summary>
-public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRecordService appraisals, IOptions<FaasOptions> faas, IClock clock) : IFormDataProvider
+public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRecordService appraisals, IOptions<FaasOptions> faas, IClock clock,
+    IOptions<UnitPinOptions> unitPins) : IFormDataProvider
 {
     public FormSubjectType SubjectType => FormSubjectType.Faas;
 
@@ -48,7 +49,7 @@ public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRec
                 tdNumber = td.TaxDeclarationNumber,
                 transactionCode = td.TransactionCode,
                 kind = rpu.RpuType.ToString(),
-                pin = UnitPin.Compose(pin, rpu.PinSuffix, ownedSeparately, await UnitPin.TemporaryPostfixAsync(db, td.PropertyId, rpu.Id, cancellationToken)),
+                pin = await UnitPin.ForUnitAsync(db, unitPins.Value, rpu, pin, ownedSeparately, cancellationToken),
                 tdStatus = td.Status.ToString(),
                 taxability = td.Taxability.ToString(),
                 effectivity = new { date = eff, quarter = (eff.Month - 1) / 3 + 1, year = eff.Year },
@@ -109,10 +110,11 @@ public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRec
         var owners = (await PartiesAsync(previous.PropertyId, previous.RpuId, previous.EffectivityDate, ct))
             .Where(p => p.role is "Owner" or "UnknownOwner").Select(p => p.name);
         var pin = await db.Properties.Where(p => p.Id == previous.PropertyId).Select(p => p.PropertyIdentificationNumber).FirstAsync(ct);
-        var rpu = await db.RealPropertyUnits.Where(x => x.Id == previous.RpuId).Select(x => x.PinSuffix).FirstAsync(ct);
+        var rpu = await db.RealPropertyUnits.AsNoTracking().FirstAsync(x => x.Id == previous.RpuId, ct);
+        var unitPin = await UnitPin.ForUnitAsync(db, unitPins.Value, rpu, pin, false, ct);
         return new
         {
-            pin = UnitPin.Compose(pin, rpu, false),
+            pin = unitPin,
             arpNumber = faas.Value.NumberSource == FaasNumberSource.TaxDeclaration ? previous.TaxDeclarationNumber : previous.Assessment?.FaasNumber,
             tdNumber = previous.TaxDeclarationNumber,
             totalAssessedValue = previous.Assessment?.AssessedValue,
@@ -162,7 +164,7 @@ public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRec
         var owners = (await PartiesAsync(host.PropertyId, host.Id, today, ct)).Where(p => p.role is "Owner" or "UnknownOwner").Select(p => p.name).ToList();
         var ownedSeparately = await db.PropertyTaxpayers.AnyAsync(x => x.RpuId == host.Id && x.IsCurrent
             && (x.Role == PropertyPartyRole.Owner || x.Role == PropertyPartyRole.UnknownOwner), ct);
-        return new { owner = string.Join("; ", owners), pin = UnitPin.Compose(pin, host.PinSuffix, ownedSeparately, await UnitPin.TemporaryPostfixAsync(db, host.PropertyId, host.Id, ct)) };
+        return new { owner = string.Join("; ", owners), pin = await UnitPin.ForUnitAsync(db, unitPins.Value, host, pin, ownedSeparately, ct) };
     }
 
     private async Task<object> AdditionalItemsAsync(Guid rpuId, CancellationToken ct) =>

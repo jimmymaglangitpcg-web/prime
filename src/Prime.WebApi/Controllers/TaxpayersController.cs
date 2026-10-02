@@ -16,6 +16,11 @@ public class TaxpayersController(ITaxpayerService taxpayerService) : ApiControll
     public async Task<ActionResult<TaxpayerDto>> GetById(Guid id, CancellationToken cancellationToken) =>
         HandleResult(await taxpayerService.GetByIdAsync(id, cancellationToken));
 
+    /// <summary>Corrects contact and personal details with a reason (docs/analysis/records-and-forms.md §4.1).</summary>
+    [HttpPut("{id:guid}/details")]
+    public async Task<ActionResult<TaxpayerDto>> UpdateDetails(Guid id, UpdateTaxpayerDetailsRequest request, CancellationToken cancellationToken) =>
+        HandleResult(await taxpayerService.UpdateDetailsAsync(id, request, cancellationToken));
+
     [HttpGet]
     public async Task<ActionResult<PagedResult<TaxpayerDto>>> Search([FromQuery] TaxpayerSearchRequest request, CancellationToken cancellationToken) =>
         HandleResult(await taxpayerService.SearchAsync(request, cancellationToken));

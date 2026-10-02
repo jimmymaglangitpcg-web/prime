@@ -25,4 +25,7 @@ public enum ValuationMethod
     /// <see cref="ReplacementCost"/> stays the method for an entered replacement cost.
     /// </summary>
     DerivedReplacementCost = 3,
+
+    /// <summary>A value the appraiser determined outside the SMV, by the market, income or cost approach (valuation-foundation.md §4.7).</summary>
+    IndependentAppraisal = 4,
 }

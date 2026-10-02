@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Alert, Button, Card, DatePicker, Descriptions, Empty, Input, Modal, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
+import { TerritorialChangesCard } from './TerritorialChangesCard';
 import { EditOutlined, PlusOutlined, PrinterOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import dayjs, { type Dayjs } from 'dayjs';
@@ -76,6 +77,8 @@ export function PropertyIdentificationPage() {
           ]} />
         </Card>
       )}
+
+      <TerritorialChangesCard />
 
       {editing && <IndexNumberModal {...editing} onClose={() => setEditing(null)} />}
     </Space>
@@ -178,7 +181,7 @@ function BarangaysTab({ municipalityId }: { municipalityId: string }) {
       />
       {selected && <SectionsPanel barangay={selected} />}
       {editing && (
-        <IndexNumberModal kind="barangays" id={editing.id} label={`Barangay ${editing.name}`} current={editing.pinIndexNumber} digits="4 digits"
+        <IndexNumberModal kind="barangays" id={editing.id} label={`Barangay ${editing.name}`} current={editing.pinIndexNumber} digits="4 digits, or 3 where the province uses 3 (setting Pin:BarangayIndexDigits)"
           districts={districts.data} districtId={editing.cityDistrictId} onClose={() => setEditing(null)} />
       )}
       {splitting && <SplitModal barangay={splitting} onClose={() => setSplitting(null)} />}

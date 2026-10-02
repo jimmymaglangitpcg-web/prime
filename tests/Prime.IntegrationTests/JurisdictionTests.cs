@@ -35,6 +35,7 @@ public class JurisdictionTests(WebApplicationFactory<Program> factory) : IClassF
         ["TaxBill"] = "frozen treasury (CLAUDE.md §0)",
         ["PaymentAllocation"] = "frozen treasury (CLAUDE.md §0)",
         ["PropertyTransactionProperty"] = "a transaction's related properties; reached through its filtered transaction",
+        ["TerritorialChangeItem"] = "a provincial territorial change spanning municipalities; read through its job (identification-numbering.md §4.3)",
     };
 
     private sealed record World(

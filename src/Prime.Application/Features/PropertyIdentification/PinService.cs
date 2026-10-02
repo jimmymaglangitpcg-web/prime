@@ -42,7 +42,8 @@ public sealed record RecordTieUpRequest(TieUpStage Stage, bool Withdraw = false,
 /// <see cref="ParcelNumber"/> is only for migrating an existing tax map (the PIN
 /// scheme must allow manual entry); otherwise the next number in the section is used.
 /// </summary>
-public sealed record PlaceInSectionRequest(Guid ParcelId, Guid SectionId, int? ParcelNumber = null);
+/// <param name="OverWater">Structures over water, not attached to land: the PIN takes parcel 000 and no parcel is named (LAM Bk II p.38).</param>
+public sealed record PlaceInSectionRequest(Guid ParcelId, Guid SectionId, int? ParcelNumber = null, bool OverWater = false);
 
 public interface IPinService
 {
@@ -167,6 +168,10 @@ public sealed class PinService(
         {
             return Fail("PROPERTY_NOT_ACTIVE", "Only an active property can be given a PIN.");
         }
+        if (request.OverWater)
+        {
+            return await PlaceOverWaterAsync(property, request.SectionId, cancellationToken);
+        }
         var parcel = await db.Parcels.FirstOrDefaultAsync(x => x.Id == request.ParcelId && x.PropertyId == propertyId, cancellationToken);
         if (parcel is null)
         {
@@ -214,6 +219,63 @@ public sealed class PinService(
             return Fail("PIN_CONFLICT", "The PIN could not be saved because of a simultaneous change (e.g. the same parcel number). Nothing was changed; try again.");
         }
         return await GetAsync(propertyId, cancellationToken);
+    }
+
+    /// <summary>
+    /// The PIN of a section's structures over water (LAM Bk II pp.38–39; docs/analysis/identification-numbering.md
+    /// §4.2): parcel number 000, not from the section's sequence. One property per section holds them, each
+    /// structure a building unit of it (owned apart as needed), so their PINs stay unique (1001, 1002 …).
+    /// </summary>
+    private async Task<Result<PropertyPinDto>> PlaceOverWaterAsync(PropertyEntity property, Guid sectionId, CancellationToken ct)
+    {
+        var section = await db.TaxMapSections.Include(x => x.Barangay).FirstOrDefaultAsync(x => x.Id == sectionId, ct);
+        if (section is null)
+        {
+            return Fail("TAX_MAP_SECTION_NOT_FOUND", "No tax map section was found with the given id.");
+        }
+        if (section.RetiredOn is not null || section.Barangay!.RetiredOn is not null || section.BarangayId != property.BarangayId)
+        {
+            return Fail("VALIDATION_FAILED", $"Section {section.IndexNumber} must be an active section of the property's barangay.");
+        }
+        if (await db.RealPropertyUnits.AnyAsync(r => r.PropertyId == property.Id && r.RpuType == RpuType.Land, ct))
+        {
+            return Fail("PIN_OVER_WATER_HAS_LAND", "A property with a land unit is on land; parcel 000 is for structures over water only.");
+        }
+        var current = await db.PinAssignments.FirstOrDefaultAsync(x => x.PropertyId == property.Id && x.RetiredAt == null, ct);
+        if (current?.Kind == PinKind.Permanent)
+        {
+            return Fail("PIN_ALREADY_PERMANENT", $"The property already has its permanent PIN {current.Pin}.");
+        }
+        var today = clock.Today;
+        var scheme = await db.NumberingSchemes.InForce(today).FirstOrDefaultAsync(x => x.AppliesTo == NumberedDocumentKind.PropertyIdentificationNumber, ct);
+        if (scheme is null || !NumberPattern.Tokens(scheme.Pattern).Contains("SECT"))
+        {
+            return Fail("PIN_SCHEME_NOT_SECTIONED", "No PIN numbering scheme with a section ({SECT}) is in force.");
+        }
+        var context = await PinContexts.ForBarangayAsync(db, section.BarangayId, today.Year, section.IndexNumber, ct);
+        if (NumberPattern.MissingValues(scheme.Pattern, context) is { Count: > 0 } missing)
+        {
+            return Fail("NUMBER_CONTEXT_MISSING", $"The PIN needs {string.Join(", ", missing)}; set the index numbers under Property Identification first.");
+        }
+        var pin = NumberPattern.FormatZero(scheme.Pattern, context);
+        if (await db.Properties.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Id != property.Id && x.PropertyIdentificationNumber == pin, ct) is { } holder)
+        {
+            return Fail("PIN_OVER_WATER_EXISTS",
+                $"Section {section.IndexNumber}'s structures over water are already recorded under PIN {pin}; add this structure as a building unit of that property.");
+        }
+        var now = clock.UtcNow;
+        PermanentPins.Retire(db, property, current, now, $"Superseded by the over-water PIN {pin}.", null);
+        await db.SaveChangesAsync(ct);
+        property.PropertyIdentificationNumber = pin;
+        property.IsOverWater = true;
+        db.PinAssignments.Add(new PinAssignment
+        {
+            PropertyId = property.Id, Pin = pin, Kind = PinKind.Permanent, BarangayId = section.BarangayId, SectionId = section.Id, ParcelNumber = 0,
+            AssignedAt = now,
+        });
+        currentUser.Reason = $"Over-water PIN {pin} (section {section.IndexNumber}, parcel 000).";
+        await db.SaveChangesAsync(ct);
+        return await GetAsync(property.Id, ct);
     }
 
     private static Result<PropertyPinDto> Fail(string code, string message) => Result.Failure<PropertyPinDto>(code, message);

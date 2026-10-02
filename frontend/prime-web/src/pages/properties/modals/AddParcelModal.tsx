@@ -43,6 +43,7 @@ export function AddParcelModal({ propertyId, open, onClose }: { propertyId: stri
             surveyNumber: values.surveyNumber,
             lotNumber: values.lotNumber,
             blockNumber: values.blockNumber,
+            cadastralNumber: values.cadastralNumber || undefined,
           };
           createParcel.mutate(request, { onSuccess: handleClose });
         }}
@@ -80,6 +81,9 @@ export function AddParcelModal({ propertyId, open, onClose }: { propertyId: stri
         </Form.Item>
         <Form.Item name="surveyNumber" label="Survey Number">
           <Input />
+        </Form.Item>
+        <Form.Item name="cadastralNumber" label="Cadastral Number" extra="Only when it differs from the property's.">
+          <Input maxLength={100} />
         </Form.Item>
 
         <Form.Item

@@ -52,15 +52,32 @@ public sealed class RealPropertyUnitService(IApplicationDbContext db, IValidator
             PreviousRpuId = request.PreviousRpuId,
             LandRpuId = request.LandRpuId,
             HostRpuId = request.HostRpuId,
+            IsLeasingProperty = request.IsLeasingProperty,
+            FloorPrefix = request.FloorNumber is null ? null : (request.FloorPrefix?.Trim().ToUpperInvariant() is { Length: > 0 } p ? p : "F"),
+            FloorNumber = request.FloorNumber,
             Status = RecordStatus.Active,
         };
+        // A condominium or leasing unit: its number on the floor, given or the next one (Book II p.38).
+        if (rpu.FloorNumber is { } floor)
+        {
+            rpu.UnitNumber = request.UnitNumber ?? (rpu.RpuType == RpuType.Machinery ? null
+                : (await db.RealPropertyUnits.Where(r => r.HostRpuId == request.HostRpuId && r.FloorPrefix == rpu.FloorPrefix && r.FloorNumber == floor)
+                    .MaxAsync(r => r.UnitNumber, cancellationToken) ?? 0) + 1);
+            if (rpu.UnitNumber is { } unit && await db.RealPropertyUnits.AnyAsync(r => r.HostRpuId == request.HostRpuId && r.FloorPrefix == rpu.FloorPrefix
+                    && r.FloorNumber == floor && r.UnitNumber == unit, cancellationToken))
+            {
+                return Result.Failure<RpuDto>("UNIT_NUMBER_DUPLICATE", $"Unit {rpu.FloorPrefix}{floor:D2}-{unit:D3} already exists in this leasing property.");
+            }
+        }
         db.RealPropertyUnits.Add(rpu);
 
         // The next postscript of the series. UX_RealPropertyUnit_Property_PinSuffix
         // catches a concurrent creation, which then takes the following number.
         for (var attempt = 1; ; attempt++)
         {
-            rpu.PinSuffix = await NextSuffixAsync(request.PropertyId, request.RpuType, cancellationToken);
+            // A unit of a leasing property has no series number of its own (its PIN is the floor and unit number).
+            rpu.PinSuffix = rpu.RpuType != RpuType.Machinery && rpu.FloorNumber is not null ? null
+                : await NextSuffixAsync(request.PropertyId, request.RpuType, request.IsLeasingProperty, cancellationToken);
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
@@ -106,28 +123,55 @@ public sealed class RealPropertyUnitService(IApplicationDbContext db, IValidator
                 return ("RPU_LAND_LINK_INVALID", "The land unit must be a Land RPU of the same property.");
             }
         }
+        if (request.FloorPrefix?.Trim().ToUpperInvariant() is { Length: > 0 } prefix && !pinOptions.Value.FloorPrefixes.Contains(prefix))
+        {
+            return ("VALIDATION_FAILED", $"A floor prefix is one of {string.Join(", ", pinOptions.Value.FloorPrefixes)}.");
+        }
         if (request.HostRpuId is { } hostId)
         {
-            if (request.RpuType != RpuType.Machinery)
-            {
-                return ("RPU_HOST_LINK_INVALID", "Only a machinery unit is installed in a building.");
-            }
             var host = await db.RealPropertyUnits.FirstOrDefaultAsync(r => r.Id == hostId, ct);
             if (host is null || host.PropertyId != request.PropertyId || host.RpuType != RpuType.Building)
             {
                 return ("RPU_HOST_LINK_INVALID", "The host unit must be a Building RPU of the same property.");
             }
+            if (request.RpuType == RpuType.Building)
+            {
+                // A unit of a leasing property (condominium unit).
+                if (!host.IsLeasingProperty || request.FloorNumber is null || request.IsLeasingProperty)
+                {
+                    return ("RPU_HOST_LINK_INVALID", "A building unit hosted by another is a unit of a leasing property: name the leasing property and the floor.");
+                }
+            }
+            else if (request.RpuType != RpuType.Machinery)
+            {
+                return ("RPU_HOST_LINK_INVALID", "Only machinery is installed in a building, and only a unit is part of a leasing property.");
+            }
+            else if (request.FloorNumber is not null)
+            {
+                return ("RPU_HOST_LINK_INVALID", "Machinery in a condominium unit takes the unit's floor: name the unit as its host, without a floor.");
+            }
+        }
+        else if (request.FloorNumber is not null)
+        {
+            return ("RPU_HOST_LINK_INVALID", "A unit with a floor belongs to a leasing property: name it as the host.");
         }
         return null;
     }
 
-    private async Task<int?> NextSuffixAsync(Guid propertyId, RpuType type, CancellationToken ct)
+    /// <summary>The next number of the unit's series within the property; leasing properties have their own series (3001 …).</summary>
+    private async Task<int?> NextSuffixAsync(Guid propertyId, RpuType type, bool leasingProperty, CancellationToken ct)
     {
-        if (!pinOptions.Value.SuffixStart.TryGetValue(type, out var start))
+        int start;
+        if (leasingProperty)
+        {
+            start = pinOptions.Value.LeasingPropertyStart;
+        }
+        else if (!pinOptions.Value.SuffixStart.TryGetValue(type, out start))
         {
             return null;
         }
-        var last = await db.RealPropertyUnits.Where(r => r.PropertyId == propertyId && r.RpuType == type && r.PinSuffix != null)
+        var last = await db.RealPropertyUnits.Where(r => r.PropertyId == propertyId && r.RpuType == type && r.IsLeasingProperty == leasingProperty
+                && r.PinSuffix != null && r.FloorNumber == null)
             .MaxAsync(r => r.PinSuffix, ct);
         return last is null ? start : last + 1;
     }
@@ -147,9 +191,15 @@ public sealed class RealPropertyUnitService(IApplicationDbContext db, IValidator
                 && (x.Role == PropertyPartyRole.Owner || x.Role == PropertyPartyRole.UnknownOwner))
             .Select(x => x.RpuId!.Value).Distinct().ToListAsync(ct)).ToHashSet();
         var temporary = await UnitPin.TemporaryPostfixesAsync(db, propertyIds, ct);
+        var units = await db.RealPropertyUnits.AsNoTracking().Where(r => propertyIds.Contains(r.PropertyId)).ToDictionaryAsync(r => r.Id, ct);
+        foreach (var r in rpus)
+        {
+            units[r.Id] = r;
+        }
         return rpus.Select(r => new RpuDto(
             r.Id, r.PropertyId, r.RpuNumber, r.RpuType, r.Status, r.EffectivityDate, r.EndDate, r.PreviousRpuId, r.CreatedAt,
-            r.PinSuffix, UnitPin.Compose(pins[r.PropertyId], r.PinSuffix, separate.Contains(r.Id), temporary.GetValueOrDefault(r.Id)), separate.Contains(r.Id),
-            r.LandRpuId, r.HostRpuId)).ToList();
+            r.PinSuffix, UnitPin.Compose(pins[r.PropertyId], UnitPin.Parts(r, units), separate.Contains(r.Id), pinOptions.Value.Parentheses,
+                temporary.GetValueOrDefault(r.Id)), separate.Contains(r.Id),
+            r.LandRpuId, r.HostRpuId, r.IsLeasingProperty, r.FloorPrefix, r.FloorNumber, r.UnitNumber)).ToList();
     }
 }

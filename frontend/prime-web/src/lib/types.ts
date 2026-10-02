@@ -5,7 +5,7 @@
 export type RecordStatus = 'Active' | 'Inactive' | 'Cancelled' | 'Subdivided' | 'Consolidated' | 'Superseded';
 export type WorkflowStatus = 'Draft' | 'Submitted' | 'PendingReview' | 'Approved' | 'Rejected' | 'Posted' | 'Cancelled' | 'Voided';
 export type TaxpayerType = 'Individual' | 'Corporation' | 'Partnership' | 'Government' | 'Estate' | 'Association' | 'Other';
-export type RpuType = 'Land' | 'Building' | 'Machinery' | 'OtherImprovement';
+export type RpuType = 'Land' | 'Building' | 'Machinery' | 'OtherImprovement' | 'MineralRight';
 export type Taxability = 'Taxable' | 'Exempt';
 
 export interface PagedResult<T> {
@@ -81,6 +81,8 @@ export interface PropertyDto {
   surveyNumber: string | null;
   titleNumber: string | null;
   taxMapNumber: string | null;
+  /** The cadastral lot number printed on the LAM TMCR (records-and-forms.md Q16). */
+  cadastralNumber?: string | null;
   status: RecordStatus;
   createdAt: string;
   /** Descriptive fields (docs/analysis/mrpaao-forms-model.md §10). */
@@ -184,6 +186,12 @@ export interface CreateTaxpayerRequest {
   provinceId?: string | null;
   contactNumber?: string | null;
   email?: string | null;
+  sex?: Sex | null;
+}
+
+/** Corrects a taxpayer's contact and personal details; the reason goes to the audit log (records-and-forms.md §4.1). */
+export interface UpdateTaxpayerDetailsRequest {
+  tin: string | null; address: string | null; contactNumber: string | null; email: string | null; sex: Sex | null; reason: string;
 }
 
 export interface TaxpayerDto {
@@ -203,7 +211,11 @@ export interface TaxpayerDto {
   createdAt: string;
   /** Not a party to a property in your office's jurisdiction: name and TIN only (docs/analysis/province-wide-operation.md Q5). */
   limited?: boolean;
+  /** Individuals only; printed only when Forms:PrintOwnerSex is on (records-and-forms.md Q3). */
+  sex?: Sex | null;
 }
+
+export type Sex = 'Male' | 'Female';
 
 export interface TaxpayerSearchParams {
   searchTerm?: string;
@@ -234,6 +246,8 @@ export interface CreateParcelRequest {
   surveyNumber?: string | null;
   lotNumber?: string | null;
   blockNumber?: string | null;
+  /** Overrides the property's cadastral number (records-and-forms.md Q16). */
+  cadastralNumber?: string | null;
 }
 
 export interface ParcelDto {
@@ -252,6 +266,7 @@ export interface ParcelDto {
   surveyNumber: string | null;
   lotNumber: string | null;
   blockNumber: string | null;
+  cadastralNumber?: string | null;
   status: RecordStatus;
   createdAt: string;
   /** Concurrency token (PostgreSQL xmin); send back unchanged on updates. */
@@ -317,7 +332,7 @@ export interface TaxMapSheetDto {
   features: {
     type: 'Feature'; id: string; geometry: unknown;
     /** role "area": the sheet's own boundary; "unit": a labelled section or barangay. */
-    properties: { label: string; name: string | null; role: 'area' | 'unit'; source: string; sourceReference: string | null };
+    properties: { label: string; name: string | null; role: 'area' | 'unit' | 'disputed'; source: string; sourceReference: string | null };
   }[];
   /** What the sheet cannot show (no boundary, no index number). */
   missing: string[];
@@ -341,8 +356,13 @@ export interface CreateRpuRequest {
   previousRpuId?: string | null;
   /** The land unit a building, machinery or other improvement stands on. */
   landRpuId?: string | null;
-  /** The building a machinery unit is installed in. */
+  /** The building a machinery unit is installed in, or the leasing property a unit is part of. */
   hostRpuId?: string | null;
+  /** The LAM's structured unit PIN (identification-numbering.md §4.2). */
+  isLeasingProperty?: boolean;
+  floorPrefix?: string | null;
+  floorNumber?: number | null;
+  unitNumber?: number | null;
 }
 
 export interface RpuDto {
@@ -357,11 +377,15 @@ export interface RpuDto {
   createdAt: string;
   /** PIN postscript: buildings 1001…, machinery 2001… (MRPAAO p.42). */
   pinSuffix: number | null;
-  /** Property PIN plus postscript; the parcel number is parenthesised when the unit is owned apart from the land. */
+  /** Property PIN plus the unit's parts (building, leasing property, floor, unit, machine), per the configured parenthesis convention. */
   unitPin: string;
   ownedSeparately: boolean;
   landRpuId: string | null;
   hostRpuId: string | null;
+  isLeasingProperty: boolean;
+  floorPrefix: string | null;
+  floorNumber: number | null;
+  unitNumber: number | null;
 }
 
 // --- Tax Declaration -----------------------------------------------------------
@@ -728,6 +752,15 @@ export interface MachineryDto {
   dateInstalled: string | null;
   isInOperation: boolean;
   costItems: MachineryCostItemDto[];
+  /** Acquisition documents of the LAM machinery FAAS (records-and-forms.md Q14). */
+  documents?: MachineryDocumentsDto | null;
+}
+
+export interface MachineryDocumentsDto {
+  engineeringRegistrationNumber: string | null; engineeringRegistrationDate: string | null;
+  importPermitNumber: string | null; importPermitDate: string | null;
+  supplierName: string | null; supplierAddress: string | null;
+  receiptNumber: string | null; receiptDate: string | null;
 }
 
 /** An item of a machine's acquisition cost (LAM Bk III p.75); freight and insurance are part of the cost, insurance and freight. */
@@ -1235,6 +1268,8 @@ export interface ApprovalStepDto {
   signerOffice: ApprovalSigner;
   requiredRole: string | null;
   isFinalApproval: boolean;
+  /** Warn when the signer has no valid REA licence (records-and-forms.md Q10). */
+  requiresLicensedSignatory?: boolean;
 }
 
 export interface ApprovalChainDto extends ConfigurationHeader {
@@ -1255,7 +1290,7 @@ export interface CreateApprovalChainRequest {
   officeId?: string | null;
   steps: {
     sequence: number; stepCode: string; label: string; signatoryPosition?: string;
-    signerOffice?: ApprovalSigner; requiredRole?: string | null; isFinalApproval?: boolean;
+    signerOffice?: ApprovalSigner; requiredRole?: string | null; isFinalApproval?: boolean; requiresLicensedSignatory?: boolean;
   }[];
 }
 
@@ -1422,8 +1457,8 @@ export interface PropertyTransactionDto {
 export type NoticeReason = 'FirstAssessment' | 'AssessmentIncreased' | 'AssessmentDecreased'
   | 'DeclaredOwnerChanged' | 'OwnerAddressChanged' | 'LocationChanged';
 export type NoticeStatus = 'Draft' | 'Issued' | 'Served' | 'Cancelled';
-/** The three modes LGC §223 allows. Electronic service is not established by any source, so it is not offered. */
-export type NoticeServiceMode = 'Personal' | 'RegisteredMail' | 'ThroughPunongBarangay';
+/** The modes of LGC §223, and email to the declarant's address (LAM Annex I-L; records-and-forms.md Q11). */
+export type NoticeServiceMode = 'Personal' | 'RegisteredMail' | 'ThroughPunongBarangay' | 'Email';
 
 export const noticeReasonLabel: Record<NoticeReason, string> = {
   FirstAssessment: 'First assessment',
@@ -1450,6 +1485,7 @@ export const serviceModeLabel: Record<NoticeServiceMode, string> = {
   Personal: 'Personal delivery',
   RegisteredMail: 'Registered mail',
   ThroughPunongBarangay: 'Through the punong barangay',
+  Email: 'By email',
 };
 
 export interface NoticeDto {
@@ -1486,6 +1522,10 @@ export interface NoticeDto {
   addresseeTaxpayerId: string | null;
   /** One row per property assessment the notice gives (MRPAAO Att. 10). */
   items: NoticeItemDto[] | null;
+  /** The address an emailed notice went to. */
+  emailAddress?: string | null;
+  /** The date mailed or emailed (LAM proof of service). */
+  sentDate?: string | null;
 }
 
 /** A FAAS "Property Assessment" row (docs/analysis/mrpaao-forms-model.md §8.2). */
@@ -1590,7 +1630,11 @@ export interface AppraisalRecordDto {
   recordedAt: string;
   /** Date of entry in the Record of Assessment (when posted) and by whom. */
   recordEntry: { postedAt: string; postedBy: string | null } | null;
-  signatures: { label: string; name: string; position: string | null; signedAt: string }[];
+  signatures: {
+    label: string; name: string; position: string | null; signedAt: string; underDelegation?: string | null;
+    /** REA licence when signed, frozen; and whether a licensed-signatory step was signed without a valid one (records-and-forms.md Q10). */
+    licenceNumber?: string | null; licenceValidUntil?: string | null; signedWithoutValidLicence?: boolean;
+  }[];
   notices: { id: string; number: string | null; status: NoticeStatus; issuedAt: string | null; receivedDate: string | null; appealDeadline: string | null }[];
 }
 
@@ -1600,6 +1644,7 @@ export interface UpdatePropertyDescriptionRequest {
   street: string | null; sitio: string | null; lotNumber: string | null; blockNumber: string | null; surveyNumber: string | null;
   titleNumber: string | null; titleTypeId: string | null; titleDate: string | null; taxMapNumber: string | null;
   boundaryNorth: string | null; boundaryEast: string | null; boundarySouth: string | null; boundaryWest: string | null; reason: string;
+  cadastralNumber?: string | null;
 }
 
 export interface UpdateBuildingDescriptionRequest {
@@ -1615,6 +1660,9 @@ export interface AddBuildingMaterialRequest { structuralPartId: string; structur
 export interface UpdateMachineryDescriptionRequest {
   description: string | null; brand: string | null; model: string | null; serialNumber: string | null; capacity: number | null;
   capacityUnit: string | null; yearInstalled: number | null; yearOfInitialOperation: number | null; conversionFactor: number | null; reason: string;
+  engineeringRegistrationNumber?: string | null; engineeringRegistrationDate?: string | null; importPermitNumber?: string | null;
+  importPermitDate?: string | null; supplierName?: string | null; supplierAddress?: string | null; receiptNumber?: string | null;
+  receiptDate?: string | null;
 }
 
 export interface TransferTaxClearanceDto {
@@ -1826,4 +1874,33 @@ export interface CreateAdjustmentFactorRequest {
   smvId: string; code: string; name: string; percent: number; classificationId: string | null; description: string | null;
   legalBasis: string; effectiveDate: string; remarks: string | null;
   ruleKind: AdjustmentRuleKind; distanceReference: DistanceReference | null; standardDepth: number | null; rows: AdjustmentFactorRowRequest[];
+}
+
+// --- Independent appraisal (docs/analysis/valuation-foundation.md §4.7) ---
+
+export type IndependentAppraisalSubject = 'Land' | 'Building' | 'BuildingComponent' | 'Machinery';
+export type AppraisalApproach = 'Market' | 'Income' | 'Cost';
+export const appraisalApproaches: { value: AppraisalApproach; label: string }[] = [
+  { value: 'Market', label: 'Market approach' }, { value: 'Income', label: 'Income approach' }, { value: 'Cost', label: 'Cost approach' },
+];
+export interface IndependentAppraisalInputDto { sequence: number; name: string; value: number; unit: string | null }
+export interface IndependentAppraisalDto {
+  id: string; rpuId: string; subject: IndependentAppraisalSubject; subjectId: string; subjectLabel: string; approach: AppraisalApproach; value: number;
+  appraisedOn: string; basis: string; evidence: string; isCurrent: boolean; endReason: string | null; createdAt: string; inputs: IndependentAppraisalInputDto[];
+}
+export interface CreateIndependentAppraisalRequest {
+  rpuId: string; subject: IndependentAppraisalSubject; subjectId: string; approach: AppraisalApproach; value: number; appraisedOn: string;
+  basis: string; evidence: string; inputs: { name: string; value: number; unit: string | null }[];
+}
+
+// --- Back taxes (docs/analysis/valuation-foundation.md §4.8) ---
+
+export interface BackTaxRequest { rpuId: string; declaredFromYear: number; basis: string; initialAssessmentYear: number | null; transactionTypeId: string | null }
+export interface BackTaxPeriodDto {
+  sequence: number; startDate: string; endDate: string | null; smvReference: string | null; valuationId: string | null; assessmentId: string | null;
+  marketValue: number | null; assessedValue: number | null; assessmentStatus: WorkflowStatus | null;
+}
+export interface BackTaxRunDto {
+  id: string | null; rpuId: string; declaredFromYear: number; basis: string; initialAssessmentYear: number; yearsLimit: number; yearsLimitLegalBasis: string;
+  buildingRules: 'ByPeriod' | 'Current'; machineryRules: 'ByPeriod' | 'Current'; periods: BackTaxPeriodDto[]; createdAt: string | null;
 }

@@ -45,6 +45,8 @@ export function useDelegationActions() {
 
 export interface OfficeDto {
   id: string; code: string; name: string; kind: OfficeKind; lguName: string | null; headPosition: string | null; address: string | null; contact: string | null; status: RecordStatus;
+  /** The Sanggunian whose tax ordinance the office's TDs cite (records-and-forms.md Q8). */
+  sanggunianName?: string | null;
 }
 export interface OfficeJurisdictionDto {
   id: string; officeId: string; officeCode: string; municipalityId: string; municipalityName: string; municipalityPsgcCode: string;
@@ -57,14 +59,22 @@ export interface OfficeAssignmentDto {
   createdBy: string | null; createdAt: string; approvedBy: string | null; approvedAt: string | null;
 }
 export interface RoleDto { code: string; name: string }
-export interface UserSummaryDto { id: string; displayName: string; email: string; status: RecordStatus; officeCode: string | null; provinceWide: boolean; roles: string[] }
+export interface UserSummaryDto {
+  id: string; displayName: string; email: string; status: RecordStatus; officeCode: string | null; provinceWide: boolean; roles: string[];
+  /** Real Estate Appraiser licence printed with the signature (LAM Bk I p.9; records-and-forms.md Q10). */
+  reaLicenceNumber?: string | null; reaLicenceValidUntil?: string | null;
+}
+export interface UserLicenceInput { reaLicenceNumber: string | null; reaLicenceValidUntil: string | null; reason: string }
 export interface CurrentUserDto {
   userId: string | null; displayName: string | null; officeId: string | null; officeCode: string | null; officeName: string | null;
   officeKind: OfficeKind | null; assigned: boolean; provinceWide: boolean; roles: string[]; municipalityIds: string[] | null;
 }
 export interface DevUser { key: string; displayName: string; office: string; roles: string[] }
 
-export interface OfficeInput { code?: string; name: string; kind?: OfficeKind; lguName?: string | null; headPosition?: string | null; address?: string | null; contact?: string | null; status?: RecordStatus }
+export interface OfficeInput {
+  code?: string; name: string; kind?: OfficeKind; lguName?: string | null; headPosition?: string | null; address?: string | null; contact?: string | null;
+  status?: RecordStatus; sanggunianName?: string | null;
+}
 export interface JurisdictionInput { officeId: string; municipalityId: string; effectiveDate: string; legalBasis: string; remarks?: string | null }
 export interface AssignmentInput { appUserId: string; officeId: string | null; roles: string[]; effectiveDate: string; legalBasis: string; remarks?: string | null }
 
@@ -92,6 +102,13 @@ export function useCreateOffice() {
 export function useUpdateOffice() {
   const invalidate = useInvalidate();
   return useMutation({ mutationFn: ({ id, ...input }: OfficeInput & { id: string }) => apiPut<OfficeDto>(`/api/offices/${id}`, input), onSuccess: invalidate });
+}
+export function useUpdateUserLicence() {
+  const invalidate = useInvalidate();
+  return useMutation({
+    mutationFn: ({ id, ...input }: UserLicenceInput & { id: string }) => apiPut<UserSummaryDto>(`/api/users/${id}/licence`, input),
+    onSuccess: invalidate,
+  });
 }
 export function useCreateJurisdiction() {
   const invalidate = useInvalidate();

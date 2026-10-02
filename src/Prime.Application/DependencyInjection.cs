@@ -63,6 +63,11 @@ public static class DependencyInjection
         services.AddScoped<Features.Smv.IAdjustmentFactorService, Features.Smv.AdjustmentFactorService>();
         services.AddScoped<Features.Smv.IBuildingCostTableService, Features.Smv.BuildingCostTableService>();
         services.AddScoped<Features.Valuation.IMachineryIndexService, Features.Valuation.MachineryIndexService>();
+        services.AddScoped<Features.Valuation.IIndependentAppraisalService, Features.Valuation.IndependentAppraisalService>();
+        services.AddScoped<Features.Assessments.IBackTaxService, Features.Assessments.BackTaxService>();
+        services.AddScoped<Features.PropertyIdentification.IBarangayPartService, Features.PropertyIdentification.BarangayPartService>();
+        services.AddScoped<Features.PropertyIdentification.ITerritorialChangeService, Features.PropertyIdentification.TerritorialChangeService>();
+        services.AddScoped<Features.PropertyIdentification.TerritorialChangeJobRunner>();
         services.AddScoped<Features.Descriptions.IDescriptionService, Features.Descriptions.DescriptionService>();
         services.AddScoped<IFormDataProvider, AppraisalRecordFormDataProvider>();
         services.AddScoped<IFormDataProvider, StatementOfAccountFormDataProvider>();
