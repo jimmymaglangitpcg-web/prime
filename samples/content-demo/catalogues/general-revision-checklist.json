@@ -1,0 +1,34 @@
+[
+  {
+    "code": "DEMO-GR-01",
+    "sequence": 1,
+    "title": "DEMO step: the revision is authorised",
+    "description": "DEMO step with an invented title; the office's checklist is loaded from its own content pack.",
+    "legalBasis": "DEMO — not the LAM's text",
+    "effectiveDate": "2020-01-01"
+  },
+  {
+    "code": "DEMO-GR-02",
+    "sequence": 2,
+    "title": "DEMO step: every unit valued",
+    "gate": "Valued",
+    "legalBasis": "DEMO — not the LAM's text",
+    "effectiveDate": "2020-01-01"
+  },
+  {
+    "code": "DEMO-GR-03",
+    "sequence": 3,
+    "title": "DEMO step: notices served",
+    "gate": "NoticesServed",
+    "legalBasis": "DEMO — not the LAM's text",
+    "effectiveDate": "2020-01-01"
+  },
+  {
+    "code": "DEMO-GR-04",
+    "sequence": 4,
+    "title": "DEMO step: roll prepared",
+    "gate": "AssessmentRollRun",
+    "legalBasis": "DEMO — not the LAM's text",
+    "effectiveDate": "2020-01-01"
+  }
+]

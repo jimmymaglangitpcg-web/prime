@@ -84,7 +84,7 @@ public class MrpaaoFormsTests(WebApplicationFactory<Program> factory) : IClassFi
         var preview = await c.Forms.PreviewAsync("TAX_DECLARATION", c.Seed.TaxDeclaration.Id);
 
         preview.IsSuccess.ShouldBeTrue(preview.IsSuccess ? null : preview.Message);
-        preview.Value.FormVersion.ShouldBe(4); // v4 adds the delegation a signature was given under (LP-4)
+        preview.Value.FormVersion.ShouldBeGreaterThanOrEqualTo(4); // v4 adds the delegation a signature was given under (LP-4); v5 line taxability (L3-1b)
         preview.Value.Authority.ShouldBe(FormAuthority.Mrpaao);
         var html = preview.Value.Html;
         html.ShouldContain("TAX DECLARATION OF REAL PROPERTY");

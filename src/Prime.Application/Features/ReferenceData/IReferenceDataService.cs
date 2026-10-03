@@ -29,6 +29,7 @@ public interface IReferenceDataService
     Task<IReadOnlyList<LookupDto>> GetStructuralPartsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<StructuralMaterialDto>> GetStructuralMaterialsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LookupDto>> GetAnnotationTypesAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<LookupDto>> GetConveyanceModesAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>A material of the structural checklist, with the structure part it belongs to.</summary>

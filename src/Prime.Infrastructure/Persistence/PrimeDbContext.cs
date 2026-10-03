@@ -69,6 +69,10 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
     public DbSet<Prime.Domain.Entities.Registers.AssessmentRollSubmission> AssessmentRollSubmissions => Set<Prime.Domain.Entities.Registers.AssessmentRollSubmission>();
     public DbSet<Prime.Domain.Entities.Registers.AssessmentRollSubmissionItem> AssessmentRollSubmissionItems => Set<Prime.Domain.Entities.Registers.AssessmentRollSubmissionItem>();
     public DbSet<Prime.Domain.Entities.Registers.AssessmentRollEntry> AssessmentRollEntries => Set<Prime.Domain.Entities.Registers.AssessmentRollEntry>();
+    public DbSet<Prime.Domain.Entities.Exemptions.ExemptionType> ExemptionTypes => Set<Prime.Domain.Entities.Exemptions.ExemptionType>();
+    public DbSet<Prime.Domain.Entities.AssessmentLevelCeiling> AssessmentLevelCeilings => Set<Prime.Domain.Entities.AssessmentLevelCeiling>();
+    public DbSet<Prime.Domain.Entities.Exemptions.PropertyExemption> PropertyExemptions => Set<Prime.Domain.Entities.Exemptions.PropertyExemption>();
+    public DbSet<Prime.Domain.Entities.Exemptions.ExemptionEvidence> ExemptionEvidence => Set<Prime.Domain.Entities.Exemptions.ExemptionEvidence>();
     public DbSet<Prime.Domain.Entities.SwornStatements.SwornStatement> SwornStatements => Set<Prime.Domain.Entities.SwornStatements.SwornStatement>();
     public DbSet<Prime.Domain.Entities.SwornStatements.SwornStatementItem> SwornStatementItems => Set<Prime.Domain.Entities.SwornStatements.SwornStatementItem>();
     public DbSet<LandImprovement> LandImprovements => Set<LandImprovement>();
@@ -126,6 +130,13 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
     public DbSet<PropertyTransactionTdCancellation> PropertyTransactionTdCancellations => Set<PropertyTransactionTdCancellation>();
     public DbSet<PropertyTransactionProperty> PropertyTransactionProperties => Set<PropertyTransactionProperty>();
     public DbSet<NoticeOfAssessment> NoticesOfAssessment => Set<NoticeOfAssessment>();
+    public DbSet<NoticeOfCancellation> NoticesOfCancellation => Set<NoticeOfCancellation>();
+    public DbSet<Prime.Domain.Entities.Transactions.DiscoverySummons> DiscoverySummonses => Set<Prime.Domain.Entities.Transactions.DiscoverySummons>();
+    public DbSet<Prime.Domain.Entities.MarketData.MarketTransaction> MarketTransactions => Set<Prime.Domain.Entities.MarketData.MarketTransaction>();
+    public DbSet<Prime.Domain.Entities.MarketData.BuildingPermitAbstract> BuildingPermitAbstracts => Set<Prime.Domain.Entities.MarketData.BuildingPermitAbstract>();
+    public DbSet<Prime.Domain.Entities.MarketData.MachineryRegistrationAbstract> MachineryRegistrationAbstracts => Set<Prime.Domain.Entities.MarketData.MachineryRegistrationAbstract>();
+    public DbSet<Prime.Domain.Entities.MarketData.MarketDataReportRun> MarketDataReportRuns => Set<Prime.Domain.Entities.MarketData.MarketDataReportRun>();
+    public DbSet<ConveyanceMode> ConveyanceModes => Set<ConveyanceMode>();
     public DbSet<NoticeOfAssessmentItem> NoticeOfAssessmentItems => Set<NoticeOfAssessmentItem>();
     public DbSet<BarangayBoundary> BarangayBoundaries => Set<BarangayBoundary>();
     public DbSet<SectionBoundary> SectionBoundaries => Set<SectionBoundary>();
@@ -149,6 +160,13 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
     public DbSet<Assessment> Assessments => Set<Assessment>();
     public DbSet<AssessmentLine> AssessmentLines => Set<AssessmentLine>();
     public DbSet<GeneralRevisionJob> GeneralRevisionJobs => Set<GeneralRevisionJob>();
+    public DbSet<GeneralRevisionProgramme> GeneralRevisionProgrammes => Set<GeneralRevisionProgramme>();
+    public DbSet<GeneralRevisionScope> GeneralRevisionScopes => Set<GeneralRevisionScope>();
+    public DbSet<GeneralRevisionSuspension> GeneralRevisionSuspensions => Set<GeneralRevisionSuspension>();
+    public DbSet<GeneralRevisionItem> GeneralRevisionItems => Set<GeneralRevisionItem>();
+    public DbSet<GeneralRevisionRunIssue> GeneralRevisionRunIssues => Set<GeneralRevisionRunIssue>();
+    public DbSet<GeneralRevisionChecklistStepDefinition> GeneralRevisionChecklistStepDefinitions => Set<GeneralRevisionChecklistStepDefinition>();
+    public DbSet<GeneralRevisionChecklistStep> GeneralRevisionChecklistSteps => Set<GeneralRevisionChecklistStep>();
 
     // Identity / authorization (CLAUDE.md §47; Supabase Auth owns credentials)
     public DbSet<AppUser> AppUsers => Set<AppUser>();
@@ -204,6 +222,16 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
         modelBuilder.Entity<Assessment>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
         modelBuilder.Entity<TaxDeclaration>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
         modelBuilder.Entity<NoticeOfAssessment>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        modelBuilder.Entity<NoticeOfCancellation>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
+        // General revision items follow their unit's city/municipality (smv-preparation-general-revision.md §4.6).
+        modelBuilder.Entity<GeneralRevisionItem>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
+        // Market data (smv-preparation-general-revision.md §4.1): prices and parties stay within the office's jurisdiction.
+        modelBuilder.Entity<Prime.Domain.Entities.MarketData.MarketTransaction>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
+        modelBuilder.Entity<Prime.Domain.Entities.MarketData.BuildingPermitAbstract>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
+        modelBuilder.Entity<Prime.Domain.Entities.MarketData.MachineryRegistrationAbstract>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
+        modelBuilder.Entity<Prime.Domain.Entities.MarketData.MarketDataReportRun>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
+        modelBuilder.Entity<Prime.Domain.Entities.Transactions.DiscoverySummons>().HasQueryFilter(x => !JurisdictionRestricted
+            || JurisdictionMunicipalities.Contains(x.PropertyTransaction!.Property!.MunicipalityId));
         // No navigation to its property: look the property up (a notice's items belong to its own municipality).
         modelBuilder.Entity<NoticeOfAssessmentItem>().HasQueryFilter(x => !JurisdictionRestricted
             || Set<PropertyEntity>().Any(p => p.Id == x.PropertyId && JurisdictionMunicipalities.Contains(p.MunicipalityId)));
@@ -216,5 +244,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
             .HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
         modelBuilder.Entity<Prime.Domain.Entities.Registers.AssessmentRollEntry>()
             .HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.TaxDeclaration!.Property!.MunicipalityId));
+        modelBuilder.Entity<Prime.Domain.Entities.Exemptions.PropertyExemption>()
+            .HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
     }
 }

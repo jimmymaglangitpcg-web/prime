@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Features.Exemptions;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
 
@@ -28,6 +29,11 @@ internal static class TaxDeclarationApproval
             return Result.Failure<TaxDeclaration?>("TAX_DECLARATION_ASSESSMENT_REQUIRED",
                 $"TD {td.TaxDeclarationNumber} declares no assessment; approve an assessment for its RPU first.");
         }
+        // A TD declaring an assessment is as taxable as its lines (assessment-listing-exemptions.md Q2).
+        if (td.AssessmentId is { } assessmentId && await ExemptionTaxability.OfAssessmentAsync(db, assessmentId, ct) is { } taxability)
+        {
+            td.Taxability = taxability;
+        }
         var current = await db.TaxDeclarations.FirstOrDefaultAsync(
             x => x.RpuId == td.RpuId && x.Id != td.Id && x.Status == WorkflowStatus.Approved, ct);
         if (current is not null && current.Id != td.PreviousTaxDeclarationId)
@@ -38,10 +44,20 @@ internal static class TaxDeclarationApproval
         var previous = td.PreviousTaxDeclarationId is { } previousId
             ? await db.TaxDeclarations.FirstOrDefaultAsync(x => x.Id == previousId, ct)
             : null;
+        if (td.RestoresTaxDeclarationId is { } restoredId
+            && await db.TaxDeclarations.AnyAsync(x => x.Id != td.Id && x.RestoresTaxDeclarationId == restoredId && x.Status == WorkflowStatus.Approved, ct))
+        {
+            return Result.Failure<TaxDeclaration?>("TAX_DECLARATION_ALREADY_RESTORED",
+                $"Another approved TD already restores the declaration TD {td.TaxDeclarationNumber} names.");
+        }
         if (previous is { Status: WorkflowStatus.Cancelled or WorkflowStatus.Voided })
         {
             return Result.Failure<TaxDeclaration?>("PREVIOUS_TAX_DECLARATION_CANCELLED",
                 $"TD {previous.TaxDeclarationNumber} was cancelled after this TD was drafted; this TD can no longer replace it.");
+        }
+        if (previous is not null && await CancellationGuard.BlockerAsync(db, [previous.Id], ct) is { } blocked)
+        {
+            return Result.Failure<TaxDeclaration?>(CancellationGuard.Code, blocked);
         }
         return Result.Success(previous);
     }
@@ -51,20 +67,24 @@ internal static class TaxDeclarationApproval
     /// index is not deferrable), then approves <paramref name="td"/> and saves.
     /// </summary>
     public static async Task ApplyAsync(IApplicationDbContext db, TaxDeclaration td, TaxDeclaration? previous, Guid? userId,
-        DateTimeOffset now, CancellationToken ct)
+        DateTimeOffset now, DateOnly today, CancellationToken ct)
     {
         if (previous is not null)
         {
             Cancel(previous, userId, now, $"Cancelled by TD No. {td.TaxDeclarationNumber}.");
             previous.SupersededByTaxDeclarationId = td.Id;
+            // A reassessment cancelling an assessment declared in a previous owner's name tells that owner (Q11).
+            await Notices.NoticeOfCancellationService.PreviousOwnersAsync(db, previous, td, today, ct);
             await db.SaveChangesAsync(ct);
         }
         td.Status = WorkflowStatus.Approved;
         td.ApprovedBy = userId;
         td.ApprovedAt = now;
-        if (previous is not null)
+        // A restored declaration's unlifted annotations come back with it (§4.3).
+        var sources = new[] { previous?.Id, td.RestoresTaxDeclarationId }.OfType<Guid>().ToList();
+        if (sources.Count > 0)
         {
-            await CarryAnnotationsAsync(db, [previous.Id], td.Id, ct);
+            await CarryAnnotationsAsync(db, sources, td.Id, ct);
         }
         await db.SaveChangesAsync(ct);
     }

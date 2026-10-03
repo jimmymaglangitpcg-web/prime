@@ -37,7 +37,7 @@ export function PrintFormButton({ formCode, subjectId, issuable, label = 'Print'
     <>
       {toastContext}
       <Button size="small" icon={<PrinterOutlined />} loading={issue.isPending} onClick={handleClick}>
-        {issuable ? label : `Preview`}
+        {issuable ? label : label === 'Print' ? 'Preview' : `Preview: ${label}`}
       </Button>
     </>
   );

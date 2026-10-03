@@ -68,7 +68,8 @@ public sealed record AppraisalValuationDto(
 /// <summary>One FAAS "Property Assessment" row, with the level row it used (frozen percent, bracket, ordinance).</summary>
 public sealed record AppraisalAssessmentLineDto(
     int Sequence, string Classification, string ActualUse, string PropertyType, decimal MarketValue, decimal AssessmentLevelPercent,
-    decimal LevelLowerValue, decimal? LevelUpperValue, string LevelOrdinanceNumber, DateOnly? LevelOrdinanceDate, decimal AssessedValue);
+    decimal LevelLowerValue, decimal? LevelUpperValue, string LevelOrdinanceNumber, DateOnly? LevelOrdinanceDate, decimal AssessedValue,
+    Taxability Taxability = Taxability.Taxable, string? LegalBasis = null, string? TaxabilityNote = null);
 
 /// <summary>
 /// The assessment totals. The single-row fields (classification … level
@@ -140,6 +141,7 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
             .Include(x => x.Lines).ThenInclude(l => l.ActualUse)
             .Include(x => x.Lines).ThenInclude(l => l.PropertyType)
             .Include(x => x.Lines).ThenInclude(l => l.AssessmentLevel)
+            .Include(x => x.Lines).ThenInclude(l => l.PropertyExemption).ThenInclude(e => e!.ExemptionType)
             .FirstOrDefaultAsync(x => x.Id == assessmentId, ct);
         if (a is null)
         {
@@ -248,7 +250,8 @@ public sealed class AppraisalRecordService(IApplicationDbContext db, IClock cloc
                 a.AssessedValue, a.RevisionReference, a.Remarks,
                 assessmentLines.Select(l => new AppraisalAssessmentLineDto(l.Sequence, l.Classification!.Name, l.ActualUse!.Name, l.PropertyType!.Name,
                     l.MarketValue, l.AssessmentPercentage, l.AssessmentLevel!.LowerValue, l.AssessmentLevel.UpperValue,
-                    l.AssessmentLevel.OrdinanceNumber, l.AssessmentLevel.OrdinanceDate, l.AssessedValue)).ToList()),
+                    l.AssessmentLevel.OrdinanceNumber, l.AssessmentLevel.OrdinanceDate, l.AssessedValue,
+                    l.Taxability, l.Taxability == Taxability.Exempt ? l.PropertyExemption?.ExemptionType?.LegalBasis : null, l.TaxabilityNote)).ToList()),
             previous is null ? null : new AppraisalPreviousDto(previous.Id, previous.FaasNumber, previous.AssessmentYear, previous.EffectiveDate,
                 previous.MarketValue, previous.AssessedValue, a.AssessedValue - previous.AssessedValue),
             a.CreatedBy is { } creator ? userNames.GetValueOrDefault(creator) ?? "(unknown user)" : null, a.CreatedAt, signatures,

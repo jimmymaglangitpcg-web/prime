@@ -94,6 +94,20 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(Prime.Application.Features.RealPropertyUnits.UnitPinOptions.SectionName))
             .Validate(o => o.SuffixStart.Values.All(v => v > 0), "UnitPin:SuffixStart values must be positive.")
             .ValidateOnStart();
+        services.AddOptions<Prime.Application.Features.Exemptions.ExemptionsOptions>()
+            .Bind(configuration.GetSection(Prime.Application.Features.Exemptions.ExemptionsOptions.SectionName))
+            .Validate(o => o.ProofPeriodDays > 0, "Exemptions:ProofPeriodDays must be positive.")
+            .ValidateOnStart();
+        services.AddOptions<Prime.Application.Features.GeneralRevision.GeneralRevisionOptions>()
+            .Bind(configuration.GetSection(Prime.Application.Features.GeneralRevision.GeneralRevisionOptions.SectionName))
+            .Validate(o => o.CalamitySuspensionDays > 0, "GeneralRevision:CalamitySuspensionDays must be positive.")
+            .Validate(o => o.RollWaitDays >= 0, "GeneralRevision:RollWaitDays cannot be negative.")
+            .ValidateOnStart();
+        services.AddOptions<Prime.Application.Features.Transactions.DiscoveryOptions>()
+            .Bind(configuration.GetSection(Prime.Application.Features.Transactions.DiscoveryOptions.SectionName))
+            .Validate(o => o.SummonsPeriodDays > 0 && !string.IsNullOrWhiteSpace(o.SummonsLegalBasis),
+                "Discovery:SummonsPeriodDays must be positive and Discovery:SummonsLegalBasis given.")
+            .ValidateOnStart();
         services.AddOptions<Prime.Application.Features.Registers.RegistersOptions>()
             .Bind(configuration.GetSection(Prime.Application.Features.Registers.RegistersOptions.SectionName))
             .Validate(o => o.AssessmentRollRowsPerPage >= 0, "Registers:AssessmentRollRowsPerPage cannot be negative.")

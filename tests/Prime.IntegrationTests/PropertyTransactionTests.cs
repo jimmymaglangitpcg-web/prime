@@ -145,6 +145,39 @@ public class PropertyTransactionTests(WebApplicationFactory<Program> factory) : 
         bought.StartedByTransactionId.ShouldBe(t.Id);
     }
 
+    /// <summary>L6-1 (smv-preparation-general-revision.md Q3): a transfer with the deed's consideration leaves an unreviewed market transaction.</summary>
+    [Fact]
+    public async Task Transfer_WithConsideration_PrefillsAnUnreviewedMarketTransaction_Once()
+    {
+        var (c, tx) = await BeginAsync();
+        await using var _ = tx;
+        var type = await ApprovedTypeAsync(c, PropertyTransactionKind.Transfer);
+        var (buyer, ownershipType) = await PartiesAsync(c);
+        c.User.AppUserId = c.A.Id;
+        var t = (await c.Tx.OpenAsync(new OpenTransactionRequest(type.Id, c.Seed.PropertyId, new DateOnly(2026, 7, 1), "DEMO sale",
+            [new NewPartyRequest(PropertyPartyRole.Owner, buyer.Id, ownershipType.Id, 100m)]))).Value;
+        (await c.Tds.CreateAsync(Td(c, c.Seed.TaxDeclaration.Id, t.Id))).IsSuccess.ShouldBeTrue();
+        var set = await c.Services.GetRequiredService<Application.Features.Descriptions.IDescriptionService>().SetTransferTaxClearanceAsync(t.Id,
+            new Application.Features.Descriptions.SetTransferTaxClearanceRequest("CAR-DEMO-9", null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, Consideration: 1_250_000m));
+        set.IsSuccess.ShouldBeTrue(set.IsSuccess ? null : set.Message);
+        (await c.Tx.SubmitAsync(t.Id)).IsSuccess.ShouldBeTrue();
+        c.User.AppUserId = c.B.Id;
+        var approved = await c.Tx.ApproveAsync(t.Id);
+        approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
+
+        var record = await c.Db.MarketTransactions.SingleAsync(x => x.PropertyTransactionId == t.Id);
+        record.Source.ShouldBe(MarketDataSource.TransferDeed);
+        record.Review.ShouldBe(MarketDataReview.Unreviewed);
+        record.Consideration.ShouldBe(1_250_000m);
+        record.ConveysLand.ShouldBeTrue();
+        record.PropertyId.ShouldBe(c.Seed.PropertyId);
+        record.DocumentReference.ShouldBe("CAR CAR-DEMO-9");
+        record.GrantorNames.ShouldNotBeNull().ShouldContain("DEMO_Seller");
+        record.GranteeNames.ShouldNotBeNull().ShouldContain("DEMO_Buyer");
+        record.TransactionDate.ShouldBe(new DateOnly(2026, 7, 1));
+    }
+
     [Fact]
     public async Task Transfer_WithSharesNotTotalling100_CannotBeSubmitted()
     {

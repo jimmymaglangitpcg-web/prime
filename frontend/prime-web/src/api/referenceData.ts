@@ -53,6 +53,7 @@ export const useTitleTypes = () => useLookup('title-types');
 export const usePropertyTypes = () => useLookup('property-types');
 export const useStructuralParts = () => useLookup('structural-parts');
 export const useTaxTypes = () => useLookup('tax-types');
+export const useConveyanceModes = () => useLookup('conveyance-modes');
 
 export function useStructuralMaterials() {
   return useQuery({

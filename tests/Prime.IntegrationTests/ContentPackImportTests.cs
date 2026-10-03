@@ -88,13 +88,14 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
         var record = result.Import.ShouldNotBeNull();
         // 1 province, 2 towns, 4 barangays, 2 classifications, 1 sub-class, 1 actual use, 2 parts, 2 materials,
         // 4 draft versions, 1 office with 2 draft jurisdictions, a draft SMV with 2 unit values, 2 factors and 1 level, 2 barangay boundaries,
-        // 1 structural type, 1 building kind, 1 component type, and the SMV's construction cost, extra-item cost and depreciation table (L1-5), 2 exchange rates and 1 price index (L1-6)
-        record.CreatedCount.ShouldBe(39);
+        // 1 structural type, 1 building kind, 1 component type, and the SMV's construction cost, extra-item cost and depreciation table (L1-5), 2 exchange rates and 1 price index (L1-6),
+        // 2 draft exemption types (L3-1a), 1 draft assessment-level ceiling (L3-2), 2 conveyance modes (L6-1), 4 draft checklist steps (L6-6c)
+        record.CreatedCount.ShouldBe(48);
         record.ChangedCount.ShouldBe(0);
         record.ImportedBy.ShouldBe(c.Importer.Id);
         record.ImportedByName.ShouldBe("DEMO Importer");
         record.Fingerprint.ShouldBe(preview.Fingerprint);
-        record.Files.Count.ShouldBe(26);
+        record.Files.Count.ShouldBe(30); // + exemption-types (L3-1a), assessment-level-ceilings (L3-2), conveyance-modes (L6-1), general-revision-checklist (L6-6c)
 
         var province = await c.Db.Provinces.SingleAsync(x => x.PsgcCode == "9900000000");
         province.PinIndexNumber.ShouldBe("998");
@@ -126,7 +127,7 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
         (table.Reading, table.MinimumRemainingPercent, table.Rows.Count, table.Status).ShouldBe((DepreciationReading.YearlyWithinBand, 20m, 2, WorkflowStatus.Draft));
 
         var items = (await c.Service.ListImportItemsAsync(record.Id, new PagedRequest { PageSize = 100 })).Value;
-        items.TotalCount.ShouldBe(39);
+        items.TotalCount.ShouldBe(48);
         items.Items.ShouldAllBe(i => i.Action == ContentImportAction.Created && i.Source.Length > 0 && i.Line >= 1);
         items.Items.Single(i => i.Key == "9900200001").Source.ShouldBe("DEMO data (row-level source)");
         items.Items.Single(i => i.Key == "9900200001").EntityId.ShouldBe((await c.Db.Barangays.SingleAsync(x => x.PsgcCode == "9900200001")).Id);

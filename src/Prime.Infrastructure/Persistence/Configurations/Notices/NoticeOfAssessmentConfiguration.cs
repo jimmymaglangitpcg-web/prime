@@ -68,3 +68,39 @@ public sealed class NoticeOfAssessmentItemConfiguration : IEntityTypeConfigurati
     }
 }
 
+
+public sealed class NoticeOfCancellationConfiguration : IEntityTypeConfiguration<NoticeOfCancellation>
+{
+    public void Configure(EntityTypeBuilder<NoticeOfCancellation> builder)
+    {
+        builder.ToTable("NoticesOfCancellation", t =>
+        {
+            t.HasCheckConstraint("CK_NoticesOfCancellation_Issued", "(\"Status\" IN ('Issued', 'Served')) <= (\"IssuedAt\" IS NOT NULL)");
+            t.HasCheckConstraint("CK_NoticesOfCancellation_Served",
+                "(\"Status\" = 'Served') = (\"ReceivedDate\" IS NOT NULL AND \"ServiceMode\" IS NOT NULL AND \"ProofReference\" IS NOT NULL)");
+            t.HasCheckConstraint("CK_NoticesOfCancellation_Email", "(\"ServiceMode\" = 'Email') <= (\"EmailAddress\" IS NOT NULL)");
+            t.HasCheckConstraint("CK_NoticesOfCancellation_Cancelled", "(\"Status\" = 'Cancelled') = (\"CancelledAt\" IS NOT NULL)");
+        });
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.TaxDeclarationNumber).HasMaxLength(50).IsRequired();
+        builder.Property(x => x.ReplacedByTaxDeclarationNumber).HasMaxLength(50);
+        builder.Property(x => x.Ground).HasConversion<string>().HasMaxLength(30);
+        builder.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
+        builder.Property(x => x.NoticeNumber).HasMaxLength(100);
+        builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.ServiceMode).HasConversion<string>().HasMaxLength(30);
+        builder.Property(x => x.AddresseeNames).HasMaxLength(2000).IsRequired();
+        builder.Property(x => x.AddresseeAddress).HasMaxLength(1000);
+        builder.Property(x => x.ServedTo).HasMaxLength(300);
+        builder.Property(x => x.EmailAddress).HasMaxLength(320);
+        builder.Property(x => x.ProofReference).HasMaxLength(200);
+        builder.Property(x => x.ServiceNotes).HasMaxLength(1000);
+        builder.Property(x => x.CancellationReason).HasMaxLength(1000);
+        builder.HasOne(x => x.Property).WithMany().HasForeignKey(x => x.PropertyId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.TaxDeclaration).WithMany().HasForeignKey(x => x.TaxDeclarationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<TaxDeclaration>().WithMany().HasForeignKey(x => x.ReplacedByTaxDeclarationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Prime.Domain.Entities.Transactions.PropertyTransaction>().WithMany().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => new { x.PropertyId, x.Status });
+        builder.HasIndex(x => x.TaxDeclarationId);
+    }
+}

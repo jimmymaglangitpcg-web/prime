@@ -8,6 +8,7 @@ import { BackTaxModal } from './BackTaxModal';
 import { ApiRequestError } from '../../../lib/apiClient';
 import { formatMoney } from '../../../lib/format';
 import type { AppraisalRecordDto, AssessmentSummaryDto, WorkflowStatus } from '../../../lib/types';
+import { TaxabilityTag } from '../../../components/TaxabilityTag';
 
 const statusColor: Partial<Record<WorkflowStatus, string>> = {
   PendingReview: 'gold', Approved: 'green', Posted: 'green', Rejected: 'red', Cancelled: 'red', Voided: 'red',
@@ -66,6 +67,13 @@ export function AssessmentsForRpu({ rpuId }: { rpuId: string }) {
               if (!previous) return '—';
               const d = a.assessedValue - previous.assessedValue;
               return <Tag color={d > 0 ? 'orange' : d < 0 ? 'blue' : 'default'}>{d > 0 ? '+' : ''}{formatMoney(d)}</Tag>;
+            },
+          },
+          {
+            // The lines' taxability (L3-1b): partly exempt when they differ.
+            title: 'Taxability', render: (_, a) => {
+              const kinds = new Set(a.lines.map((l) => l.taxability));
+              return kinds.size === 0 ? '—' : <TaxabilityTag value={kinds.size > 1 ? 'PartlyExempt' : a.lines[0].taxability} />;
             },
           },
           { title: 'Status', dataIndex: 'status', render: statusTag },
@@ -277,6 +285,7 @@ function AppraisalRecordView({ r }: { r: AppraisalRecordDto }) {
             render: (_, l) => `${plain.format(l.assessmentLevelPercent)}% (${formatMoney(l.levelLowerValue)} – ${l.levelUpperValue !== null ? formatMoney(l.levelUpperValue) : 'up'}; Ord. ${l.levelOrdinanceNumber})`,
           },
           { title: 'Assessed value', dataIndex: 'assessedValue', align: 'right', render: formatMoney },
+          { title: 'Taxability', render: (_, l) => <TaxabilityTag value={l.taxability} legalBasis={l.legalBasis} note={l.taxabilityNote} /> },
         ]}
         summary={() => r.assessment.lines.length > 1 && (
           <Table.Summary.Row>
@@ -284,6 +293,7 @@ function AppraisalRecordView({ r }: { r: AppraisalRecordDto }) {
             <Table.Summary.Cell index={1} align="right"><strong>{formatMoney(r.assessment.marketValue)}</strong></Table.Summary.Cell>
             <Table.Summary.Cell index={2} />
             <Table.Summary.Cell index={3} align="right"><strong>{formatMoney(r.assessment.assessedValue)}</strong></Table.Summary.Cell>
+            <Table.Summary.Cell index={4} />
           </Table.Summary.Row>
         )} />
       <Descriptions size="small" bordered column={{ xs: 1, md: 2 }}>

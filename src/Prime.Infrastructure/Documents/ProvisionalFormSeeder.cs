@@ -40,20 +40,33 @@ public sealed class ProvisionalFormSeeder(IServiceScopeFactory scopes, ILogger<P
     [
         ("TAX_BILL", 1, "Real Property Tax Bill", FormSubjectType.TaxBill, FormAuthority.PrimeProvisional, "PRIME provisional template"),
         // v4 (and FAAS v2): signatures show the delegation they were given under (docs/analysis/province-wide-operation.md §3.4).
-        ("TAX_DECLARATION", 4, "Tax Declaration of Real Property", FormSubjectType.TaxDeclaration, FormAuthority.Mrpaao, "MRPAAO Attachment 4 (p.236)"),
+        // v5 (and FAAS v3): each assessment row says whether it is exempt and on what basis; a partly exempt TD ticks both
+        // boxes (docs/analysis/assessment-listing-exemptions.md Q2).
+        ("TAX_DECLARATION", 5, "Tax Declaration of Real Property", FormSubjectType.TaxDeclaration, FormAuthority.Mrpaao, "MRPAAO Attachment 4 (p.236)"),
         ("NOTICE_OF_ASSESSMENT", 2, "Notice of Assessment", FormSubjectType.NoticeOfAssessment, FormAuthority.Mrpaao, "MRPAAO Attachment 10 (p.242)"),
         ("FAAS", 1, "Field Appraisal and Assessment Sheet", FormSubjectType.Assessment, FormAuthority.PrimeProvisional, "PRIME provisional template"),
         ("STATEMENT_OF_ACCOUNT", 2, "Statement of Account — Real Property Tax", FormSubjectType.StatementOfAccount, FormAuthority.PrimeProvisional, "PRIME provisional template"),
         ("OFFICIAL_RECEIPT", 1, "Official Receipt — Real Property Tax", FormSubjectType.Payment, FormAuthority.PrimeProvisional, "PRIME provisional template; eOR minimum content per DOF DO 054-2024 §7.1"),
-        ("FAAS_LAND", 2, "Real Property Field Appraisal & Assessment Sheet — Land / Other Improvements", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 1 (p.230–231)"),
-        ("FAAS_BUILDING", 2, "Real Property Field Appraisal & Assessment Sheet — Building & Other Improvements", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 2 (p.232–233)"),
-        ("FAAS_MACHINERY", 2, "Real Property Field Appraisal & Assessment Sheet — Machinery", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 3 (p.234–235)"),
+        ("FAAS_LAND", 3, "Real Property Field Appraisal & Assessment Sheet — Land / Other Improvements", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 1 (p.230–231)"),
+        ("FAAS_BUILDING", 3, "Real Property Field Appraisal & Assessment Sheet — Building & Other Improvements", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 2 (p.232–233)"),
+        ("FAAS_MACHINERY", 3, "Real Property Field Appraisal & Assessment Sheet — Machinery", FormSubjectType.Faas, FormAuthority.Mrpaao, "MRPAAO Attachment 3 (p.234–235)"),
         ("TMCR", 2, "Tax Map Control Roll", FormSubjectType.Register, FormAuthority.Mrpaao, "MRPAAO Attachment 5 (p.158–159); Ch. II Figure 10 (p.70)"),
         ("PRE_TMCR", 2, "Pre-Tax Map Control Roll", FormSubjectType.Register, FormAuthority.Mrpaao, "MRPAAO Ch. II Figure 3 (p.54)"),
         ("AR_TAXABLE", 1, "Assessment Roll — Taxable Properties", FormSubjectType.Register, FormAuthority.Mrpaao, "MRPAAO Attachment 6 (p.160–161)"),
         ("AR_EXEMPT", 1, "Assessment Roll — Exempt Properties", FormSubjectType.Register, FormAuthority.Mrpaao, "MRPAAO Attachment 7 (p.162–163)"),
         ("ORC", 1, "Ownership Record Card", FormSubjectType.Register, FormAuthority.Mrpaao, "MRPAAO Attachment 8 (p.164–166)"),
         ("ROA", 1, "Record of Assessment", FormSubjectType.Register, FormAuthority.Mrpaao, "MRPAAO Attachment 9 (p.166–167)"),
+        // L3-4: the LAM describes these but gives no annex form (docs/analysis/assessment-listing-exemptions.md Q10, Q11).
+        ("DISCOVERY_SUMMONS", 1, "Summons (Discovery)", FormSubjectType.DiscoverySummons, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book III pp.85–86 describes the summons"),
+        ("NOTICE_OF_CANCELLATION", 1, "Notice of Cancellation", FormSubjectType.NoticeOfCancellation, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book III p.89 C requires the notice"),
+        // L6-1: market data lists (docs/analysis/smv-preparation-general-revision.md §4.1); the LAM's annex forms are loaded as content.
+        ("MARKET_ABSTRACT_TRANSACTIONS", 1, "Abstract of Registered Real Property Transactions", FormSubjectType.MarketDataReport, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book I p.22 describes the abstract"),
+        ("MARKET_ABSTRACT_BUILDING_PERMITS", 1, "Abstract of Building Permits", FormSubjectType.MarketDataReport, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book I pp.22–23 describes the abstract"),
+        ("MARKET_ABSTRACT_MACHINERY", 1, "Abstract of Certificates of Registration of Installation of Machinery", FormSubjectType.MarketDataReport, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book I p.23 describes the abstract"),
+        ("MARKET_SALES_REPORT", 1, "Report of Lowest to Highest Recorded Sales of Real Properties", FormSubjectType.MarketDataReport, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book I p.25 describes the report"),
+        // L6-6c: the general revision's reports, printed from the programme (docs/analysis/smv-preparation-general-revision.md §4.6).
+        ("GR_COMPLETION_REPORT", 1, "General Revision — Completion Report", FormSubjectType.GeneralRevision, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV p.125 (GRI 19) requires the report"),
+        ("GR_STATUS_REPORT", 1, "General Revision Status Report", FormSubjectType.GeneralRevision, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book I p.25 describes the report"),
         ("SWORN_STATEMENT", 1, "Sworn Statement of the True Current and Fair Market Value of Real Properties", FormSubjectType.SwornStatement, FormAuthority.Mrpaao, "MRPAAO Attachment 11 (p.243–244)"),
     ];
 

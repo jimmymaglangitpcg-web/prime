@@ -10,6 +10,7 @@ import {
   effectivityRules, type AssessmentLineDto, type AssessmentPreviewDto, type CreateAssessmentRequest, type EffectivityDto, type ValuationDto,
   type ValuationLineDto,
 } from '../../../lib/types';
+import { TaxabilityTag } from '../../../components/TaxabilityTag';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error)?.message);
 const plain = new Intl.NumberFormat('en-PH', { maximumFractionDigits: 6 });
@@ -240,6 +241,7 @@ function AssessModal({ rpuId, valuation, transactionTypeId, causeDate, ready, on
               { title: 'Market value', dataIndex: 'marketValue', align: 'right', render: formatMoney },
               { title: 'Level', dataIndex: 'assessmentPercentage', align: 'right', render: (v: number) => `${plain.format(v)}%` },
               { title: 'Assessed value', dataIndex: 'assessedValue', align: 'right', render: formatMoney },
+              { title: 'Taxability', render: (_, l) => <TaxabilityTag value={l.taxability} legalBasis={l.exemptionLegalBasis} note={l.taxabilityNote} /> },
             ]}
             summary={() => (
               <Table.Summary.Row>
@@ -247,6 +249,7 @@ function AssessModal({ rpuId, valuation, transactionTypeId, causeDate, ready, on
                 <Table.Summary.Cell index={1} align="right"><b>{formatMoney(shown.marketValue)}</b></Table.Summary.Cell>
                 <Table.Summary.Cell index={2} />
                 <Table.Summary.Cell index={3} align="right"><b>{formatMoney(shown.assessedValue)}</b></Table.Summary.Cell>
+                <Table.Summary.Cell index={4} />
               </Table.Summary.Row>
             )} />
           {previous && <BeforeAfter previous={{ marketValue: previous.marketValue, assessedValue: previous.assessedValue }} next={shown} />}

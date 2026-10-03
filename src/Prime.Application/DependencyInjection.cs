@@ -57,8 +57,19 @@ public static class DependencyInjection
         services.AddScoped<Features.Submissions.IApprovedDocumentIssuer, Features.Submissions.ApprovedDocumentIssuer>();
         services.AddScoped<Features.Submissions.ISubmissionService, Features.Submissions.SubmissionService>();
         services.AddScoped<ITransactionService, TransactionService>();
+        services.AddScoped<Features.Exemptions.IExemptionService, Features.Exemptions.ExemptionService>();
+        services.AddScoped<Features.AssessmentLevels.IAssessmentLevelCeilingService, Features.AssessmentLevels.AssessmentLevelCeilingService>();
         services.AddScoped<INoticeService, NoticeService>();
         services.AddScoped<IFormDataProvider, NoticeFormDataProvider>();
+        services.AddScoped<Features.Notices.INoticeOfCancellationService, Features.Notices.NoticeOfCancellationService>();
+        services.AddScoped<IFormDataProvider, Features.Notices.NoticeOfCancellationFormDataProvider>();
+        services.AddScoped<Features.Transactions.IDiscoverySummonsService, Features.Transactions.DiscoverySummonsService>();
+        services.AddScoped<IFormDataProvider, Features.Transactions.DiscoverySummonsFormDataProvider>();
+        services.AddScoped<Features.MarketData.IMarketTransactionService, Features.MarketData.MarketTransactionService>();
+        services.AddScoped<Features.MarketData.IMarketDataAbstractService, Features.MarketData.MarketDataAbstractService>();
+        services.AddScoped<Features.MarketData.IMarketDataImportService, Features.MarketData.MarketDataImportService>();
+        services.AddScoped<Features.MarketData.IMarketDataReportService, Features.MarketData.MarketDataReportService>();
+        services.AddScoped<IFormDataProvider, Features.MarketData.MarketDataReportFormDataProvider>();
         services.AddScoped<IAppraisalRecordService, AppraisalRecordService>();
         services.AddScoped<Features.Smv.IAdjustmentFactorService, Features.Smv.AdjustmentFactorService>();
         services.AddScoped<Features.Smv.IBuildingCostTableService, Features.Smv.BuildingCostTableService>();
@@ -91,6 +102,11 @@ public static class DependencyInjection
         services.AddScoped<IAssessmentService, AssessmentService>();
         services.AddScoped<IGeneralRevisionService, GeneralRevisionService>();
         services.AddScoped<GeneralRevisionJobRunner>();
+        services.AddScoped<Features.GeneralRevision.IGeneralRevisionProgrammeService, Features.GeneralRevision.GeneralRevisionProgrammeService>();
+        services.AddScoped<Features.GeneralRevision.IGeneralRevisionRecordsService, Features.GeneralRevision.GeneralRevisionRecordsService>();
+        services.AddScoped<Features.GeneralRevision.IGeneralRevisionCompletionService, Features.GeneralRevision.GeneralRevisionCompletionService>();
+        services.AddScoped<IFormDataProvider, Features.GeneralRevision.GeneralRevisionReportFormDataProvider>();
+        services.AddScoped<Features.GeneralRevision.GeneralRevisionProgrammeRunner>();
 
         return services;
     }

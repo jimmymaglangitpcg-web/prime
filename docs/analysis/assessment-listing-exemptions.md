@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Step | Phase 10, step L3 (CLAUDE.md §97); replaces the earlier step 10c |
-| Status | **Draft — awaiting decisions on §8** (no code before approval, CLAUDE.md §108) |
+| Status | Done (L3-1a to L3-4, 2026-10-02); decisions in §8.1 |
 | Sources | LAM 2025 Book III Ch. III (assessment, pp.80–90) and Ch. V (exemptions, pp.96–100); Book I p.35 §1 g (notice to the previous owner); Annex I-D p.141 (transaction codes); RA 7160 §§204–206, 218, 220, 234; RA 12001 and its IRR |
 | Depends on | L1 (valuation and assessment lines), L2 (territorial changes), L5 (forms, NOA email, annotations); province answers C7, D1, D3 (L0-4) |
 | Feeds | L7 (appeals act on assessments and notices); Phase 13 (import of existing exemptions) |
@@ -224,6 +224,177 @@ Each step: build, tests, browser check of its screens, design-doc log, roadmap a
 | Q14 | Assessed-value ceiling of an exemption (e.g. RA 11321) | A field of the exemption type; above it the line stays taxable with the reason recorded |
 | Q15 | Existing posted assessments | Lines take their TD's taxability by migration; no exemption records are invented for them |
 
-### 8.1 Decisions
+### 8.1 Decisions (user, 2026-10-02: "confirm all")
 
-Pending.
+Q1–Q15 accepted as recommended. Where a question waits on the Provincial Assessor (C7 for Q1; D1 for Q8 and Q9), the
+recommendation is the provisional default until the answer comes.
+
+## 9. Implementation log
+
+### L3-1a — exemption types and claims (2026-10-02)
+
+Done; migration `Exemptions` (three new tables) applied to the local database only.
+
+- `ExemptionType`: effective-dated configuration (code, name, description, kinds of unit it covers, proof required,
+  optional assessed-value ceiling, legal basis), approved by a second user. Content-pack kind `exemption-types` (JSON
+  catalogue); the sample pack has two DEMO types. Admin: *Forms & Numbering → Exemption types*.
+- `PropertyExemption`: a claim on a unit, or on its part in one actual use, with claimant, instrument reference, date
+  of declaration and proof due date (`Exemptions:ProofPeriodDays`, default 30, LGC §206). Statuses Claimed → ProofFiled
+  → Approved/Rejected → Ended. A type that needs no proof starts at ProofFiled. One open or approved claim per unit,
+  type and part. Approval and rejection by someone other than whoever recorded the claim (CLAUDE.md §46); approval
+  records the effective date and an optional expiry; an approved exemption ends with a date and reason. Nothing is
+  deleted. Jurisdiction-filtered through the property.
+- **Evidence by reference** (`ExemptionEvidence`: document, reference number, date, received on and by). PRIME has
+  no file storage yet (the `Documents` table has no upload pipeline, CLAUDE.md §59), so attaching scans waits for the
+  documents module. Late proof is accepted and flagged; an overdue claim is flagged, never rejected automatically (Q5).
+- Screens: the property's *Exemptions* tab (record a claim, file proof, approve, reject, end, decision trail and
+  evidence); an *Exemptions* worklist page (open claims, overdue first, a warning with the overdue count). The
+  dashboard count waits for the dashboard (it is still a placeholder).
+- Nothing yet changes an assessment or a roll: that is L3-1b (below).
+- Tests: `ExemptionTests` (2); content-pack import counts updated for the DEMO types; 628 tests pass. Browser: type
+  created as the dev admin and approved as the dev checker; a claim on DEMO-BILL-AE94B8's land recorded, proof filed,
+  approval by the recorder refused, approval by the checker, worklist. Dev DB keeps that DEMO type and claim.
+
+### L3-1b — taxability per line, rolls, reassessment on later proof (2026-10-02)
+
+Done; migration `LineTaxability` applied to the local database only.
+
+- `AssessmentLine.Taxability` (Taxable/Exempt, check constraint), `PropertyExemptionId` and `TaxabilityNote`.
+  `ExemptionTaxability.MarkAsync` is the single rule: a line is exempt under the approved exemption in force on the
+  assessment's effective date for its actual use (a part's own exemption before one of the whole unit); over the type's
+  assessed-value ceiling (the version in force) it stays taxable with the reason (Q14); an unproven claim leaves it
+  taxable (LGC §206). Lines are marked when the assessment is calculated and again when it is made (final approval),
+  so an exemption decided after the draft counts. An exemption is in force from its effective date to its expiry
+  (inclusive) and until the day it ended (exclusive).
+- `Taxability.PartlyExempt`: a TD declaring an assessment takes its taxability from the lines (on creation, on
+  preparation at posting, and on approval); a TD request cannot ask for PartlyExempt. A TD without an assessment keeps
+  the taxability it was declared with.
+- Q15: the migration marks the lines of assessments declared by an exempt TD as exempt, with no exemption record.
+  **Decided (user, 2026-10-02):** a unit with no exemption records at all whose current TD is declared exempt
+  keeps its new lines exempt, with the note "Exempt as declared on TD …, before exemption records were kept; record
+  the exemption", so declarations made before PRIME kept exemption records are not silently made taxable by the next
+  assessment. Once any claim is recorded for the unit, only approved exemptions count.
+- Q3: approving an exemption, **and ending one** (decided by the user, 2026-10-02: the same rule moves the unit back
+  to the taxable roll), opens a Draft reassessment when the unit's assessment in force would now be marked differently: same
+  valuation and values, lines re-marked, the posted assessment as its previous one, remarks naming the exemption. Its
+  effectivity follows the transaction type named by the setting `Exemptions:ReassessmentTransactionCode` when its
+  rule derives a date (empty by default, decided by the user 2026-10-02 until the Provincial Assessor names the code:
+  DOMAIN VERIFICATION REQUIRED, which Annex I-D code applies); otherwise the exemption's own date, never before the assessment in force. None is opened when the latest assessment is approved
+  but not posted, or one is in progress (it is marked when made); the decision returns the reason. Posting the
+  reassessment prepares the replacing TD through the normal workflow; posted records never change.
+- Rolls (Q4): each FAAS in force is split by its lines; the taxable roll lists the taxable part's assessed value, the
+  exempt roll the exempt part's with the legal bases of its exemptions (`legalBasis`), and a partly exempt FAAS is on
+  both (`lam.partlyExempt`, `lam.wholeAssessedValue`). A TD without an assessment is listed wholly as declared. The
+  Record of Assessment's LAM columns split market and assessed values the same way.
+- Forms: TD and FAAS rows carry `taxability`, `legalBasis` and `taxabilityNote`. Built-in reference layouts
+  TAX_DECLARATION v5 and FAAS_LAND/BUILDING/MACHINERY v3 mark exempt rows with their basis and tick both boxes for a
+  partly exempt TD (installed only where no LAM version exists). The untracked LAM versions of the same four forms and
+  AR_EXEMPT were revised the same way and imported into the dev database as new versions effective 2026-10-03.
+- Screens: a taxability tag (with the basis or note) on the assessment preview rows, the appraisal record's rows, each
+  assessment (summary of its lines) and each TD; approving or ending an exemption says whether a reassessment was
+  opened and why not; the claim shows its reassessment.
+- Frozen treasury code: `BillService` still refuses any TD that is not wholly taxable, so a partly exempt TD cannot be
+  billed there; billing is out of PRIME's scope (CLAUDE.md §0) and was not changed.
+- Tests: `ExemptionTaxabilityTests` (4: a partly exempt TD on both rolls with the basis and the TD form's rows; late
+  proof opening a reassessment that moves the unit to the exempt roll and ending it moving it back; the ceiling; a unit
+  declared exempt before exemption records); renderer test of the new built-in versions; 640 tests pass. Browser: on
+  DEMO property 990-01-0001-001-01, a claim recorded and proven as the dev admin and approved as the dev checker opened
+  a reassessment effective 2026-10-02; posted and declared (the dev database has no TD numbering scheme for that
+  municipality, so the TD was typed, and its request's "Taxable" was overridden by the lines to Exempt); the TD list,
+  assessment list and appraisal record show Exempt with the basis; the LAM exempt roll lists the TD with the legal
+  basis and the taxable roll does not. The revised LAM TD and FAAS templates were rendered against that TD.
+
+### L3-2 — statutory maximum assessment levels (2026-10-02)
+
+Done; migration `AssessmentLevelCeilings` (one new table) applied to the local database only.
+
+- `AssessmentLevelCeiling`: effective-dated configuration keyed by code (property type; classification and actual use
+  optional, blank meaning any; a value bracket read like the levels'; the maximum percentage; legal basis), approved by
+  a second user. Content-pack kind `assessment-level-ceilings` (JSON, lookups by code, the pack may add them); the
+  sample pack has one DEMO ceiling (effective 2099). Admin: *Valuation Rules → Level ceilings*. None is built in.
+- The check: creating or approving an assessment level is refused (`ASSESSMENT_LEVEL_ABOVE_CEILING`) when a ceiling in
+  force on the level's effective date matches its property type (and its classification or actual use, where the
+  ceiling names one), its bracket overlaps the level's, and the level is above it. The message names the lowest such
+  maximum, its keys, bracket, legal basis and code. With no ceiling configured nothing changes. Content-pack levels go
+  through the same service, so the check applies to them at import.
+- Approving a ceiling never changes levels already approved (they are the LGU's ordinance): it warns, naming the
+  ordinances of approved levels in force above it, that a new level must replace them.
+- Assessments are not re-checked: they use approved levels, which were checked when approved.
+- Tests: `AssessmentLevelCeilingTests` (3); content-pack import counts updated for the DEMO ceiling; 643 tests pass.
+  Browser: a DEMO ceiling (Land / DEMO_Residential, 15%, effective 2099-01-01) created as the dev admin and approved as
+  the dev checker, with the warning about an approved 20% level of that key; a new 20% level from 2099-01-01 refused
+  with the ceiling's basis. The dev database keeps that DEMO ceiling.
+
+### L3-3 — court orders, machinery relocation, codes (2026-10-02)
+
+Done; migration `CourtOrderAndRelocation` (two nullable columns) applied to the local database only.
+
+- **Court order** (`PropertyTransactionKind.CourtOrder`): a type of this kind must list at least one mandatory
+  requirement (the order). It cancels TDs like any transaction (the TDs it lists). To restore or revive a cancelled
+  declaration, a TD added to a court-order transaction names it in `RestoresTaxDeclarationId` (a cancelled TD of the
+  same unit); the new TD takes the next revision number, brings back the restored TD's unlifted annotations that carry
+  over, and the cancelled TD stays cancelled. Restoring outside a court order is refused, and one declaration is
+  restored by at most one approved TD.
+- **Machinery relocation** (`MachineryRelocation`, Q7): filed on the receiving property, naming the moving machinery
+  unit (`RelocatedRpuId`, an active machinery unit of another property, whose property is added as the Source). The
+  unit on the receiving property continues the moved one (`PreviousRpuId`); its TD, in the transaction, names the moved
+  unit's current TD as the one it replaces, across properties. Submission needs that TD. Approval cancels the old TD
+  ("Cancelled by TD No. …") and retires the moved unit (`Superseded`, ended the day before the effective date). The
+  drawer creates the receiving unit with the link; its machinery details, valuation and assessment follow the usual
+  screens.
+- **Code a TD shows** (Q9): `TransactionCodes.Highest` keeps the highest rank where ranks are configured; with none
+  ranked, the first candidate wins, and candidates are listed transaction, named code, assessment — so the producing
+  transaction's code, else the assessment's. Behaviour unchanged; documented and tested.
+- **LAM catalogue as content** (untracked `lgu-content/`, pack version `…+lam-codes-1`): the eleven Annex I-D codes,
+  unranked, with kinds per Q8 (RA, PC, DT, SP and DEP are reassessments; DEP allows a new depreciation). Effectivity
+  rules only where Book III §6 is explicit: NextJanuary for RA, PC, SP and DEP; NextQuarter with the 90-day window for
+  DT (partial destruction) and RC (change in actual use); Fixed for GR; none for SD, CS, DC and TR (dates given per
+  transaction). Requirements are left to the province's Citizen's Charter. Imported and approved in the dev database,
+  effective 2026-10-03 (provisional). The LAM gives no codes for court orders or machinery relocation: their codes are
+  for the Provincial Assessor (added to question D1); the dev database has DEMO-CO and DEMO-MR types for checks.
+- Screens: new kinds in the type admin; a relocation picker (property, then its machinery unit) when opening a
+  relocation; the drawer explains a court order, and for a relocation creates the receiving unit; the TD modal shows
+  "Restores TD" under a court order and offers the moved unit's TD as the one replaced under a relocation.
+- Tests: `CourtOrderAndRelocationTests` (4); 647 tests pass. Browser, on DEMO property 990-01-0001-001-01: a machine
+  (DEMO-MACH-L16, TD DEMO-TD-MACH-L33) relocated from DEMO-BILL-AE94B8 — unit created from the drawer, its TD added
+  replacing the old one, submitted, approved: old TD cancelled by the new one, old unit Superseded; a court order
+  cancelling DEMO-TD-L31B-77222 with its order recorded, then a second restoring it by a new TD (revision 3), the
+  original staying cancelled. Approvals beyond the first signature were completed through the API.
+
+
+### L3-4 — discovery summons, Notice of Cancellation, pending-claim guard (2026-10-02)
+
+Done; migration `SummonsAndNoticesOfCancellation` applied to the local database only.
+
+- **Pending court claim** (Q12): `AnnotationType.BlocksCancellation` (default off; set through the content pack's
+  `blocksCancellation`). `CancellationGuard` refuses (`TD_CANCELLATION_BLOCKED`, naming the annotation and its
+  reference) while such an annotation is unlifted, wherever a TD is cancelled or replaced: a direct cancellation, a
+  transaction listing it (when opened and again at approval) and the approval of a TD naming it as the one replaced.
+  Lifting the annotation, with the court's resolution as reference, clears the way.
+- **Notice of Cancellation** (Q11): `TransactionType.CancelsMotuProprio` (content pack `cancelsMotuProprio`; switch
+  in the type admin). Approving such a transaction drafts a `NoticeOfCancellation` for each TD it cancels, one per
+  addressee address, to the declared owners and the parties with a legal interest; the previous-owner case drafts one
+  when a TD declaring a new assessment replaces a TD declared in the name of owners who no longer own the unit (a
+  transfer re-declaring the same assessment does not). The notice freezes the TD numbers, ground, reason, date and
+  addressees; it is issued (numbered by a `NoticeOfCancellation` scheme, if any), served as for the NOA, or
+  cancelled with a reason. Form `NOTICE_OF_CANCELLATION` v1, PRIME provisional and watermarked.
+- **Discovery summons** (Q10): `DiscoverySummons` on an open new-discovery transaction: addressee, issue date,
+  service (mode, receipt, receiver, proof), due date = receipt + `Discovery:SummonsPeriodDays` (15, frozen on the
+  summons), outcome Complied or NotComplied (non-compliance only after the due date). A second summons only after a
+  first not complied with; after a second not complied with, the transaction records the verification with other
+  agencies (`InterAgencyVerification`). Summonses never block the transaction (LGC §204 declaration). Numbering kind
+  `DiscoverySummons`; form `DISCOVERY_SUMMONS` v1, PRIME provisional and watermarked, legal basis from
+  `Discovery:SummonsLegalBasis`.
+- Screens: Notices tab, "Notices of Cancellation" table (issue, record service, print, cancel; the NOA's service
+  dialog is shared); transaction drawer, "Discovery summonses" panel for a new-discovery transaction (issue, record
+  service, record outcome, print, verification) with the next step shown; type admin switch and column "Notice of
+  Cancellation"; the two new numbering kinds in the numbering admin.
+- Tests: `CancellationAndDiscoveryTests` (4); 653 tests pass. Browser, dev database (DEMO): type DEMO-MP created
+  with the switch and approved by the checker; annotation type DEMO-ADVERSE (blocking) added to the dev database
+  directly; TD DEMO-TD-VA-2027B on DEMO-BILL-AE94B8 annotated, opening a DEMO-MP cancellation refused with the
+  annotation named, lifted, opened and approved (through the API as the checker): one notice drafted to the declared
+  owner, then issued, served and printed from the Notices tab. Discovery on 990-01-0001-001-01 (type DEMO-DC, since
+  the LAM's DC is in force only from 2026-10-03): two back-dated summonses served and not complied with, due dates
+  2026-08-28 and 2026-09-19, then the verification recorded; summons 1 printed.
+
+**L3 complete.** Exit criteria 1–3 and 6 were met in L3-1 to L3-3; 4 and 5 by L3-4.

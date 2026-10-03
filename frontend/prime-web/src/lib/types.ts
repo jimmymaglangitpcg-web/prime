@@ -6,7 +6,8 @@ export type RecordStatus = 'Active' | 'Inactive' | 'Cancelled' | 'Subdivided' | 
 export type WorkflowStatus = 'Draft' | 'Submitted' | 'PendingReview' | 'Approved' | 'Rejected' | 'Posted' | 'Cancelled' | 'Voided';
 export type TaxpayerType = 'Individual' | 'Corporation' | 'Partnership' | 'Government' | 'Estate' | 'Association' | 'Other';
 export type RpuType = 'Land' | 'Building' | 'Machinery' | 'OtherImprovement' | 'MineralRight';
-export type Taxability = 'Taxable' | 'Exempt';
+/** A line is Taxable or Exempt; a TD with both kinds of line is PartlyExempt. */
+export type Taxability = 'Taxable' | 'Exempt' | 'PartlyExempt';
 
 export interface PagedResult<T> {
   items: T[];
@@ -408,6 +409,8 @@ export interface CreateTaxDeclarationRequest {
   transactionCode?: string;
   /** The posted assessment this TD declares (FAAS = TD + assessment; docs/analysis/mrpaao-forms-model.md §6.1). */
   assessmentId?: string | null;
+  /** Within a court-order transaction: the cancelled TD this new declaration restores (L3-3). */
+  restoresTaxDeclarationId?: string | null;
 }
 
 export interface TaxDeclarationDto {
@@ -1200,9 +1203,12 @@ export type NumberedDocumentKind =
   | 'SwornStatement'
   | 'PaymentTransaction'
   | 'Remittance'
-  | 'TemporaryPin';
+  | 'TemporaryPin'
+  | 'NoticeOfCancellation'
+  | 'DiscoverySummons';
 export type FormAuthority = 'PrimeProvisional' | 'Lam' | 'Blgf' | 'LguOrdinance' | 'Other' | 'Mrpaao';
-export type FormSubjectType = 'TaxBill' | 'TaxDeclaration' | 'NoticeOfAssessment' | 'Assessment' | 'StatementOfAccount' | 'Faas' | 'Register' | 'SwornStatement' | 'Payment';
+export type FormSubjectType = 'TaxBill' | 'TaxDeclaration' | 'NoticeOfAssessment' | 'Assessment' | 'StatementOfAccount' | 'Faas' | 'Register' | 'SwornStatement' | 'Payment'
+  | 'NoticeOfCancellation' | 'DiscoverySummons';
 export type ApprovalSubjectType = 'Assessment' | 'TaxDeclaration' | 'PropertyTransaction';
 
 interface ConfigurationHeader {
@@ -1328,11 +1334,13 @@ export interface IssuedFormDto {
 
 export type PropertyTransactionKind =
   | 'NewDiscovery' | 'NewAssessment' | 'Transfer' | 'Subdivision' | 'Consolidation' | 'Reclassification'
-  | 'Reassessment' | 'GeneralRevision' | 'Cancellation' | 'Correction' | 'AdditionOfImprovement' | 'RemovalOfImprovement';
+  | 'Reassessment' | 'GeneralRevision' | 'Cancellation' | 'Correction' | 'AdditionOfImprovement' | 'RemovalOfImprovement'
+  | 'TerritorialChange' | 'CourtOrder' | 'MachineryRelocation';
 
 export const transactionKinds: PropertyTransactionKind[] = [
   'NewDiscovery', 'NewAssessment', 'Transfer', 'Subdivision', 'Consolidation', 'Reclassification',
   'Reassessment', 'GeneralRevision', 'Cancellation', 'Correction', 'AdditionOfImprovement', 'RemovalOfImprovement',
+  'TerritorialChange', 'CourtOrder', 'MachineryRelocation',
 ];
 
 export interface TransactionRequirementDto {
@@ -1365,6 +1373,8 @@ export interface TransactionTypeDto {
   causeWindowDays: number | null;
   /** A building valued for this transaction takes a new depreciation (valuation-foundation.md §4.5). */
   allowsNewDepreciation: boolean;
+  /** Cancels TDs on the assessor's own motion: approval generates Notices of Cancellation (L3-4, Q11). */
+  cancelsMotuProprio: boolean;
 }
 
 /** How an assessment finds its effectivity date (docs/analysis/valuation-foundation.md §4.2). */
@@ -1390,6 +1400,7 @@ export interface CreateTransactionTypeRequest {
   effectivityLegalBasis?: string | null;
   causeWindowDays?: number | null;
   allowsNewDepreciation?: boolean;
+  cancelsMotuProprio?: boolean;
 }
 
 export interface NewPartyRequest {
@@ -1410,6 +1421,8 @@ export interface OpenTransactionRequest {
   transferRpuId?: string;
   /** A subdivision's resulting lots (Result) or a consolidation's sources (Source). */
   relatedProperties?: { propertyId: string; role: 'Source' | 'Result' }[];
+  /** A machinery relocation: the machinery unit moving here from another property (L3-3). */
+  relocatedRpuId?: string;
 }
 
 export interface TransactionRequirementStatusDto extends TransactionRequirementDto {
@@ -1453,6 +1466,7 @@ export interface PropertyTransactionDto {
   relatedProperties: { propertyId: string; propertyIdentificationNumber: string; role: 'Source' | 'Result' }[];
   transferRpuId: string | null;
   taxClearance: TransferTaxClearanceDto | null;
+  relocatedRpuId: string | null;
 }
 
 // --- Notices of Assessment (LGC §§223, 226; docs/FORMS-REVISION-PLAN.md A6) ---
@@ -1462,6 +1476,77 @@ export type NoticeReason = 'FirstAssessment' | 'AssessmentIncreased' | 'Assessme
 export type NoticeStatus = 'Draft' | 'Issued' | 'Served' | 'Cancelled';
 /** The modes of LGC §223, and email to the declarant's address (LAM Annex I-L; records-and-forms.md Q11). */
 export type NoticeServiceMode = 'Personal' | 'RegisteredMail' | 'ThroughPunongBarangay' | 'Email';
+
+/** Why a Notice of Cancellation was generated (assessment-listing-exemptions.md §4.4, Q11). */
+export type CancellationNoticeGround = 'MotuProprio' | 'PreviousOwner';
+export const cancellationGroundLabel: Record<CancellationNoticeGround, string> = {
+  MotuProprio: "Assessor's own motion",
+  PreviousOwner: 'Previous owner (reassessment)',
+};
+
+export interface NoticeOfCancellationDto {
+  id: string;
+  noticeNumber: string | null;
+  propertyId: string;
+  pin: string;
+  taxDeclarationId: string;
+  taxDeclarationNumber: string;
+  replacedByTaxDeclarationId: string | null;
+  replacedByTaxDeclarationNumber: string | null;
+  propertyTransactionId: string | null;
+  ground: CancellationNoticeGround;
+  reason: string;
+  cancelledOn: string;
+  addresseeNames: string;
+  addresseeAddress: string | null;
+  status: NoticeStatus;
+  createdAt: string;
+  issuedAt: string | null;
+  serviceMode: NoticeServiceMode | null;
+  receivedDate: string | null;
+  servedTo: string | null;
+  emailAddress: string | null;
+  sentDate: string | null;
+  proofReference: string | null;
+  serviceNotes: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+}
+
+export type SummonsOutcome = 'Pending' | 'Complied' | 'NotComplied';
+
+/** A summons to the owner of a discovered property to declare it (LGC §213; L3-4, Q10). */
+export interface DiscoverySummonsDto {
+  id: string;
+  propertyTransactionId: string;
+  sequence: number;
+  summonsNumber: string | null;
+  addresseeName: string;
+  addresseeAddress: string | null;
+  addresseeTaxpayerId: string | null;
+  issuedOn: string;
+  periodDays: number;
+  serviceMode: NoticeServiceMode | null;
+  receivedOn: string | null;
+  servedTo: string | null;
+  proofReference: string | null;
+  serviceNotes: string | null;
+  dueDate: string | null;
+  /** Served, still pending, and past its due date. */
+  overdue: boolean;
+  outcome: SummonsOutcome;
+  outcomeOn: string | null;
+  outcomeNotes: string | null;
+  createdAt: string;
+}
+
+export interface DiscoveryDto {
+  summonses: DiscoverySummonsDto[];
+  interAgencyVerification: string | null;
+  verificationRecordedOn: string | null;
+  canIssue: boolean;
+  nextStep: string | null;
+}
 
 export const noticeReasonLabel: Record<NoticeReason, string> = {
   FirstAssessment: 'First assessment',
@@ -1543,6 +1628,11 @@ export interface AssessmentLineDto {
   assessmentLevelId: string;
   assessmentPercentage: number;
   assessedValue: number;
+  /** From the exemptions approved and in force on the effective date (L3-1b). */
+  taxability: Taxability;
+  propertyExemptionId: string | null;
+  taxabilityNote: string | null;
+  exemptionLegalBasis: string | null;
 }
 
 export interface AssessmentSummaryDto {
@@ -1626,6 +1716,7 @@ export interface AppraisalRecordDto {
     lines: {
       sequence: number; classification: string; actualUse: string; propertyType: string; marketValue: number; assessmentLevelPercent: number;
       levelLowerValue: number; levelUpperValue: number | null; levelOrdinanceNumber: string; levelOrdinanceDate: string | null; assessedValue: number;
+      taxability: Taxability; legalBasis: string | null; taxabilityNote: string | null;
     }[];
   };
   previous: { assessmentId: string; faasNumber: string | null; year: number; effectiveDate: string; marketValue: number; assessedValue: number; assessedValueChange: number } | null;
@@ -1673,6 +1764,8 @@ export interface TransferTaxClearanceDto {
   capitalGainsTax: number | null; capitalGainsTaxReceipt: string | null; capitalGainsTaxDate: string | null;
   documentaryStampTax: number | null; documentaryStampTaxReceipt: string | null; documentaryStampTaxDate: string | null;
   transferTax: number | null; transferTaxReceipt: string | null; transferTaxDate: string | null; remarks: string | null;
+  /** The deed's consideration; approval then prefills an unreviewed market transaction (smv-preparation-general-revision.md Q3). */
+  consideration: number | null;
 }
 
 export type SetTransferTaxClearanceRequest = TransferTaxClearanceDto;
@@ -1910,4 +2003,64 @@ export interface BackTaxPeriodDto {
 export interface BackTaxRunDto {
   id: string | null; rpuId: string; declaredFromYear: number; basis: string; initialAssessmentYear: number; yearsLimit: number; yearsLimitLegalBasis: string;
   buildingRules: 'ByPeriod' | 'Current'; machineryRules: 'ByPeriod' | 'Current'; periods: BackTaxPeriodDto[]; createdAt: string | null;
+}
+
+// --- Exemptions (docs/analysis/assessment-listing-exemptions.md §4.1, step L3-1a) ---
+
+export type ExemptionKind = 'Land' | 'Building' | 'Machinery' | 'OtherImprovement';
+export const exemptionKinds: ExemptionKind[] = ['Land', 'Building', 'Machinery', 'OtherImprovement'];
+/** The API writes the flags as "All" or a comma-separated list ("Land, Building"). */
+export function parseExemptionAppliesTo(value: string): ExemptionKind[] {
+  return value === 'All' ? exemptionKinds : value.split(',').map((x) => x.trim() as ExemptionKind);
+}
+export type ExemptionStatus = 'Claimed' | 'ProofFiled' | 'Approved' | 'Rejected' | 'Ended';
+export const exemptionStatusLabel: Record<ExemptionStatus, string> = {
+  Claimed: 'Claimed — no proof yet', ProofFiled: 'Proof filed', Approved: 'Approved', Rejected: 'Rejected', Ended: 'Ended',
+};
+
+export interface ExemptionTypeDto {
+  id: string; code: string; name: string; description: string | null; appliesTo: string; requiresProof: boolean;
+  assessedValueCeiling: number | null; legalBasis: string; effectiveDate: string; endDate: string | null; status: WorkflowStatus;
+  createdBy: string | null; approvedBy: string | null; approvedAt: string | null; remarks: string | null;
+}
+
+export interface CreateExemptionTypeRequest {
+  legalBasis: string; effectiveDate: string; remarks: string | null; code: string; name: string; description: string | null;
+  appliesTo: string; requiresProof: boolean; assessedValueCeiling: number | null;
+}
+
+export interface ExemptionEvidenceDto { sequence: number; description: string; referenceNumber: string | null; documentDate: string | null; receivedOn: string; receivedBy: string | null }
+
+export interface PropertyExemptionDto {
+  id: string; propertyId: string; pin: string; rpuId: string; rpuNumber: string; rpuType: RpuType;
+  exemptionTypeId: string; typeCode: string; typeName: string; legalBasis: string;
+  actualUseId: string | null; actualUseName: string | null; portionDescription: string | null; claimantTaxpayerId: string | null; claimantName: string | null;
+  claimedOn: string; proofDueDate: string; proofOverdue: boolean; proofLate: boolean; reference: string | null; remarks: string | null;
+  status: ExemptionStatus; proofFiledOn: string | null; effectiveDate: string | null; expiryDate: string | null;
+  createdBy: string | null; createdByName: string | null; createdAt: string; decidedBy: string | null; decidedByName: string | null; decidedAt: string | null;
+  decisionRemarks: string | null; endedOn: string | null; endReason: string | null; evidence: ExemptionEvidenceDto[];
+  /** The draft reassessment its approval or end opened (Q3). */
+  reassessmentId: string | null;
+  /** Approve and end only: whether a reassessment was opened, and if not, why. */
+  reassessmentNote: string | null;
+}
+
+export interface ClaimExemptionRequest {
+  rpuId: string; exemptionTypeId: string; actualUseId: string | null; portionDescription: string | null; claimantTaxpayerId: string | null;
+  claimedOn: string | null; reference: string | null; remarks: string | null;
+}
+
+/** A statutory maximum assessment level (L3-2). */
+export interface AssessmentLevelCeilingDto {
+  id: string; code: string; description: string | null; propertyTypeId: string; propertyTypeName: string;
+  classificationId: string | null; classificationName: string | null; actualUseId: string | null; actualUseName: string | null;
+  lowerValue: number; upperValue: number | null; maximumPercentage: number; legalBasis: string; effectiveDate: string; endDate: string | null;
+  status: WorkflowStatus; createdBy: string | null; approvedBy: string | null; approvedAt: string | null; remarks: string | null;
+  /** Approval only: approved levels in force above the new ceiling. */
+  warning: string | null;
+}
+
+export interface CreateAssessmentLevelCeilingRequest {
+  legalBasis: string; effectiveDate: string; remarks: string | null; code: string; description: string | null;
+  propertyTypeId: string; classificationId: string | null; actualUseId: string | null; lowerValue: number; upperValue: number | null; maximumPercentage: number;
 }

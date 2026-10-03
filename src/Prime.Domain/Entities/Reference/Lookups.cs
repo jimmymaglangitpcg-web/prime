@@ -60,7 +60,19 @@ public sealed class AnnotationType : LookupEntity
     /// (docs/analysis/records-and-forms.md §4.4, Q7). Yes unless the office says otherwise.
     /// </summary>
     public bool CarriesOver { get; set; } = true;
+
+    /// <summary>
+    /// Whether an unlifted annotation of this type (e.g. an adverse claim pending in court) stops any cancellation or
+    /// replacement of its TD until it is lifted (LAM Bk III p.89; assessment-listing-exemptions.md Q12). No unless set.
+    /// </summary>
+    public bool BlocksCancellation { get; set; }
 }
+
+/// <summary>
+/// Mode of conveyance of a market transaction — sale, donation, partition, lease, mortgage … (LAM 2025 Annex I-M;
+/// docs/analysis/smv-preparation-general-revision.md §4.1). Configured content, not an enum.
+/// </summary>
+public sealed class ConveyanceMode : LookupEntity;
 
 /// <summary>
 /// Supports Document (§59, DOMAIN-MODEL.md §3.19a) — Title, Deed, Tax

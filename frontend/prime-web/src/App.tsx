@@ -15,6 +15,10 @@ import { FormDocumentPage } from './pages/documents/FormDocumentPage';
 import { SwornStatementPage } from './pages/swornStatements/SwornStatementPage';
 import { SwornStatementsPage } from './pages/swornStatements/SwornStatementsPage';
 import { RegistersPage } from './pages/registers/RegistersPage';
+import { ExemptionClaimsPage } from './pages/exemptions/ExemptionClaimsPage';
+import { MarketDataPage } from './pages/marketData/MarketDataPage';
+import { GeneralRevisionsPage } from './pages/generalRevision/GeneralRevisionsPage';
+import { GeneralRevisionPage } from './pages/generalRevision/GeneralRevisionPage';
 import { ValuationRulesPage } from './pages/admin/ValuationRulesPage';
 import { FormsAdminPage } from './pages/admin/FormsAdminPage';
 import { CollectionSetupPage } from './pages/admin/CollectionSetupPage';
@@ -58,6 +62,10 @@ export default function App() {
         <Route path="/documents/preview" element={<FormDocumentPage />} />
         <Route path="/documents/:id" element={<FormDocumentPage />} />
         <Route path="/registers" element={<RegistersPage />} />
+        <Route path="/exemptions" element={<ExemptionClaimsPage />} />
+        <Route path="/market-data" element={<MarketDataPage />} />
+        <Route path="/general-revision" element={<GeneralRevisionsPage />} />
+        <Route path="/general-revision/:id" element={<GeneralRevisionPage />} />
         <Route path="/sworn-statements" element={<SwornStatementsPage />} />
         <Route path="/sworn-statements/:id" element={<SwornStatementPage />} />
         <Route path="/admin/forms" element={<FormsAdminPage />} />

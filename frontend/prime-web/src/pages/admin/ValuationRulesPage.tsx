@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert, Button, Card, Col, DatePicker, Descriptions, Form, Input, InputNumber, Modal, Row, Select, Space, Table, Tabs, Tag, Typography } from 'antd';
 import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import {
-  useAllAdjustmentFactors, useApproveAdjustmentFactor, useApproveAssessmentLevel, useApproveSmv, useApproveSmvSchedule, useAssessmentLevels,
+  useAllAdjustmentFactors, useApproveAdjustmentFactor, useApproveAssessmentLevel, useApproveAssessmentLevelCeiling, useAssessmentLevelCeilings, useCreateAssessmentLevelCeiling, useApproveSmv, useApproveSmvSchedule, useAssessmentLevels,
   useCreateAdjustmentFactor, useCreateAssessmentLevel, useCreateSmv, useCreateSmvSchedule, useSmvSchedules, useSmvs,
 } from '../../api/valuation';
 import {
@@ -11,7 +11,7 @@ import {
 } from '../../api/referenceData';
 import { formatMoney } from '../../lib/format';
 import {
-  adjustmentRuleKinds, distanceReferences, type AdjustmentFactorDto, type AdjustmentRuleKind, type AssessmentLevelDto, type SmvBasis,
+  adjustmentRuleKinds, distanceReferences, type AdjustmentFactorDto, type AdjustmentRuleKind, type AssessmentLevelCeilingDto, type AssessmentLevelDto, type SmvBasis,
   type SmvDto, type SmvScheduleDto,
 } from '../../lib/types';
 import { day, errorText, lookup, pct, period, statusTag, useToast } from './ruleHelpers';
@@ -38,6 +38,7 @@ export function ValuationRulesPage() {
         { key: 'buildings', label: 'Building costs', children: <BuildingCostsTab /> },
         { key: 'machinery', label: 'Machinery indices', children: <MachineryIndicesTab /> },
         { key: 'levels', label: 'Assessment levels', children: <LevelsTab /> },
+        { key: 'ceilings', label: 'Level ceilings', children: <CeilingsTab /> },
       ]} />
     </Space>
   );
@@ -421,6 +422,79 @@ function LevelsTab() {
         columns={[{ title: 'Classification / actual use / property type', dataIndex: 'label' }, { title: 'Levels', render: (_, g) => g.levels.length }]} />}
       {creating && <CreateLevelModal onClose={() => setCreating(false)} />}
     </Card>
+  );
+}
+
+// ---------------- Statutory maximum levels (L3-2) ----------------
+
+/**
+ * The highest levels the law allows (docs/analysis/assessment-listing-exemptions.md §4.2): loaded from the province's
+ * content pack, approved by a second user. A level above the ceiling in force for its keys cannot be created or approved.
+ */
+function CeilingsTab() {
+  const { data = [], isLoading } = useAssessmentLevelCeilings();
+  const approve = useApproveAssessmentLevelCeiling();
+  const { context, fail } = useToast();
+  const [modal, modalContext] = Modal.useModal();
+  const [creating, setCreating] = useState(false);
+  return (
+    <Card title="Statutory maximum assessment levels" extra={<Button icon={<PlusOutlined />} onClick={() => setCreating(true)}>New ceiling</Button>}>
+      {context}{modalContext}
+      <Typography.Paragraph type="secondary">
+        Optional. While a ceiling is in force, an assessment level of its property type (and its classification or actual use, where it names one)
+        whose bracket overlaps the ceiling's cannot be above it. The maximums come from the law and are loaded as content; none is built in.
+      </Typography.Paragraph>
+      <Table<AssessmentLevelCeilingDto> rowKey="id" size="small" loading={isLoading} dataSource={data} pagination={false} scroll={{ x: true }}
+        locale={{ emptyText: 'No ceilings: assessment levels are not checked' }}
+        columns={[
+          { title: 'Code', dataIndex: 'code' },
+          { title: 'Applies to', render: (_, c) => [c.propertyTypeName, c.classificationName ?? 'any classification', c.actualUseName ?? 'any use'].join(' / ') },
+          { title: 'Over', dataIndex: 'lowerValue', align: 'right', render: formatMoney },
+          { title: 'Not over', dataIndex: 'upperValue', align: 'right', render: (v: number | null) => (v === null ? '—' : formatMoney(v)) },
+          { title: 'Maximum', dataIndex: 'maximumPercentage', align: 'right', render: pct },
+          { title: 'Legal basis', dataIndex: 'legalBasis' },
+          { title: 'Period', render: (_, c) => period(c.effectiveDate, c.endDate) },
+          { title: 'Status', dataIndex: 'status', render: statusTag },
+          {
+            title: '', render: (_, c) => <ApproveButton status={c.status} pending={approve.isPending} onApprove={() => approve.mutate(c.id, {
+              onError: fail,
+              onSuccess: (r) => { if (r.warning) modal.warning({ title: 'Levels above the new ceiling', content: r.warning }); },
+            })} />,
+          },
+        ]} />
+      {creating && <CreateCeilingModal onClose={() => setCreating(false)} />}
+    </Card>
+  );
+}
+
+function CreateCeilingModal({ onClose }: { onClose: () => void }) {
+  const create = useCreateAssessmentLevelCeiling();
+  const [form] = Form.useForm();
+  const { data: classifications = [] } = useClassifications();
+  const { data: actualUses = [] } = useActualUses();
+  const { data: propertyTypes = [] } = usePropertyTypes();
+  return (
+    <Modal open title="New assessment-level ceiling (Draft)" okText="Create" onCancel={onClose} okButtonProps={{ loading: create.isPending }} onOk={() => form.submit()} width={720} destroyOnHidden>
+      {create.isError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Not created" description={errorText(create.error)} />}
+      <Form form={form} layout="vertical" initialValues={{ lowerValue: 0 }} onFinish={(v) => create.mutate({
+        code: v.code, description: v.description || null, legalBasis: v.legalBasis, remarks: null, effectiveDate: day(v.effectiveDate)!,
+        propertyTypeId: v.propertyTypeId, classificationId: v.classificationId ?? null, actualUseId: v.actualUseId ?? null,
+        lowerValue: v.lowerValue, upperValue: v.upperValue ?? null, maximumPercentage: v.maximumPercentage,
+      }, { onSuccess: onClose })}>
+        <Row gutter={12}>
+          <Col span={8}><Form.Item name="code" label="Code" rules={[{ required: true }]}><Input maxLength={50} /></Form.Item></Col>
+          <Col span={16}><Form.Item name="legalBasis" label="Legal basis" rules={[{ required: true }]}><Input maxLength={500} placeholder="e.g. the section of the law that sets it" /></Form.Item></Col>
+          <Col span={8}><Form.Item name="propertyTypeId" label="Property type" rules={[{ required: true }]}><Select options={lookup(propertyTypes)} /></Form.Item></Col>
+          <Col span={8}><Form.Item name="classificationId" label="Classification" extra="Blank: any"><Select allowClear showSearch optionFilterProp="label" options={lookup(classifications)} /></Form.Item></Col>
+          <Col span={8}><Form.Item name="actualUseId" label="Actual use" extra="Blank: any"><Select allowClear showSearch optionFilterProp="label" options={lookup(actualUses)} /></Form.Item></Col>
+          <Col span={8}><Form.Item name="lowerValue" label="Over (market value)" rules={[{ required: true }]}><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col span={8}><Form.Item name="upperValue" label="Not over" extra="Blank: no upper limit"><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col span={8}><Form.Item name="maximumPercentage" label="Maximum level %" rules={[{ required: true }]}><InputNumber min={0.0001} max={100} precision={4} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col span={8}><Form.Item name="effectiveDate" label="Effective" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
+          <Col span={16}><Form.Item name="description" label="Description"><Input maxLength={1000} /></Form.Item></Col>
+        </Row>
+      </Form>
+    </Modal>
   );
 }
 

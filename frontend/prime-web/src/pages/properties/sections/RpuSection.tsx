@@ -12,6 +12,7 @@ import { PrintFormButton } from '../../../components/PrintFormButton';
 import { PropertyDetailForRpu } from './PropertyDetailForRpu';
 import { AssessmentsForRpu } from './AssessmentsForRpu';
 import { IndependentAppraisalsForRpu } from './IndependentAppraisalsForRpu';
+import { TaxabilityTag } from '../../../components/TaxabilityTag';
 
 const workflowStatusColor: Record<string, string> = {
   Draft: 'default',
@@ -83,6 +84,7 @@ function TaxDeclarationsForRpu({ propertyId, rpuId, rpuType }: { propertyId: str
           { title: 'Assessment Year', dataIndex: 'assessmentYear', width: 130 },
           { title: 'Effectivity', dataIndex: 'effectivityDate' },
           { title: 'Replaces', render: (_, td) => numberOf(td.previousTaxDeclarationId) ?? '—' },
+          { title: 'Taxability', render: (_, td) => <TaxabilityTag value={td.taxability} /> },
           {
             title: 'Status',
             render: (_, td) => {

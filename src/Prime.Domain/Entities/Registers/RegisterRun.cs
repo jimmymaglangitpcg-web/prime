@@ -37,6 +37,15 @@ public sealed class RegisterRun : AuditableEntity
     /// </summary>
     public bool IncludePastOwners { get; set; }
 
+    /// <summary>The general revision the run was made for (GRI 5, 12, 17, 18; docs/analysis/smv-preparation-general-revision.md §4.6).</summary>
+    public Guid? GeneralRevisionProgrammeId { get; set; }
+
+    /// <summary>
+    /// A general revision's assessment roll run before every notice was served and the waiting period had passed
+    /// (Q15): why. Also written into <see cref="Remarks"/>, so the roll shows it.
+    /// </summary>
+    public string? RollGateOverrideReason { get; set; }
+
     /// <summary>
     /// Record of Assessment: the first day of the period; Assessment Roll: a
     /// supplement lists only FAAS entered on or after this day. Null: all.

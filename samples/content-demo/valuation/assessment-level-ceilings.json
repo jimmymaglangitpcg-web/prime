@@ -1,0 +1,12 @@
+[
+  {
+    "code": "DEMO-CEIL-LAND-R",
+    "description": "DEMO maximum for exercising the check; not a statutory value.",
+    "propertyType": "LAND",
+    "classification": "DEMO-CP-R",
+    "lowerValue": 0,
+    "maximumPercentage": 25,
+    "legalBasis": "DEMO — cites no law",
+    "effectiveDate": "2099-01-01"
+  }
+]

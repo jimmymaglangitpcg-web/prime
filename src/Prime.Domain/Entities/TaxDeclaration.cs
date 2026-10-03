@@ -80,6 +80,12 @@ public sealed class TaxDeclaration : AuditableEntity
     public Guid? CancelledBy { get; set; }
     public string? CancellationReason { get; set; }
     /// <summary>The TD that cancelled this one, when it was superseded rather than cancelled outright.</summary>
+    /// <summary>
+    /// The cancelled declaration a court order restores or revives (assessment-listing-exemptions.md §4.3): this TD is
+    /// the new declaration that names it; the cancelled one stays cancelled. Only within a court-order transaction.
+    /// </summary>
+    public Guid? RestoresTaxDeclarationId { get; set; }
+
     public Guid? SupersededByTaxDeclarationId { get; set; }
 
     public List<TaxDeclarationAnnotation> Annotations { get; set; } = [];

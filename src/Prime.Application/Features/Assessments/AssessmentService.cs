@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Approvals;
+using Prime.Application.Features.Exemptions;
 using Prime.Application.Features.Numbering;
 using Prime.Application.Features.TaxDeclarations;
 using Prime.Domain.DomainServices;
@@ -88,7 +89,8 @@ public sealed class AssessmentService(
         var actualUses = await db.ActualUses.Where(x => actualUseIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
         return Result.Success(new AssessmentPreviewDto(valuation.Id, valuation.RpuId, lines.Sum(l => l.MarketValue), lines.Sum(l => l.AssessedValue),
             lines.Select(l => new AssessmentLineDto(Guid.Empty, l.Sequence, l.ClassificationId, classifications.GetValueOrDefault(l.ClassificationId, ""),
-                l.ActualUseId, actualUses.GetValueOrDefault(l.ActualUseId, ""), l.MarketValue, l.AssessmentLevelId, l.AssessmentPercentage, l.AssessedValue)).ToList(),
+                l.ActualUseId, actualUses.GetValueOrDefault(l.ActualUseId, ""), l.MarketValue, l.AssessmentLevelId, l.AssessmentPercentage, l.AssessedValue,
+                l.Taxability, l.PropertyExemptionId, l.TaxabilityNote)).ToList(),
             effectivity));
     }
 
@@ -289,6 +291,8 @@ public sealed class AssessmentService(
                 AssessedValue = Math.Round(marketValue * level.AssessmentPercentage / 100m, 2, MidpointRounding.AwayFromZero),
             });
         }
+        // Taxable or exempt by the exemptions in force on the effective date (assessment-listing-exemptions.md §4.1).
+        await ExemptionTaxability.MarkAsync(db, valuation.RpuId, assessmentLines, effectiveDate, cancellationToken);
         return Result.Success(new Calculated(valuation, assessmentLines, effectivity));
     }
 
@@ -353,6 +357,9 @@ public sealed class AssessmentService(
             assessment.ApprovedBy = currentUser.AppUserId;
             assessment.ApprovedAt = DateTimeOffset.UtcNow;
             assessment.MadeOn = today;
+            // The lines are marked as of when the assessment is made: an exemption decided since the draft counts (§4.1).
+            await ExemptionTaxability.MarkAsync(db, assessment.RpuId,
+                await db.AssessmentLines.Where(l => l.AssessmentId == assessment.Id).ToListAsync(cancellationToken), assessment.EffectiveDate, cancellationToken);
             if (assessment.CauseDate is { } cause && assessment.EffectivityRule == EffectivityRule.NextQuarter)
             {
                 assessment.CauseWindowExceeded = EffectivityRules.CauseWindowExceeded(cause, today, assessment.CauseWindowDays);
@@ -471,6 +478,73 @@ public sealed class AssessmentService(
         return Result.Success<IReadOnlyList<AssessmentDto>>(assessments.Select(ToDto).ToList());
     }
 
+    /// <summary>
+    /// After an exemption of the unit is approved or ended (assessment-listing-exemptions.md §4.1, Q3): when its
+    /// assessment in force would now be marked differently, a Draft reassessment with the same values, the lines
+    /// re-marked as of its effectivity and the posted assessment as its previous one. It goes through the normal
+    /// workflow; posting it prepares the replacing TD. Posted records never change. The effectivity follows the
+    /// transaction type <paramref name="transactionCode"/> when its rule derives a date (the exemption's date as the
+    /// cause); otherwise it is <paramref name="from"/>, never before the assessment in force. The caller saves.
+    /// Returns the draft, or null with the reason none was opened.
+    /// </summary>
+    public async Task<(Domain.Entities.Assessment? Draft, string Note)> ReassessTaxabilityAsync(Guid rpuId, DateOnly from, string reason,
+        string? transactionCode, CancellationToken cancellationToken = default)
+    {
+        var ct = cancellationToken;
+        var today = clock.Today;
+        var latest = await db.Assessments.Include(x => x.Lines)
+            .Where(x => x.RpuId == rpuId && (x.Status == WorkflowStatus.Approved || x.Status == WorkflowStatus.Posted))
+            .OrderByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt).FirstOrDefaultAsync(ct);
+        if (latest is null)
+        {
+            return (null, "The unit has no assessment yet; its first assessment takes the exemption into account.");
+        }
+        if (latest.Status != WorkflowStatus.Posted)
+        {
+            return (null, "The unit's latest assessment is approved but not posted; post it, then reassess the unit for the exemption.");
+        }
+        if (await db.Assessments.AnyAsync(x => x.RpuId == rpuId && (x.Status == WorkflowStatus.Draft || x.Status == WorkflowStatus.PendingReview), ct))
+        {
+            return (null, "An assessment of the unit is in progress; it takes the exemption into account when it is approved.");
+        }
+
+        Domain.Entities.Transactions.TransactionType? type = null;
+        if (transactionCode?.Trim() is { Length: > 0 } code)
+        {
+            type = await db.TransactionTypes.AsNoTracking().InForce(today).FirstOrDefaultAsync(x => x.Code == code, ct);
+            if (type is null)
+            {
+                return (null, $"No transaction type {code} is in force (Exemptions:ReassessmentTransactionCode); reassess the unit by hand.");
+            }
+        }
+        var derived = type?.EffectivityRule is { } rule ? EffectivityRules.Derive(rule, today) : null;
+        var effective = derived ?? (from > latest.EffectiveDate ? from : latest.EffectiveDate);
+
+        var lines = latest.Lines.OrderBy(l => l.Sequence).Select(l => new Domain.Entities.AssessmentLine
+        {
+            Sequence = l.Sequence, ClassificationId = l.ClassificationId, ActualUseId = l.ActualUseId, PropertyTypeId = l.PropertyTypeId,
+            MarketValue = l.MarketValue, AssessmentLevelId = l.AssessmentLevelId, AssessmentPercentage = l.AssessmentPercentage, AssessedValue = l.AssessedValue,
+            Taxability = l.Taxability, PropertyExemptionId = l.PropertyExemptionId, TaxabilityNote = l.TaxabilityNote,
+        }).ToList();
+        if (!await ExemptionTaxability.MarkAsync(db, rpuId, lines, effective, ct))
+        {
+            return (null, $"No reassessment is needed: the assessment in force is already taxable or exempt as the exemptions in force on {effective:yyyy-MM-dd} make it.");
+        }
+        var draft = new Domain.Entities.Assessment
+        {
+            RpuId = latest.RpuId, PropertyId = latest.PropertyId, ValuationId = latest.ValuationId, AssessmentYear = effective.Year,
+            MarketValue = latest.MarketValue, AssessmentLevelId = latest.AssessmentLevelId, AssessmentPercentage = latest.AssessmentPercentage,
+            AssessedValue = latest.AssessedValue, Status = WorkflowStatus.Draft, EffectiveDate = effective,
+            TransactionTypeId = type?.Id, TransactionCode = type?.Code, EffectivityRule = derived is null ? null : type?.EffectivityRule,
+            CauseDate = derived is not null && EffectivityRules.NeedsCauseDate(type!.EffectivityRule!.Value) ? (from <= today ? from : today) : null,
+            PreviousAssessmentId = latest.Id,
+            Remarks = $"Taxability reassessment: {reason} Values of the {latest.AssessmentYear} assessment effective {latest.EffectiveDate:yyyy-MM-dd} unchanged.",
+            Lines = lines,
+        };
+        db.Assessments.Add(draft);
+        return (draft, $"A draft reassessment effective {effective:yyyy-MM-dd} was opened; approving and posting it prepares the replacing Tax Declaration.");
+    }
+
     private async Task<Domain.Entities.AssessmentLevel?> ResolveAssessmentLevelAsync(
         Guid classificationId, Guid actualUseId, Guid propertyTypeId, decimal marketValue, DateOnly asOf, CancellationToken cancellationToken)
     {
@@ -491,7 +565,8 @@ public sealed class AssessmentService(
 
     private static IQueryable<Domain.Entities.Assessment> WithLines(IQueryable<Domain.Entities.Assessment> query) => query
         .Include(x => x.Lines).ThenInclude(l => l.Classification)
-        .Include(x => x.Lines).ThenInclude(l => l.ActualUse);
+        .Include(x => x.Lines).ThenInclude(l => l.ActualUse)
+        .Include(x => x.Lines).ThenInclude(l => l.PropertyExemption).ThenInclude(e => e!.ExemptionType);
 
     private async Task<AssessmentDto> MapAsync(Guid id, CancellationToken ct) =>
         ToDto(await WithLines(db.Assessments).AsNoTracking().SingleAsync(x => x.Id == id, ct));
@@ -516,7 +591,8 @@ public sealed class AssessmentService(
         x.ApprovedAt,
         x.CreatedAt,
         x.Lines.OrderBy(l => l.Sequence).Select(l => new AssessmentLineDto(l.Id, l.Sequence, l.ClassificationId, l.Classification!.Name,
-            l.ActualUseId, l.ActualUse!.Name, l.MarketValue, l.AssessmentLevelId, l.AssessmentPercentage, l.AssessedValue)).ToList(),
+            l.ActualUseId, l.ActualUse!.Name, l.MarketValue, l.AssessmentLevelId, l.AssessmentPercentage, l.AssessedValue,
+            l.Taxability, l.PropertyExemptionId, l.TaxabilityNote, l.PropertyExemption?.ExemptionType?.LegalBasis)).ToList(),
         x.PostedAt,
         x.PostedBy,
         null,

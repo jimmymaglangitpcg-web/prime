@@ -53,9 +53,11 @@ public sealed class PropertyTransactionConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.Description).HasMaxLength(2000).IsRequired();
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(x => x.CloseReason).HasMaxLength(1000);
+        builder.Property(x => x.InterAgencyVerification).HasMaxLength(2000);
         builder.HasOne(x => x.TransactionType).WithMany().HasForeignKey(x => x.TransactionTypeId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Property).WithMany().HasForeignKey(x => x.PropertyId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Prime.Domain.Entities.RealPropertyUnit>().WithMany().HasForeignKey(x => x.TransferRpuId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Prime.Domain.Entities.RealPropertyUnit>().WithMany().HasForeignKey(x => x.RelocatedRpuId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(x => x.Requirements).WithOne().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(x => x.NewParties).WithOne().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasMany(x => x.TdCancellations).WithOne().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
@@ -128,7 +130,7 @@ public sealed class TransferTaxClearanceConfiguration : IEntityTypeConfiguration
     public void Configure(EntityTypeBuilder<TransferTaxClearance> builder)
     {
         builder.ToTable("TransferTaxClearances", t => t.HasCheckConstraint("CK_TransferTaxClearances_Amounts",
-            "COALESCE(\"CapitalGainsTax\", 0) >= 0 AND COALESCE(\"DocumentaryStampTax\", 0) >= 0 AND COALESCE(\"TransferTax\", 0) >= 0"));
+            "COALESCE(\"CapitalGainsTax\", 0) >= 0 AND COALESCE(\"DocumentaryStampTax\", 0) >= 0 AND COALESCE(\"TransferTax\", 0) >= 0 AND COALESCE(\"Consideration\", 0) >= 0"));
         builder.HasKey(x => x.Id);
         builder.HasIndex(x => x.PropertyTransactionId).IsUnique();
         builder.Property(x => x.CarNumber).HasMaxLength(100);
@@ -136,11 +138,41 @@ public sealed class TransferTaxClearanceConfiguration : IEntityTypeConfiguration
         builder.Property(x => x.TransferorTin).HasMaxLength(20);
         builder.Property(x => x.TransfereeTin).HasMaxLength(20);
         builder.Property(x => x.CapitalGainsTax).HasPrecision(18, 2);
+        builder.Property(x => x.Consideration).HasPrecision(18, 2);
         builder.Property(x => x.DocumentaryStampTax).HasPrecision(18, 2);
         builder.Property(x => x.TransferTax).HasPrecision(18, 2);
         builder.Property(x => x.CapitalGainsTaxReceipt).HasMaxLength(100);
         builder.Property(x => x.DocumentaryStampTaxReceipt).HasMaxLength(100);
         builder.Property(x => x.TransferTaxReceipt).HasMaxLength(100);
         builder.Property(x => x.Remarks).HasMaxLength(1000);
+    }
+}
+
+public sealed class DiscoverySummonsConfiguration : IEntityTypeConfiguration<DiscoverySummons>
+{
+    public void Configure(EntityTypeBuilder<DiscoverySummons> builder)
+    {
+        builder.ToTable("DiscoverySummonses", t =>
+        {
+            t.HasCheckConstraint("CK_DiscoverySummonses_Sequence", "\"Sequence\" IN (1, 2)");
+            t.HasCheckConstraint("CK_DiscoverySummonses_Period", "\"PeriodDays\" > 0");
+            t.HasCheckConstraint("CK_DiscoverySummonses_Served",
+                "(\"ReceivedOn\" IS NOT NULL) = (\"ServiceMode\" IS NOT NULL AND \"ProofReference\" IS NOT NULL AND \"DueDate\" IS NOT NULL)");
+            t.HasCheckConstraint("CK_DiscoverySummonses_Outcome", "(\"Outcome\" = 'Pending') = (\"OutcomeOn\" IS NULL)");
+            t.HasCheckConstraint("CK_DiscoverySummonses_OutcomeServed", "\"Outcome\" = 'Pending' OR \"ReceivedOn\" IS NOT NULL");
+        });
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.SummonsNumber).HasMaxLength(100);
+        builder.Property(x => x.AddresseeName).HasMaxLength(300).IsRequired();
+        builder.Property(x => x.AddresseeAddress).HasMaxLength(1000);
+        builder.Property(x => x.ServiceMode).HasConversion<string>().HasMaxLength(30);
+        builder.Property(x => x.ServedTo).HasMaxLength(300);
+        builder.Property(x => x.ProofReference).HasMaxLength(200);
+        builder.Property(x => x.ServiceNotes).HasMaxLength(1000);
+        builder.Property(x => x.Outcome).HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.OutcomeNotes).HasMaxLength(1000);
+        builder.HasOne(x => x.PropertyTransaction).WithMany().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Prime.Domain.Entities.Taxpayer>().WithMany().HasForeignKey(x => x.AddresseeTaxpayerId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => new { x.PropertyTransactionId, x.Sequence }).IsUnique();
     }
 }

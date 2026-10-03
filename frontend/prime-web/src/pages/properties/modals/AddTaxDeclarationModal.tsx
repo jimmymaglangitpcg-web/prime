@@ -15,6 +15,8 @@ export function AddTaxDeclarationModal({
   open,
   onClose,
   transactionId,
+  courtOrder,
+  continuesRpuId,
 }: {
   propertyId: string;
   rpuId: string;
@@ -22,6 +24,10 @@ export function AddTaxDeclarationModal({
   onClose: () => void;
   /** Draft the TD under this property transaction; it is then approved with the transaction. */
   transactionId?: string;
+  /** Under a court order: a cancelled TD of the unit may be restored by this new TD (L3-3). */
+  courtOrder?: boolean;
+  /** Under a machinery relocation: the moved unit, whose current TD this TD replaces across properties (L3-3). */
+  continuesRpuId?: string;
 }) {
   const [form] = Form.useForm();
   const { data: classifications } = useClassifications();
@@ -29,8 +35,11 @@ export function AddTaxDeclarationModal({
   const { data: subClassifications } = useSubClassifications();
   const { data: transactionTypes = [] } = useTransactionTypes(true);
   const createTaxDeclaration = useCreateTaxDeclaration(propertyId);
-  const { data: existing = [] } = useTaxDeclarationsByRpu(rpuId);
-  const current = existing.find((td) => td.status === 'Approved');
+  const { data: own = [] } = useTaxDeclarationsByRpu(rpuId);
+  const { data: moved = [] } = useTaxDeclarationsByRpu(continuesRpuId);
+  const existing = continuesRpuId ? [...own, ...moved] : own;
+  const current = own.find((td) => td.status === 'Approved') ?? (continuesRpuId ? moved.find((td) => td.status === 'Approved') : undefined);
+  const cancelled = own.filter((td) => td.status === 'Cancelled');
   const { data: assessments = [] } = useRpuAssessments(rpuId);
   const posted = assessments.filter((a) => a.status === 'Posted').sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
   // Propose the current TD as the one replaced once it is known (the list may load after the
@@ -82,6 +91,7 @@ export function AddTaxDeclarationModal({
             propertyTransactionId: transactionId,
             transactionCode: transactionId ? undefined : values.transactionCode,
             assessmentId: values.assessmentId ?? null,
+            restoresTaxDeclarationId: courtOrder ? values.restoresTaxDeclarationId ?? null : null,
           };
           createTaxDeclaration.mutate(request, { onSuccess: handleClose });
         }}
@@ -102,6 +112,13 @@ export function AddTaxDeclarationModal({
           <Select allowClear placeholder="None — first declaration for this RPU"
             options={replaceable.map((td) => ({ value: td.id, label: `${td.taxDeclarationNumber} (${td.status})` }))} />
         </Form.Item>
+
+        {courtOrder && (
+          <Form.Item name="restoresTaxDeclarationId" label="Restores TD (court order)"
+            extra="The cancelled declaration the court order restores or revives. It stays cancelled; this new TD names it.">
+            <Select allowClear placeholder="None" options={cancelled.map((td) => ({ value: td.id, label: `${td.taxDeclarationNumber} (Cancelled)` }))} />
+          </Form.Item>
+        )}
 
         <Form.Item name="assessmentId" label="Declares assessment"
           extra="The posted assessment this declaration declares; its FAAS then shows the assessment's values.">

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Approvals;
+using Prime.Application.Features.Exemptions;
 using Prime.Application.Features.Numbering;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
@@ -29,9 +30,10 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         // The FAAS transaction code: the transaction's, a code named, and GR for a general revision
         // assessment; the highest rank wins (MRPAAO p.145, 167).
         var codes = new List<(string? Code, int? Rank)>();
+        Domain.Entities.Transactions.PropertyTransaction? tx = null;
         if (request.PropertyTransactionId is { } transactionId)
         {
-            var tx = await db.PropertyTransactions.Include(x => x.RelatedProperties).Include(x => x.TransactionType)
+            tx = await db.PropertyTransactions.Include(x => x.RelatedProperties).Include(x => x.TransactionType)
                 .FirstOrDefaultAsync(x => x.Id == transactionId, cancellationToken);
             if (tx is null)
             {
@@ -76,7 +78,10 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
             {
                 return Result.Failure<TaxDeclarationDto>("PREVIOUS_TAX_DECLARATION_NOT_FOUND", "The specified previous Tax Declaration does not exist.");
             }
-            if (previous.RpuId != request.RpuId)
+            // A relocated machine's new unit names the TD of the unit it continues, on the property it left (Q7).
+            var relocation = tx is { Kind: PropertyTransactionKind.MachineryRelocation } && previous.RpuId == tx.RelocatedRpuId
+                && rpu.PreviousRpuId == tx.RelocatedRpuId;
+            if (previous.RpuId != request.RpuId && !relocation)
             {
                 return Result.Failure<TaxDeclarationDto>("PREVIOUS_TAX_DECLARATION_OTHER_RPU", "The previous Tax Declaration belongs to a different RPU.");
             }
@@ -86,6 +91,21 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
                     $"TD {previous.TaxDeclarationNumber} is already cancelled; name the current TD instead.");
             }
             revisionNumber = previous.RevisionNumber + 1;
+        }
+        // A court order restores a cancelled declaration by a new TD naming it (assessment-listing-exemptions.md §4.3).
+        if (request.RestoresTaxDeclarationId is { } restoredId)
+        {
+            if (tx is not { Kind: PropertyTransactionKind.CourtOrder })
+            {
+                return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_RESTORE_NOT_ALLOWED", "Only a court-order transaction restores a cancelled Tax Declaration.");
+            }
+            var restored = await db.TaxDeclarations.FirstOrDefaultAsync(x => x.Id == restoredId, cancellationToken);
+            if (restored is null || restored.RpuId != request.RpuId || restored.Status != WorkflowStatus.Cancelled)
+            {
+                return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_RESTORE_INVALID", "The TD to restore must be a cancelled TD of the same RPU.");
+            }
+            revisionNumber = Math.Max(revisionNumber,
+                await db.TaxDeclarations.Where(x => x.RpuId == request.RpuId).MaxAsync(x => x.RevisionNumber, cancellationToken) + 1);
         }
 
         // The assessment this TD declares (the TD with it is the FAAS): named, or the one in force.
@@ -135,7 +155,9 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
             AssessmentCount = assigned.Value.Sequence,
             RevisionNumber = revisionNumber,
             EffectivityDate = request.EffectivityDate,
-            Taxability = request.Taxability,
+            // Declaring an assessment, it is as taxable as its lines (assessment-listing-exemptions.md Q2).
+            Taxability = assessmentId is { } declaredId && await ExemptionTaxability.OfAssessmentAsync(db, declaredId, cancellationToken) is { } derived
+                ? derived : request.Taxability,
             ClassificationId = request.ClassificationId,
             ActualUseId = request.ActualUseId,
             SubClassificationId = request.SubClassificationId,
@@ -144,6 +166,7 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
             Remarks = request.Remarks,
             PropertyTransactionId = request.PropertyTransactionId,
             AssessmentId = assessmentId,
+            RestoresTaxDeclarationId = request.RestoresTaxDeclarationId,
             TransactionCode = transactionCode,
             TransactionRank = transactionRank,
             Status = WorkflowStatus.Draft,
@@ -249,7 +272,7 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         {
             if (completes)
             {
-                await TaxDeclarationApproval.ApplyAsync(db, td, previous, currentUser.AppUserId, clock.UtcNow, cancellationToken);
+                await TaxDeclarationApproval.ApplyAsync(db, td, previous, currentUser.AppUserId, clock.UtcNow, clock.Today, cancellationToken);
             }
             else
             {
@@ -321,6 +344,10 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         {
             return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NOT_APPROVED",
                 "Only an approved Tax Declaration can be cancelled; a draft or pending one can be rejected instead.");
+        }
+        if (await CancellationGuard.BlockerAsync(db, [td.Id], cancellationToken) is { } blocked)
+        {
+            return Result.Failure<TaxDeclarationDto>(CancellationGuard.Code, blocked);
         }
         td.Status = WorkflowStatus.Cancelled;
         td.CancelledAt = clock.UtcNow;
@@ -459,7 +486,8 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         FaasNumber(td),
         td.TransactionCode,
         td.TransactionRank,
-        td.AssessmentCount);
+        td.AssessmentCount,
+        td.RestoresTaxDeclarationId);
 
     /// <summary>A TD is a FAAS once it declares an assessment; its number follows <see cref="FaasOptions.NumberSource"/>.</summary>
     private string? FaasNumber(TaxDeclaration td) => td.AssessmentId is null

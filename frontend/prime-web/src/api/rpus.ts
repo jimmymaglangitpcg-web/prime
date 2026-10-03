@@ -7,6 +7,7 @@ export function usePropertyRpus(propertyId: string) {
   return useQuery({
     queryKey: ['properties', propertyId, 'rpus'],
     queryFn: () => apiGet<RpuDto[]>(`/api/properties/${propertyId}/rpus`),
+    enabled: !!propertyId,
   });
 }
 

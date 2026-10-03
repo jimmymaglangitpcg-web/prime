@@ -15,7 +15,9 @@ public sealed record CreateTaxDeclarationRequest(
     string? Remarks,
     Guid? PropertyTransactionId = null,
     Guid? AssessmentId = null,
-    string? TransactionCode = null);
+    string? TransactionCode = null,
+    /// <summary>Within a court-order transaction: the cancelled TD this new declaration restores (§4.3).</summary>
+    Guid? RestoresTaxDeclarationId = null);
 
 public sealed record TaxDeclarationDto(
     Guid Id,
@@ -48,7 +50,8 @@ public sealed record TaxDeclarationDto(
     string? TransactionCode = null,
     int? TransactionRank = null,
     /// <summary>The assessment count the TD number was made from (identification-numbering.md §4.1).</summary>
-    long? AssessmentCount = null);
+    long? AssessmentCount = null,
+    Guid? RestoresTaxDeclarationId = null);
 
 public sealed record TaxDeclarationReasonRequest(string Reason);
 

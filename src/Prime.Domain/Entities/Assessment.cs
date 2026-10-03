@@ -127,4 +127,15 @@ public sealed class AssessmentLine : Entity
     public AssessmentLevel? AssessmentLevel { get; set; }
     public decimal AssessmentPercentage { get; set; }
     public decimal AssessedValue { get; set; }
+
+    /// <summary>
+    /// Taxable or exempt, from the exemptions approved and in force on the assessment's effective date, set when it is
+    /// made (docs/analysis/assessment-listing-exemptions.md §4.1). An unproven claim leaves the line taxable (LGC §206).
+    /// </summary>
+    public Taxability Taxability { get; set; } = Taxability.Taxable;
+    /// <summary>The exemption that decided the line: it made it exempt, or its ceiling left it taxable.</summary>
+    public Guid? PropertyExemptionId { get; set; }
+    public Exemptions.PropertyExemption? PropertyExemption { get; set; }
+    /// <summary>Why the line is as it is when that is not plain from the exemption (a ceiling exceeded, an older exempt declaration).</summary>
+    public string? TaxabilityNote { get; set; }
 }

@@ -37,6 +37,9 @@ public class BackTaxTests(WebApplicationFactory<Program> factory) : IClassFixtur
         var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PrimeDbContext>();
         var transaction = await db.Database.BeginTransactionAsync();
+        // The test's own numbering schemes start today; set aside the database's approved ones (rolled back with the test).
+        await db.NumberingSchemes.Where(x => x.Status == WorkflowStatus.Approved)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, WorkflowStatus.Cancelled).SetProperty(x => x.ApprovedAt, (DateTimeOffset?)null));
         var province = new Province { PsgcCode = $"P{Guid.NewGuid():N}"[..10], Name = "DEMO Province" };
         var town = new Municipality { Province = province, PsgcCode = $"M{Guid.NewGuid():N}"[..10], Name = "DEMO Town" };
         var barangay = new Barangay { Municipality = town, PsgcCode = $"B{Guid.NewGuid():N}"[..10], Name = "DEMO Barangay" };

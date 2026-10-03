@@ -44,6 +44,10 @@ public interface IApplicationDbContext
     DbSet<Prime.Domain.Entities.Registers.AssessmentRollSubmission> AssessmentRollSubmissions { get; }
     DbSet<Prime.Domain.Entities.Registers.AssessmentRollSubmissionItem> AssessmentRollSubmissionItems { get; }
     DbSet<Prime.Domain.Entities.Registers.AssessmentRollEntry> AssessmentRollEntries { get; }
+    DbSet<Prime.Domain.Entities.Exemptions.ExemptionType> ExemptionTypes { get; }
+    DbSet<Prime.Domain.Entities.AssessmentLevelCeiling> AssessmentLevelCeilings { get; }
+    DbSet<Prime.Domain.Entities.Exemptions.PropertyExemption> PropertyExemptions { get; }
+    DbSet<Prime.Domain.Entities.Exemptions.ExemptionEvidence> ExemptionEvidence { get; }
     DbSet<Prime.Domain.Entities.SwornStatements.SwornStatement> SwornStatements { get; }
     DbSet<Prime.Domain.Entities.SwornStatements.SwornStatementItem> SwornStatementItems { get; }
     DbSet<LandImprovement> LandImprovements { get; }
@@ -99,6 +103,13 @@ public interface IApplicationDbContext
     DbSet<PropertyTransactionTdCancellation> PropertyTransactionTdCancellations { get; }
     DbSet<PropertyTransactionProperty> PropertyTransactionProperties { get; }
     DbSet<NoticeOfAssessment> NoticesOfAssessment { get; }
+    DbSet<NoticeOfCancellation> NoticesOfCancellation { get; }
+    DbSet<Prime.Domain.Entities.Transactions.DiscoverySummons> DiscoverySummonses { get; }
+    DbSet<Prime.Domain.Entities.MarketData.MarketTransaction> MarketTransactions { get; }
+    DbSet<Prime.Domain.Entities.MarketData.BuildingPermitAbstract> BuildingPermitAbstracts { get; }
+    DbSet<Prime.Domain.Entities.MarketData.MachineryRegistrationAbstract> MachineryRegistrationAbstracts { get; }
+    DbSet<Prime.Domain.Entities.MarketData.MarketDataReportRun> MarketDataReportRuns { get; }
+    DbSet<ConveyanceMode> ConveyanceModes { get; }
     DbSet<NoticeOfAssessmentItem> NoticeOfAssessmentItems { get; }
     /// <summary>Read by forms and approvals for signatory names.</summary>
     DbSet<AppUser> AppUsers { get; }
@@ -148,6 +159,13 @@ public interface IApplicationDbContext
     DbSet<Assessment> Assessments { get; }
     DbSet<AssessmentLine> AssessmentLines { get; }
     DbSet<GeneralRevisionJob> GeneralRevisionJobs { get; }
+    DbSet<GeneralRevisionProgramme> GeneralRevisionProgrammes { get; }
+    DbSet<GeneralRevisionScope> GeneralRevisionScopes { get; }
+    DbSet<GeneralRevisionSuspension> GeneralRevisionSuspensions { get; }
+    DbSet<GeneralRevisionItem> GeneralRevisionItems { get; }
+    DbSet<GeneralRevisionRunIssue> GeneralRevisionRunIssues { get; }
+    DbSet<GeneralRevisionChecklistStepDefinition> GeneralRevisionChecklistStepDefinitions { get; }
+    DbSet<GeneralRevisionChecklistStep> GeneralRevisionChecklistSteps { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 

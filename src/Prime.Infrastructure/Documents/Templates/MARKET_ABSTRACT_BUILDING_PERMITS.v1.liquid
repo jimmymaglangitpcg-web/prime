@@ -1,0 +1,34 @@
+{% comment %}
+  PRIME provisional layout (docs/analysis/smv-preparation-general-revision.md §4.1): the abstract of building permits
+  received (LGC §290; LAM 2025 Book I pp.22–23; the official annex form is loaded as content when adopted).
+{% endcomment %}
+{% assign r = report %}
+<style>
+  @page { size: landscape; }
+  h1 { font-size: 12.5pt; text-align: center; margin: 4px 0 2px; }
+  .lgu { text-align: center; font-weight: bold; }
+  .sub { text-align: center; font-size: 9pt; margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 6px; }
+  td, th { border: 1px solid #000; padding: 2px 4px; font-size: 7.5pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: center; }
+  .num { text-align: right; white-space: nowrap; }
+  .empty { text-align: center; font-style: italic; }
+  .sig { margin-top: 26px; width: 260px; border-top: 1px solid #000; text-align: center; font-size: 8.5pt; padding-top: 2px; display: inline-block; margin-right: 60px; }
+  .foot { font-size: 7.5pt; margin-top: 6px; }
+</style>
+{% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% endif %}{% if lgu.office %}<div class="sub">{{ lgu.office }}</div>{% endif %}
+<h1>ABSTRACT OF BUILDING PERMITS</h1>
+<div class="sub">{{ r.municipality }}{% if r.province %}, {{ r.province }}{% endif %} · {{ r.fromDate | date_ph }} to {{ r.toDate | date_ph }}</div>
+<table>
+  <tr><th>Date issued</th><th>Construction</th><th>Completion</th><th>Permit no.</th><th>Permittee</th><th>TD no.</th><th>Address</th>
+      <th>Block/lot, street, barangay</th><th>Scope</th><th>Kind</th><th>Structural type</th><th>Storeys</th><th>Floor area</th><th>Est. cost</th>
+      <th>Classification</th><th>Declared (PIN)</th></tr>
+  {% for p in data.permits %}
+  <tr><td>{{ p.issuedOn | date_ph }}</td><td>{{ p.constructionDate | date_ph }}</td><td>{{ p.completionDate | date_ph }}</td><td>{{ p.number }}</td>
+      <td>{{ p.permittee }}</td><td>{{ p.td }}</td><td>{{ p.address }}</td><td>{{ p.blockLot }} {{ p.street }} {{ p.barangay }}</td><td>{{ p.scope }}</td>
+      <td>{{ p.kind }}</td><td>{{ p.structuralType }}</td><td class="num">{{ p.storeys }}</td><td class="num">{{ p.floorArea }}</td>
+      <td class="num">{{ p.cost | money }}</td><td>{{ p.classification }}</td><td>{{ p.declaredPin | default: "not yet declared" }}</td></tr>
+  {% else %}<tr><td colspan="16" class="empty">No permits recorded in the period.</td></tr>{% endfor %}
+</table>
+<div class="sig">Prepared by</div><div class="sig">Assessor</div>
+<div class="foot">{{ form.title }} — form {{ form.code }} v{{ form.version }}. {{ form.legalBasis }}. Printed {{ issue.issuedAt | datetime_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}.{% if r.remarks %} Remarks: {{ r.remarks }}{% endif %}</div>

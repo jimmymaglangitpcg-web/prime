@@ -68,6 +68,12 @@
       "source": "DEMO data"
     },
     {
+      "kind": "lookup",
+      "lookup": "conveyance-modes",
+      "path": "lookups/conveyance-modes.csv",
+      "source": "DEMO data"
+    },
+    {
       "kind": "transaction-types",
       "path": "catalogues/transaction-types.json",
       "source": "DEMO data"
@@ -143,6 +149,21 @@
       "effectiveDate": "2026-01-01",
       "path": "gis/barangays.geojson",
       "source": "DEMO shapes in open sea, not a real boundary"
+    },
+    {
+      "kind": "exemption-types",
+      "path": "catalogues/exemption-types.json",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "assessment-level-ceilings",
+      "path": "valuation/assessment-level-ceilings.json",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "general-revision-checklist",
+      "path": "catalogues/general-revision-checklist.json",
+      "source": "DEMO data"
     }
   ]
 }

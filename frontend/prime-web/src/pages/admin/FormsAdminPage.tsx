@@ -17,6 +17,7 @@ import {
 import { apiGet, ApiRequestError } from '../../lib/apiClient';
 import { useOffices, useRoles } from '../../api/offices';
 import { TransactionTypesTab } from './TransactionTypesTab';
+import { ExemptionTypesTab } from './ExemptionTypesTab';
 import type {
   ApprovalChainDto,
   ApprovalSigner,
@@ -34,7 +35,7 @@ const statusColor: Partial<Record<WorkflowStatus, string>> = { Draft: 'default',
 const statusTag = (s: WorkflowStatus) => <Tag color={statusColor[s]}>{s}</Tag>;
 const period = (x: { effectiveDate: string; endDate: string | null }) => `${x.effectiveDate} → ${x.endDate ?? 'open'}`;
 
-const kinds: NumberedDocumentKind[] = ['PropertyIdentificationNumber', 'TaxDeclaration', 'TaxBill', 'Faas', 'NoticeOfAssessment', 'OfficialReceipt', 'PropertyTransaction', 'SwornStatement', 'PaymentTransaction', 'Remittance', 'TemporaryPin'];
+const kinds: NumberedDocumentKind[] = ['PropertyIdentificationNumber', 'TaxDeclaration', 'TaxBill', 'Faas', 'NoticeOfAssessment', 'OfficialReceipt', 'PropertyTransaction', 'SwornStatement', 'PaymentTransaction', 'Remittance', 'TemporaryPin', 'NoticeOfCancellation', 'DiscoverySummons'];
 const authorities: FormAuthority[] = ['PrimeProvisional', 'Lam', 'Blgf', 'LguOrdinance', 'Other', 'Mrpaao'];
 const subjects: FormSubjectType[] = ['TaxBill', 'TaxDeclaration', 'NoticeOfAssessment', 'Assessment'];
 
@@ -339,6 +340,7 @@ export function FormsAdminPage() {
           { key: 'forms', label: 'Form versions', children: <FormsTab /> },
           { key: 'chains', label: 'Approval chains', children: <ChainsTab /> },
           { key: 'transactions', label: 'Transaction types', children: <TransactionTypesTab /> },
+          { key: 'exemptions', label: 'Exemption types', children: <ExemptionTypesTab /> },
         ]} />
       </Card>
     </div>

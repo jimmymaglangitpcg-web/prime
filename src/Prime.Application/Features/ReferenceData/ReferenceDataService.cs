@@ -91,6 +91,9 @@ public sealed class ReferenceDataService(IApplicationDbContext db) : IReferenceD
     public Task<IReadOnlyList<LookupDto>> GetAnnotationTypesAsync(CancellationToken cancellationToken = default) =>
         GetLookupAsync(db.AnnotationTypes, cancellationToken);
 
+    public Task<IReadOnlyList<LookupDto>> GetConveyanceModesAsync(CancellationToken cancellationToken = default) =>
+        GetLookupAsync(db.ConveyanceModes, cancellationToken);
+
     private static async Task<IReadOnlyList<LookupDto>> GetLookupAsync<T>(IQueryable<T> query, CancellationToken cancellationToken)
         where T : LookupEntity
     {

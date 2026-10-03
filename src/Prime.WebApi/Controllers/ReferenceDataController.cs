@@ -89,4 +89,8 @@ public class ReferenceDataController(IReferenceDataService referenceDataService)
     [HttpGet("annotation-types")]
     public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetAnnotationTypes(CancellationToken cancellationToken) =>
         Ok(await referenceDataService.GetAnnotationTypesAsync(cancellationToken));
+
+    [HttpGet("conveyance-modes")]
+    public async Task<ActionResult<IReadOnlyList<LookupDto>>> GetConveyanceModes(CancellationToken cancellationToken) =>
+        Ok(await referenceDataService.GetConveyanceModesAsync(cancellationToken));
 }

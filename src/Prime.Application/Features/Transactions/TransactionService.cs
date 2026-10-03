@@ -46,6 +46,9 @@ public sealed class CreateTransactionTypeRequestValidator : AbstractValidator<Cr
         RuleFor(x => x.CauseWindowDays).Null().When(x => x.EffectivityRule != EffectivityRule.NextQuarter)
             .WithMessage("causeWindowDays applies to the NextQuarter rule only.");
         RuleFor(x => x.CauseWindowDays).InclusiveBetween(1, 3660);
+        // A court order is acted on only with the order itself (assessment-listing-exemptions.md §4.3).
+        RuleFor(x => x.Requirements).Must(r => r.Any(x => x.IsMandatory)).When(x => x.Kind == PropertyTransactionKind.CourtOrder)
+            .WithMessage("A court-order type requires the court order: list it as a mandatory requirement.");
     }
 }
 
@@ -123,7 +126,7 @@ public sealed class TransactionService(
             LegalBasis = request.LegalBasis, EffectiveDate = request.EffectiveDate, Remarks = request.Remarks,
             Code = request.Code.Trim(), Name = request.Name, Kind = request.Kind, Rank = request.Rank, Description = request.Description,
             EffectivityRule = request.EffectivityRule, EffectivityLegalBasis = request.EffectivityLegalBasis, CauseWindowDays = request.CauseWindowDays,
-            AllowsNewDepreciation = request.AllowsNewDepreciation,
+            AllowsNewDepreciation = request.AllowsNewDepreciation, CancelsMotuProprio = request.CancelsMotuProprio,
             Requirements = request.Requirements.OrderBy(r => r.Sequence).Select(r => new TransactionTypeRequirement
             {
                 Sequence = r.Sequence, Code = r.Code, Label = r.Label, IsMandatory = r.IsMandatory, LegalBasis = r.LegalBasis,
@@ -199,6 +202,28 @@ public sealed class TransactionService(
             return Fail(renumbering.Code, renumbering.Message);
         }
 
+        // A machinery relocation names the moving unit; its property takes part as the source (Q7).
+        if (request.RelocatedRpuId is { } relocatedId)
+        {
+            if (type.Kind != PropertyTransactionKind.MachineryRelocation)
+            {
+                return Fail("TRANSACTION_UNIT_NOT_ALLOWED", "Only a machinery relocation names a unit that moves.");
+            }
+            var moving = await db.RealPropertyUnits.AsNoTracking().FirstOrDefaultAsync(x => x.Id == relocatedId, cancellationToken);
+            if (moving is null || moving.RpuType != RpuType.Machinery || moving.Status != RecordStatus.Active || moving.PropertyId == request.PropertyId)
+            {
+                return Fail("RELOCATED_UNIT_INVALID", "The unit that moves must be an active machinery unit of another property; the transaction is filed on the receiving property.");
+            }
+            if (related.All(r => r.PropertyId != moving.PropertyId))
+            {
+                related = [.. related, new RelatedPropertyRequest(moving.PropertyId, TransactionPropertyRole.Source)];
+            }
+        }
+        else if (type.Kind == PropertyTransactionKind.MachineryRelocation)
+        {
+            return Fail("RELOCATED_UNIT_REQUIRED", "Name the machinery unit that moves to this property.");
+        }
+
         var parties = request.NewParties ?? [];
         if (parties.Count > 0 && type.Kind != PropertyTransactionKind.Transfer)
         {
@@ -232,6 +257,10 @@ public sealed class TransactionService(
             return Fail("TRANSACTION_TD_NOT_CANCELLABLE",
                 "Every TD to cancel must be a current (Approved) TD of the transaction's property or one of its related properties.");
         }
+        if (await CancellationGuard.BlockerAsync(db, cancelIds, cancellationToken) is { } blocked)
+        {
+            return Fail(CancellationGuard.Code, blocked);
+        }
 
         var ownsTransaction = db.Database.CurrentTransaction is null;
         await using var transaction = ownsTransaction ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
@@ -246,7 +275,7 @@ public sealed class TransactionService(
         {
             TransactionTypeId = type.Id, TypeCode = type.Code, TypeName = type.Name, Kind = type.Kind,
             TransactionNumber = number.Value, PropertyId = request.PropertyId, EffectiveDate = request.EffectiveDate,
-            Description = request.Description.Trim(), TransferRpuId = request.TransferRpuId,
+            Description = request.Description.Trim(), TransferRpuId = request.TransferRpuId, RelocatedRpuId = request.RelocatedRpuId,
             Requirements = type.Requirements.OrderBy(r => r.Sequence).Select(r => new PropertyTransactionRequirement
             {
                 Sequence = r.Sequence, Code = r.Code, Label = r.Label, IsMandatory = r.IsMandatory, LegalBasis = r.LegalBasis,
@@ -340,6 +369,10 @@ public sealed class TransactionService(
         {
             return Fail("TRANSACTION_EMPTY", "The transaction does nothing yet: add a Tax Declaration, a TD to cancel, or (for a transfer) the new parties.");
         }
+        if (tx.Kind == PropertyTransactionKind.MachineryRelocation && await RelocationProblemAsync(tx, tds, cancellationToken) is { } relocation)
+        {
+            return Fail("RELOCATION_INCOMPLETE", relocation);
+        }
         if (tx.Kind == PropertyTransactionKind.Transfer && PartiesProblem(tx.NewParties) is { } problem)
         {
             return Fail("TRANSFER_PARTIES_INVALID", problem);
@@ -394,6 +427,10 @@ public sealed class TransactionService(
         {
             // 1. TDs the transaction cancels outright — first, so a new TD on the same RPU can become the approved one.
             var cancelIds = tx.TdCancellations.Select(c => c.TaxDeclarationId).ToList();
+            if (await CancellationGuard.BlockerAsync(db, cancelIds, cancellationToken) is { } blocked)
+            {
+                return await AbortAsync(transaction, CancellationGuard.Code, blocked);
+            }
             foreach (var td in await db.TaxDeclarations.Where(x => cancelIds.Contains(x.Id)).ToListAsync(cancellationToken))
             {
                 if (td.Status != WorkflowStatus.Approved)
@@ -415,7 +452,7 @@ public sealed class TransactionService(
                 {
                     return await AbortAsync(transaction, check.Code!, $"TD {td.TaxDeclarationNumber}: {check.Message}");
                 }
-                await TaxDeclarationApproval.ApplyAsync(db, td, check.Value, userId, now, cancellationToken);
+                await TaxDeclarationApproval.ApplyAsync(db, td, check.Value, userId, now, clock.Today, cancellationToken);
             }
 
             // 2a. Subdivision and consolidation: every TD the transaction ends passes its unlifted annotations to each
@@ -432,6 +469,36 @@ public sealed class TransactionService(
                 await db.SaveChangesAsync(cancellationToken);
             }
 
+            // 2b. Machinery relocation: the moved unit is retired, its history continuing in the receiving unit (Q7).
+            if (tx.Kind == PropertyTransactionKind.MachineryRelocation)
+            {
+                var moved = await db.RealPropertyUnits.SingleAsync(x => x.Id == tx.RelocatedRpuId, cancellationToken);
+                if (moved.Status != RecordStatus.Active)
+                {
+                    return await AbortAsync(transaction, "RELOCATED_UNIT_INVALID", $"Unit {moved.RpuNumber} is no longer active ({moved.Status}).");
+                }
+                moved.Status = RecordStatus.Superseded;
+                moved.EndDate = tx.EffectiveDate.AddDays(-1);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
+            // 2c. A cancellation on the assessor's own motion: each cancelled TD's declarants and parties with a legal
+            // interest get a Notice of Cancellation (LAM Bk III p.89 C; assessment-listing-exemptions.md Q11).
+            if (await db.TransactionTypes.Where(x => x.Id == tx.TransactionTypeId).Select(x => x.CancelsMotuProprio).FirstAsync(cancellationToken))
+            {
+                var replacedIds = own.Select(x => x.PreviousTaxDeclarationId).OfType<Guid>().ToList();
+                var cancelledIds = cancelIds.Concat(replacedIds).Distinct().ToList();
+                foreach (var cancelled in await db.TaxDeclarations.Where(x => cancelledIds.Contains(x.Id)).ToListAsync(cancellationToken))
+                {
+                    var parties = await PropertyParties.ProjectAsync(await PropertyParties.ScopeAsync(db, cancelled.PropertyId, cancelled.RpuId,
+                        x => x.IsCurrent && (x.Role == PropertyPartyRole.Owner || x.Role == PropertyPartyRole.Administrator
+                            || x.Role == PropertyPartyRole.LegalInterestHolder), cancellationToken), cancellationToken);
+                    await Notices.NoticeOfCancellationService.GenerateAsync(db, cancelled, own.FirstOrDefault(o => o.PreviousTaxDeclarationId == cancelled.Id),
+                        tx.Id, CancellationNoticeGround.MotuProprio, $"{tx.TypeName}: {tx.Description}", clock.Today, parties, cancellationToken);
+                }
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
             // 3. Transfer: end the current owners (and any unknown-owner declaration); start the new parties.
             if (tx.Kind == PropertyTransactionKind.Transfer)
             {
@@ -441,6 +508,9 @@ public sealed class TransactionService(
                     return await AbortAsync(transaction, "TRANSFER_EFFECTIVE_DATE_CONFLICT",
                         $"A current party started on {late.StartDate:yyyy-MM-dd}; the transfer must take effect after that.");
                 }
+                // The deed's consideration, when recorded, becomes market evidence for the SMV (smv-preparation-general-revision.md Q3).
+                await MarketData.MarketTransactionPrefill.FromTransferAsync(db, tx,
+                    ending.Where(x => x.Role == PropertyPartyRole.Owner && x.TaxpayerId != null).Select(x => x.TaxpayerId!.Value).ToList(), cancellationToken);
                 foreach (var row in ending)
                 {
                     row.IsCurrent = false;
@@ -549,6 +619,23 @@ public sealed class TransactionService(
             return $"The new owners' shares total {owners.Sum(o => o.OwnershipPercentage)}%; they must total exactly 100%.";
         }
         return null;
+    }
+
+    /// <summary>
+    /// A relocation is complete when one of its TDs declares a machinery unit of the receiving property that continues
+    /// the moved unit (<c>PreviousRpuId</c>) and replaces the moved unit's current TD, if it has one. Null when complete.
+    /// </summary>
+    private async Task<string?> RelocationProblemAsync(PropertyTransaction tx, List<TaxDeclaration> tds, CancellationToken ct)
+    {
+        var rpuIds = tds.Select(t => t.RpuId).ToList();
+        var units = await db.RealPropertyUnits.AsNoTracking().Where(x => rpuIds.Contains(x.Id)).ToListAsync(ct);
+        var current = await db.TaxDeclarations.AsNoTracking()
+            .Where(x => x.RpuId == tx.RelocatedRpuId && x.Status == WorkflowStatus.Approved).Select(x => (Guid?)x.Id).FirstOrDefaultAsync(ct);
+        var ok = tds.Any(t => units.Any(u => u.Id == t.RpuId && u.PropertyId == tx.PropertyId && u.RpuType == RpuType.Machinery
+            && u.PreviousRpuId == tx.RelocatedRpuId) && (current is null || t.PreviousTaxDeclarationId == current));
+        return ok ? null
+            : "Add the machine's unit on this property (continuing the moved unit as its previous RPU), value and assess it, and add its TD "
+              + "to this transaction naming the moved unit's current TD as the one it replaces.";
     }
 
     private static bool IsRenumbering(PropertyTransactionKind kind) =>
@@ -727,7 +814,8 @@ public sealed class TransactionService(
             tx.TransferRpuId,
             tx.TaxClearance is { } c ? new TransferTaxClearanceDto(c.CarNumber, c.CarDate, c.TransferorName, c.TransferorTin, c.TransfereeTin,
                 c.CapitalGainsTax, c.CapitalGainsTaxReceipt, c.CapitalGainsTaxDate, c.DocumentaryStampTax, c.DocumentaryStampTaxReceipt,
-                c.DocumentaryStampTaxDate, c.TransferTax, c.TransferTaxReceipt, c.TransferTaxDate, c.Remarks) : null);
+                c.DocumentaryStampTaxDate, c.TransferTax, c.TransferTaxReceipt, c.TransferTaxDate, c.Remarks, c.Consideration) : null,
+            tx.RelocatedRpuId);
     }
 
     private static Result<PropertyTransactionDto> NotFound() => Fail("PROPERTY_TRANSACTION_NOT_FOUND", "No property transaction was found with the given id.");
@@ -738,5 +826,5 @@ public sealed class TransactionService(
         x.Id, x.Code, x.Name, x.Kind, x.Rank, x.Description,
         x.Requirements.OrderBy(r => r.Sequence).Select(r => new TransactionRequirementDto(r.Sequence, r.Code, r.Label, r.IsMandatory, r.LegalBasis)).ToList(),
         x.LegalBasis, x.EffectiveDate, x.EndDate, x.Status, x.CreatedBy, x.CreatedAt, x.ApprovedBy, x.ApprovedAt, x.Remarks,
-        x.EffectivityRule, x.EffectivityLegalBasis, x.CauseWindowDays, x.AllowsNewDepreciation);
+        x.EffectivityRule, x.EffectivityLegalBasis, x.CauseWindowDays, x.AllowsNewDepreciation, x.CancelsMotuProprio);
 }

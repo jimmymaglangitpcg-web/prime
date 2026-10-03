@@ -1,12 +1,20 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
+import type { UseMutationResult } from '@tanstack/react-query';
 import { Alert, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { PlusOutlined, WarningOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useCancelNotice, useGenerateCombinedNotice, useGenerateNotice, useIssueNotice, useNoticeCandidates, usePropertyNotices, useRecordNoticeService } from '../../../api/notices';
+import {
+  type RecordNoticeServiceBody, useCancelNotice, useCancelNoticeOfCancellation, useGenerateCombinedNotice, useGenerateNotice, useIssueNotice,
+  useIssueNoticeOfCancellation, useNoticeCandidates, usePropertyNotices, usePropertyNoticesOfCancellation, useRecordNoticeOfCancellationService,
+  useRecordNoticeService,
+} from '../../../api/notices';
 import { useRpuAssessments } from '../../../api/assessments';
 import { ApiRequestError } from '../../../lib/apiClient';
 import { formatMoney } from '../../../lib/format';
-import { type NoticeCandidateDto, type NoticeDto, type NoticeReason, type NoticeServiceMode, type NoticeStatus, type PropertyOwnerDto, type RpuSummaryDto, descriptiveNoticeReasons, noticeReasonLabel, serviceModeLabel } from '../../../lib/types';
+import {
+  type NoticeCandidateDto, type NoticeDto, type NoticeOfCancellationDto, type NoticeReason, type NoticeServiceMode, type NoticeStatus, type PropertyOwnerDto,
+  type RpuSummaryDto, cancellationGroundLabel, descriptiveNoticeReasons, noticeReasonLabel, serviceModeLabel,
+} from '../../../lib/types';
 import { PrintFormButton } from '../../../components/PrintFormButton';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
@@ -26,6 +34,7 @@ export function NoticesSection({ propertyId, rpus, owners }: { propertyId: strin
   const [cancelling, setCancelling] = useState<NoticeDto | null>(null);
   const [reason, setReason] = useState('');
   const cancel = useCancelNotice(propertyId);
+  const recordService = useRecordNoticeService(propertyId);
 
   return (
     <div>
@@ -76,8 +85,75 @@ export function NoticesSection({ propertyId, rpus, owners }: { propertyId: strin
       />
       <GenerateNoticeModal propertyId={propertyId} rpus={rpus} open={generating} onClose={() => setGenerating(false)} />
       {combining && <CombinedNoticeModal propertyId={propertyId} owners={owners} onClose={() => setCombining(false)} />}
-      <RecordServiceModal propertyId={propertyId} notice={serving} onClose={() => setServing(null)} />
+      <RecordServiceModal notice={serving} record={recordService} onClose={() => setServing(null)}
+        intro={`The appeal period (${serving?.appealPeriodDays} days, LGC §226) runs from the date of receipt.`}
+        receivedExtra="The appeal period counts from this date, not the date emailed." />
       <Modal title="Cancel notice" open={cancelling !== null} okText="Cancel notice" cancelText="Back"
+        okButtonProps={{ danger: true, disabled: reason.trim() === '', loading: cancel.isPending }} onCancel={() => setCancelling(null)}
+        onOk={() => cancelling && cancel.mutate({ id: cancelling.id, reason: reason.trim() }, { onSuccess: () => setCancelling(null) })} destroyOnHidden>
+        {cancel.isError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Could not cancel" description={errorText(cancel.error)} />}
+        <Input.TextArea aria-label="Reason" placeholder="Reason (required)" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+      </Modal>
+      <CancellationNoticesTable propertyId={propertyId} />
+    </div>
+  );
+}
+
+/**
+ * Notices of Cancellation (LAM 2025 Book III p.89; Book I p.35; assessment-listing-exemptions.md §4.4, Q11):
+ * generated as drafts when a transaction cancelling TDs on the assessor's own motion is approved, or when a
+ * reassessment replaces a previous owner's declaration; one per addressee address. Issued and served like the NOA.
+ */
+function CancellationNoticesTable({ propertyId }: { propertyId: string }) {
+  const { data = [], isLoading } = usePropertyNoticesOfCancellation(propertyId);
+  const issue = useIssueNoticeOfCancellation(propertyId);
+  const recordService = useRecordNoticeOfCancellationService(propertyId);
+  const cancel = useCancelNoticeOfCancellation(propertyId);
+  const [serving, setServing] = useState<NoticeOfCancellationDto | null>(null);
+  const [cancelling, setCancelling] = useState<NoticeOfCancellationDto | null>(null);
+  const [reason, setReason] = useState('');
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <Typography.Title level={5}>Notices of Cancellation</Typography.Title>
+      <Typography.Paragraph type="secondary" style={{ marginTop: -4 }}>
+        Generated when a transaction whose type cancels on the assessor's own motion is approved, and when a reassessment
+        cancels a previous owner's declaration (LAM Book III p.89; Book I p.35).
+      </Typography.Paragraph>
+      {issue.isError && <Alert type="error" showIcon closable style={{ marginBottom: 8 }} title="Could not issue" description={errorText(issue.error)} />}
+      <Table<NoticeOfCancellationDto>
+        rowKey="id" size="small" loading={isLoading} dataSource={data} pagination={false} scroll={{ x: 'max-content' }}
+        locale={{ emptyText: <Empty description="No notices of cancellation" /> }}
+        columns={[
+          { title: 'No.', dataIndex: 'noticeNumber', render: (v: string | null) => v ?? '—' },
+          {
+            title: 'TD cancelled', render: (_, n) => (
+              <span>{n.taxDeclarationNumber}{n.replacedByTaxDeclarationNumber && <Typography.Text type="secondary"> → {n.replacedByTaxDeclarationNumber}</Typography.Text>}</span>
+            ),
+          },
+          { title: 'Cancelled on', dataIndex: 'cancelledOn' },
+          { title: 'Ground', dataIndex: 'ground', render: (g: NoticeOfCancellationDto['ground']) => cancellationGroundLabel[g] },
+          { title: 'Reason', dataIndex: 'reason', render: (r: string) => <Typography.Text ellipsis={{ tooltip: r }} style={{ maxWidth: 240 }}>{r}</Typography.Text> },
+          { title: 'Addressee', render: (_, n) => <Tooltip title={n.addresseeAddress}>{n.addresseeNames}</Tooltip> },
+          { title: 'Status', dataIndex: 'status', render: (st: NoticeStatus) => <Tag color={statusColor[st]}>{st}</Tag> },
+          { title: 'Received', render: (_, n) => n.receivedDate ? `${n.receivedDate} (${serviceModeLabel[n.serviceMode!]})` : '—' },
+          {
+            title: 'Actions', render: (_, n) => (
+              <Space size={4} wrap>
+                {n.status === 'Draft' && <Button size="small" type="primary" loading={issue.isPending} onClick={() => issue.mutate(n.id)}>Issue</Button>}
+                {n.status === 'Issued' && <Button size="small" type="primary" onClick={() => { recordService.reset(); setServing(n); }}>Record service</Button>}
+                {n.status !== 'Cancelled' && <PrintFormButton formCode="NOTICE_OF_CANCELLATION" subjectId={n.id} issuable={n.status === 'Issued' || n.status === 'Served'} />}
+                {(n.status === 'Draft' || n.status === 'Issued') && (
+                  <Button size="small" danger onClick={() => { setCancelling(n); setReason(''); cancel.reset(); }}>Cancel</Button>
+                )}
+              </Space>
+            ),
+          },
+        ]}
+      />
+      <RecordServiceModal notice={serving} record={recordService} onClose={() => setServing(null)}
+        intro={serving ? `Tells ${serving.addresseeNames} that TD ${serving.taxDeclarationNumber} was cancelled.` : ''} />
+      <Modal title="Cancel notice of cancellation" open={cancelling !== null} okText="Cancel notice" cancelText="Back"
         okButtonProps={{ danger: true, disabled: reason.trim() === '', loading: cancel.isPending }} onCancel={() => setCancelling(null)}
         onOk={() => cancelling && cancel.mutate({ id: cancelling.id, reason: reason.trim() }, { onSuccess: () => setCancelling(null) })} destroyOnHidden>
         {cancel.isError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Could not cancel" description={errorText(cancel.error)} />}
@@ -117,16 +193,20 @@ function GenerateNoticeModal({ propertyId, rpus, open, onClose }: { propertyId: 
   );
 }
 
-function RecordServiceModal({ propertyId, notice, onClose }: { propertyId: string; notice: NoticeDto | null; onClose: () => void }) {
-  const record = useRecordNoticeService(propertyId);
+/** Service of a notice by one of the statutory modes, with proof; shared by the NOA and the Notice of Cancellation. */
+function RecordServiceModal<T>({ notice, record, intro, receivedExtra, onClose }: {
+  notice: { id: string; noticeNumber: string | null } | null;
+  record: UseMutationResult<T, Error, RecordNoticeServiceBody>;
+  intro: ReactNode;
+  receivedExtra?: string;
+  onClose: () => void;
+}) {
   const [form] = Form.useForm();
   const mode = Form.useWatch('serviceMode', form) as NoticeServiceMode | undefined;
   return (
     <Modal title={notice ? `Record service — ${notice.noticeNumber ?? 'notice'}` : ''} open={notice !== null} footer={null} destroyOnHidden
       onCancel={() => { record.reset(); onClose(); }}>
-      <Typography.Paragraph type="secondary">
-        The appeal period ({notice?.appealPeriodDays} days, LGC §226) runs from the date of receipt.
-      </Typography.Paragraph>
+      <Typography.Paragraph type="secondary">{intro}</Typography.Paragraph>
       {record.isError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Could not record" description={errorText(record.error)} />}
       <Form form={form} layout="vertical" initialValues={{ receivedDate: dayjs() }}
         onFinish={(v) => notice && record.mutate({
@@ -146,7 +226,7 @@ function RecordServiceModal({ propertyId, notice, onClose }: { propertyId: strin
           <Form.Item name="sentDate" label={mode === 'Email' ? 'Date emailed' : 'Date mailed / sent'}><DatePicker /></Form.Item>
         )}
         <Form.Item name="receivedDate" label="Date received" rules={[{ required: true }]}
-          extra={mode === 'Email' ? 'The appeal period counts from this date, not the date emailed.' : undefined}><DatePicker /></Form.Item>
+          extra={mode === 'Email' ? receivedExtra : undefined}><DatePicker /></Form.Item>
         <Form.Item name="servedTo" label="Received by" rules={[{ required: true }, { max: 300 }]}><Input /></Form.Item>
         <Form.Item name="proofReference" label="Proof of service" rules={[{ required: true }, { max: 200 }]}
           extra="E.g. registry return card no., or the reference of the signed receiving copy.">

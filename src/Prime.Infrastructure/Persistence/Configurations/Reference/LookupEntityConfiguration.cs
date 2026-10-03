@@ -43,6 +43,7 @@ public sealed class PropertyTypeConfiguration : LookupEntityConfiguration<Proper
 public sealed class ImprovementKindConfiguration : LookupEntityConfiguration<ImprovementKind>;
 public sealed class TitleTypeConfiguration : LookupEntityConfiguration<TitleType>;
 public sealed class StructuralPartConfiguration : LookupEntityConfiguration<StructuralPart>;
+public sealed class ConveyanceModeConfiguration : LookupEntityConfiguration<ConveyanceMode>;
 
 public sealed class StructuralMaterialConfiguration : LookupEntityConfiguration<StructuralMaterial>
 {

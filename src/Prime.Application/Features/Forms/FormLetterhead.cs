@@ -84,6 +84,17 @@ public static class FormLetterhead
             await db.RegisterRuns.Where(x => x.Id == id).Select(x => x.Barangay == null ? null : (Guid?)x.Barangay.MunicipalityId).FirstOrDefaultAsync(ct),
         FormSubjectType.SwornStatement =>
             await db.SwornStatements.Where(x => x.Id == id).Select(x => (Guid?)x.MunicipalityId).FirstOrDefaultAsync(ct),
+        FormSubjectType.NoticeOfCancellation =>
+            await db.NoticesOfCancellation.Where(x => x.Id == id).Select(x => (Guid?)x.Property!.MunicipalityId).FirstOrDefaultAsync(ct),
+        FormSubjectType.DiscoverySummons =>
+            await db.DiscoverySummonses.Where(x => x.Id == id).Select(x => (Guid?)x.PropertyTransaction!.Property!.MunicipalityId).FirstOrDefaultAsync(ct),
+        FormSubjectType.MarketDataReport =>
+            await db.MarketDataReportRuns.Where(x => x.Id == id).Select(x => (Guid?)x.MunicipalityId).FirstOrDefaultAsync(ct),
+        // A revision of one city/municipality carries its office's letterhead; one of several, the province's.
+        FormSubjectType.GeneralRevision =>
+            await db.GeneralRevisionScopes.Where(x => x.GeneralRevisionProgrammeId == id).CountAsync(ct) == 1
+                ? await db.GeneralRevisionScopes.Where(x => x.GeneralRevisionProgrammeId == id).Select(x => (Guid?)x.MunicipalityId).FirstAsync(ct)
+                : null,
         _ => null,
     };
 }

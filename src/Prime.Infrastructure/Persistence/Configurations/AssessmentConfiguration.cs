@@ -57,6 +57,8 @@ public sealed class AssessmentLineConfiguration : IEntityTypeConfiguration<Asses
         {
             t.HasCheckConstraint("CK_AssessmentLines_Sequence", "\"Sequence\" >= 1");
             t.HasCheckConstraint("CK_AssessmentLines_Values", "\"MarketValue\" >= 0 AND \"AssessedValue\" >= 0");
+            // A line is taxable or exempt; PartlyExempt summarises a TD only.
+            t.HasCheckConstraint("CK_AssessmentLines_Taxability", "\"Taxability\" IN ('Taxable', 'Exempt')");
         });
         builder.HasKey(x => x.Id);
         builder.Property(x => x.MarketValue).HasPrecision(18, 2);
@@ -66,6 +68,10 @@ public sealed class AssessmentLineConfiguration : IEntityTypeConfiguration<Asses
         builder.HasOne(x => x.ActualUse).WithMany().HasForeignKey(x => x.ActualUseId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.PropertyType).WithMany().HasForeignKey(x => x.PropertyTypeId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.AssessmentLevel).WithMany().HasForeignKey(x => x.AssessmentLevelId).OnDelete(DeleteBehavior.Restrict);
+        builder.Property(x => x.Taxability).HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.TaxabilityNote).HasMaxLength(500);
+        builder.HasOne(x => x.PropertyExemption).WithMany().HasForeignKey(x => x.PropertyExemptionId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.PropertyExemptionId);
         // One row per (classification, actual use) — the grouping rule (§8.2).
         builder.HasIndex(x => new { x.AssessmentId, x.ClassificationId, x.ActualUseId }).IsUnique();
         builder.HasIndex(x => new { x.AssessmentId, x.Sequence }).IsUnique();

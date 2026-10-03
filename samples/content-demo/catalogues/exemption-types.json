@@ -1,0 +1,21 @@
+[
+  {
+    "code": "DEMO-EX-COOP",
+    "name": "DEMO cooperative exemption",
+    "description": "DEMO type for exercising the exemption workflow; not an LGU list.",
+    "appliesTo": ["Land", "Building", "Machinery", "OtherImprovement"],
+    "requiresProof": true,
+    "legalBasis": "DEMO — cites no law",
+    "effectiveDate": "2020-01-01"
+  },
+  {
+    "code": "DEMO-EX-STORAGE",
+    "name": "DEMO farm storage structure exemption",
+    "description": "DEMO type with an assessed-value ceiling.",
+    "appliesTo": ["Building"],
+    "requiresProof": true,
+    "assessedValueCeiling": 1000000,
+    "legalBasis": "DEMO — cites no law",
+    "effectiveDate": "2020-01-01"
+  }
+]

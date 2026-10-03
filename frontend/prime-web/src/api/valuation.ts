@@ -4,7 +4,7 @@ import type {
   AdjustmentFactorDto, AssessmentLevelDto, AssessmentPreviewDto, AssessmentSummaryDto, CreateAdjustmentFactorRequest,
   CreateAssessmentLevelRequest, CreateAssessmentRequest, EffectivityDto, CreateSmvRequest, CreateSmvScheduleRequest, PagedResult, SmvDto, SmvScheduleDto, ValuationDto,
   BuildingCostDto, CreateBuildingCostRequest, CreateDepreciationScheduleRequest, CreateExtraItemCostRequest, DepreciationScheduleDto, ExtraItemCostDto,
-  CreateExchangeRateRequest, CreatePriceIndexRequest, ExchangeRateDto, PriceIndexDto,
+  CreateExchangeRateRequest, CreatePriceIndexRequest, ExchangeRateDto, PriceIndexDto, AssessmentLevelCeilingDto, CreateAssessmentLevelCeilingRequest,
 } from '../lib/types';
 
 // --- Value and assess a unit (docs/analysis/value-and-assess.md §3) ---
@@ -106,6 +106,13 @@ export const useApproveSmvSchedule = (smvId: string) =>
   useRuleMutation((id: string) => apiPost<SmvScheduleDto>(`/api/smv/schedules/${id}/approve`, {}), [['smv', smvId]]);
 export const useCreateAssessmentLevel = () =>
   useRuleMutation((r: CreateAssessmentLevelRequest) => apiPost<AssessmentLevelDto>('/api/assessment-levels', r), [['assessment-levels']]);
+export function useAssessmentLevelCeilings() {
+  return useQuery({ queryKey: ['assessment-level-ceilings'], queryFn: () => apiGet<AssessmentLevelCeilingDto[]>('/api/assessment-level-ceilings') });
+}
+export const useCreateAssessmentLevelCeiling = () =>
+  useRuleMutation((r: CreateAssessmentLevelCeilingRequest) => apiPost<AssessmentLevelCeilingDto>('/api/assessment-level-ceilings', r), [['assessment-level-ceilings']]);
+export const useApproveAssessmentLevelCeiling = () =>
+  useRuleMutation((id: string) => apiPost<AssessmentLevelCeilingDto>(`/api/assessment-level-ceilings/${id}/approve`, {}), [['assessment-level-ceilings']]);
 export const useApproveAssessmentLevel = () =>
   useRuleMutation((id: string) => apiPost<AssessmentLevelDto>(`/api/assessment-levels/${id}/approve`, {}), [['assessment-levels']]);
 export const useCreateAdjustmentFactor = () =>

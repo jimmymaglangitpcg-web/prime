@@ -192,7 +192,7 @@ export function TaxClearanceModal({ propertyId, transactionId, value, onClose }:
           capitalGainsTaxDate: fromDay(v.capitalGainsTaxDate), documentaryStampTax: v.documentaryStampTax ?? null,
           documentaryStampTaxReceipt: v.documentaryStampTaxReceipt ?? null, documentaryStampTaxDate: fromDay(v.documentaryStampTaxDate),
           transferTax: v.transferTax ?? null, transferTaxReceipt: v.transferTaxReceipt ?? null, transferTaxDate: fromDay(v.transferTaxDate),
-          remarks: v.remarks ?? null,
+          remarks: v.remarks ?? null, consideration: v.consideration ?? null,
         }, { onSuccess: onClose })}>
         <Space wrap>
           <Form.Item name="carNumber" label="CAR No."><Input maxLength={100} /></Form.Item>
@@ -203,6 +203,10 @@ export function TaxClearanceModal({ propertyId, transactionId, value, onClose }:
           <Form.Item name="transferorTin" label="Transferor TIN"><Input maxLength={20} /></Form.Item>
           <Form.Item name="transfereeTin" label="Transferee TIN"><Input maxLength={20} /></Form.Item>
         </Space>
+        <Form.Item name="consideration" label="Consideration in the deed"
+          extra="Optional. When recorded, approving the transfer adds the sale to the market data (unreviewed) for the SMV.">
+          <InputNumber<number> min={0} style={{ width: 200 }} />
+        </Form.Item>
         {tax('capitalGainsTax', 'Capital gains tax')}
         {tax('documentaryStampTax', 'Documentary stamp tax')}
         {tax('transferTax', 'Transfer tax')}

@@ -158,6 +158,7 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db, IOp
         var assessments = db.Assessments.AsNoTracking()
             .Include(x => x.Lines).ThenInclude(l => l.Classification)
             .Include(x => x.Lines).ThenInclude(l => l.ActualUse)
+            .Include(x => x.Lines).ThenInclude(l => l.PropertyExemption).ThenInclude(e => e!.ExemptionType)
             .Include(x => x.Valuation).ThenInclude(v => v!.Smv)
             .Include(x => x.Valuation).ThenInclude(v => v!.Lines);
         var assessment = td.AssessmentId is { } declared
@@ -222,6 +223,9 @@ public sealed class TaxDeclarationFormDataProvider(IApplicationDbContext db, IOp
                 {
                     classification = l.Classification!.Name, actualUse = l.ActualUse!.Name, marketValue = l.MarketValue,
                     assessmentLevelPercent = l.AssessmentPercentage, assessedValue = l.AssessedValue,
+                    // Each row says whether it is taxable or exempt, and on what basis (assessment-listing-exemptions.md Q2).
+                    taxability = l.Taxability, legalBasis = l.Taxability == Taxability.Exempt ? l.PropertyExemption?.ExemptionType?.LegalBasis : null,
+                    taxabilityNote = l.TaxabilityNote,
                     area = AreaOf(assessment, td, l.ClassificationId, l.ActualUseId),
                     areaUnit = assessment.Valuation?.Lines.FirstOrDefault(v => v.Quantity != null && v.Source != ValuationLineSource.LandImprovement)?.Unit,
                 }),

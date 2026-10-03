@@ -11,6 +11,7 @@ import {
 } from '../../../api/transactions';
 import { useTaxpayerSearch } from '../../../api/taxpayers';
 import { usePropertySearch } from '../../../api/properties';
+import { useCreateRpu, usePropertyRpus } from '../../../api/rpus';
 import { useOwnershipTypes } from '../../../api/referenceData';
 import { ApiRequestError } from '../../../lib/apiClient';
 import {
@@ -18,6 +19,7 @@ import {
   type TransactionRequirementStatusDto, type WorkflowStatus,
 } from '../../../lib/types';
 import { AddTaxDeclarationModal } from '../modals/AddTaxDeclarationModal';
+import { DiscoveryPanel } from './DiscoveryPanel';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
 const statusColor: Partial<Record<WorkflowStatus, string>> = { Draft: 'default', PendingReview: 'gold', Approved: 'green', Rejected: 'red', Cancelled: 'red' };
@@ -44,6 +46,23 @@ function PropertiesPicker({ excludeId, value, onChange }: { excludeId: string; v
       options={data?.items.filter((p) => p.id !== excludeId).map((p) => ({
         value: p.id, label: `${p.propertyIdentificationNumber} — ${p.barangayName}${p.lotNumber ? `, lot ${p.lotNumber}` : ''}`,
       }))} />
+  );
+}
+
+/** The machinery unit moving here: a property searched by PIN, then one of its active machinery units (L3-3, Q7). */
+function RelocatedUnitPicker({ excludeId, value, onChange }: { excludeId: string; value?: string; onChange?: (v: string) => void }) {
+  const [term, setTerm] = useState('');
+  const [fromId, setFromId] = useState<string>();
+  const { data, isFetching } = usePropertySearch({ searchTerm: term || undefined, pageSize: 20 });
+  const { data: units = [] } = usePropertyRpus(fromId ?? '');
+  return (
+    <Space wrap>
+      <Select showSearch value={fromId} onChange={(v) => { setFromId(v); onChange?.(undefined as unknown as string); }} filterOption={false} onSearch={setTerm}
+        loading={isFetching} style={{ width: 320 }} placeholder="Property it moves from" notFoundContent="No properties found"
+        options={data?.items.filter((p) => p.id !== excludeId).map((p) => ({ value: p.id, label: `${p.propertyIdentificationNumber} — ${p.barangayName}` }))} />
+      <Select value={value} onChange={onChange} style={{ width: 260 }} placeholder="Machinery unit" disabled={!fromId}
+        options={units.filter((u) => u.rpuType === 'Machinery' && u.status === 'Active').map((u) => ({ value: u.id, label: `RPU ${u.rpuNumber}` }))} />
+    </Space>
   );
 }
 
@@ -114,6 +133,7 @@ function NewTransactionModal({ propertyId, rpus, taxDeclarations, open, onClose 
           transactionTypeId: v.transactionTypeId, propertyId, effectiveDate: v.effectiveDate.format('YYYY-MM-DD'), description: v.description,
           cancelTaxDeclarationIds: v.cancelTaxDeclarationIds,
           transferRpuId: kind === 'Transfer' ? v.transferRpuId : undefined,
+          relocatedRpuId: kind === 'MachineryRelocation' ? v.relocatedRpuId : undefined,
           relatedProperties: kind === 'Subdivision' || kind === 'Consolidation'
             ? (v.relatedPropertyIds ?? []).map((id: string) => ({ propertyId: id, role: kind === 'Subdivision' ? 'Result' : 'Source' }))
             : undefined,
@@ -146,6 +166,16 @@ function NewTransactionModal({ propertyId, rpus, taxDeclarations, open, onClose 
               : 'Open this on the consolidated property, registered with its parcel first. On approval the sources’ PINs are retired and it takes the next parcel number in their tax map section.'}>
             <PropertiesPicker excludeId={propertyId} />
           </Form.Item>
+        )}
+        {kind === 'MachineryRelocation' && (
+          <Form.Item name="relocatedRpuId" label="Machine moving to this property" rules={[{ required: true, message: 'Choose the machinery unit' }]}
+            extra="Open this on the receiving property. Its unit here continues the moved unit, and its TD replaces the moved unit's TD; on approval the moved unit is retired.">
+            <RelocatedUnitPicker excludeId={propertyId} />
+          </Form.Item>
+        )}
+        {kind === 'CourtOrder' && (
+          <Alert type="info" showIcon style={{ marginBottom: 12 }} title="Court order"
+            description="List the TDs the order cancels above. To restore a cancelled declaration, add a new TD to this transaction naming the TD it restores; the cancelled TD is never reopened." />
         )}
         {kind === 'Transfer' && (
           <>
@@ -217,7 +247,12 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
   const [tdRpuId, setTdRpuId] = useState<string | undefined>(rpus[0]?.id);
   const [addTdOpen, setAddTdOpen] = useState(false);
   const [clearanceOpen, setClearanceOpen] = useState(false);
+  const { data: fullRpus = [] } = usePropertyRpus(propertyId);
+  const createRpu = useCreateRpu(propertyId);
+  const [newUnitNumber, setNewUnitNumber] = useState('');
   if (!tx) return null;
+  // A relocation's receiving unit continues the moved one (PreviousRpuId).
+  const arrivedUnit = tx.relocatedRpuId ? fullRpus.find((r) => r.previousRpuId === tx.relocatedRpuId) : undefined;
   const editable = tx.status === 'Draft' || tx.status === 'PendingReview';
 
   function confirm(kind: TransactionAction, title: string, content?: string) {
@@ -257,6 +292,8 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
           <Button type="primary" onClick={() => confirm('approve', 'Approve this transaction?',
             'Approval applies it: its TDs are approved (cancelling the TDs they replace), listed TDs are cancelled' + (tx.kind === 'Transfer'
               ? ', and the current owners are replaced by the new parties.'
+              : tx.kind === 'MachineryRelocation'
+                ? ', the moved machinery unit is retired and its TD is cancelled by the new unit\'s TD.'
               : tx.kind === 'Subdivision' || tx.kind === 'Consolidation'
                 ? `, the ${tx.kind === 'Subdivision' ? 'mother property' : 'source properties'} are retired with their PINs, and the ${tx.kind === 'Subdivision' ? 'lots take' : 'consolidated property takes'} the next parcel numbers in the tax map section.`
                 : '.'))}>
@@ -281,6 +318,28 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
         ]}
       />
 
+      {tx.kind === 'NewDiscovery' && <DiscoveryPanel transactionId={tx.id} open={editable} />}
+
+      {tx.kind === 'MachineryRelocation' && (
+        <Alert type={arrivedUnit ? 'success' : 'info'} showIcon style={{ marginTop: 16 }} title="Machinery relocation"
+          description={arrivedUnit
+            ? `The machine continues here as RPU ${arrivedUnit.rpuNumber}. Record its machinery details, value and assess it, then add its TD below, replacing the moved unit's TD.`
+            : (
+              <Space orientation="vertical">
+                <span>Create the machine's unit on this property; it continues the moved unit.</span>
+                {tx.status === 'Draft' && (
+                  <Space wrap>
+                    <Input placeholder="New RPU number" value={newUnitNumber} onChange={(e) => setNewUnitNumber(e.target.value)} style={{ width: 220 }} />
+                    <Button disabled={!newUnitNumber.trim()} loading={createRpu.isPending}
+                      onClick={() => createRpu.mutate({ propertyId, rpuNumber: newUnitNumber.trim(), rpuType: 'Machinery', effectivityDate: tx.effectiveDate,
+                        previousRpuId: tx.relocatedRpuId }, { onSuccess: () => setNewUnitNumber('') })}>Create unit</Button>
+                  </Space>
+                )}
+                {createRpu.isError && <Typography.Text type="danger">{errorText(createRpu.error)}</Typography.Text>}
+              </Space>
+            )} />
+      )}
+
       <Typography.Title level={5} style={{ marginTop: 16 }}>Tax Declarations issued by this transaction</Typography.Title>
       <Table rowKey="taxDeclarationId" size="small" dataSource={tx.issuedTaxDeclarations} pagination={false} locale={{ emptyText: 'None yet' }}
         columns={[{ title: 'TD No.', dataIndex: 'taxDeclarationNumber' }, { title: 'Status', dataIndex: 'status', render: statusTag }]} />
@@ -291,7 +350,9 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
         </Space>
       )}
       {tdRpuId && (
-        <AddTaxDeclarationModal propertyId={propertyId} rpuId={tdRpuId} transactionId={tx.id} open={addTdOpen} onClose={() => setAddTdOpen(false)} />
+        <AddTaxDeclarationModal propertyId={propertyId} rpuId={tdRpuId} transactionId={tx.id} open={addTdOpen} onClose={() => setAddTdOpen(false)}
+          courtOrder={tx.kind === 'CourtOrder'}
+          continuesRpuId={tx.kind === 'MachineryRelocation' && arrivedUnit?.id === tdRpuId ? tx.relocatedRpuId ?? undefined : undefined} />
       )}
 
       {tx.cancelledTaxDeclarations.length > 0 && (

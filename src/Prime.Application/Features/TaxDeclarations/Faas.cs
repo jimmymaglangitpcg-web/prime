@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Features.Exemptions;
 using Prime.Application.Features.Numbering;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
@@ -48,7 +49,12 @@ public sealed class FaasOptions
 /// <summary>The FAAS transaction code rule (MRPAAO p.145, 167).</summary>
 public static class TransactionCodes
 {
-    /// <summary>The highest-ranking code (lowest rank number); unranked codes come last.</summary>
+    /// <summary>
+    /// The code a TD shows (assessment-listing-exemptions.md Q9): where ranks are configured, the highest-ranking code
+    /// (lowest rank number), unranked codes coming last; where none is ranked — the LAM ranks none (Annex I-D) — the
+    /// first candidate, which callers list in order of precedence: the transaction that produced the TD, a code named
+    /// on it, then the code of the assessment it declares.
+    /// </summary>
     public static (string? Code, int? Rank) Highest(IEnumerable<(string? Code, int? Rank)> candidates) =>
         candidates.Where(c => !string.IsNullOrWhiteSpace(c.Code))
             .OrderBy(c => c.Rank ?? int.MaxValue)
@@ -166,7 +172,8 @@ internal static class FaasTaxDeclarations
             AssessmentCount = number.Value.Sequence,
             RevisionNumber = current.RevisionNumber + 1,
             EffectivityDate = assessment.EffectiveDate,
-            Taxability = current.Taxability,
+            // Its lines' taxability (assessment-listing-exemptions.md Q2).
+            Taxability = await ExemptionTaxability.OfAssessmentAsync(db, assessment.Id, ct) ?? current.Taxability,
             ClassificationId = level.ClassificationId,
             ActualUseId = level.ActualUseId,
             SubClassificationId = current.ClassificationId == level.ClassificationId ? current.SubClassificationId : null,

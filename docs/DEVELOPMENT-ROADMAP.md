@@ -936,10 +936,10 @@ L0   Governance & groundwork                          done (L0-4 questions sent;
 LP   Province-wide operation (CLAUDE.md §117)         done (LP-1 to LP-6)
 L1   Valuation foundation                         done (L1-1 to L1-8; exit criteria met)
 L2   Identification & numbering (LAM deltas)      done (L2-1 to L2-3)
-L3   Assessment, listing, exemptions
+L3   Assessment, listing, exemptions             done (L3-1a to L3-4)
 L4   Condominium                                      deferred
 L5   Records & forms                              done (L5-1 to L5-6; LAM forms await the province's review)
-L6   SMV preparation & general revision
+L6   SMV preparation & general revision         in progress (L6-1, L6-6 done)
 L7   Assessment appeals
 L8   Treasury interface
 ```
@@ -1200,8 +1200,32 @@ and in a subdivision or consolidation to each resulting TD of the same kind; per
 include past owners, otherwise a run for an owner holding nothing is refused; migration `OrfPastOwners`, local
 database only). **L5-6 done** (ten LAM form templates in the untracked content pack; imported, approved and issued
 against DEMO land, building and machinery in a rolled-back transaction; layouts await the Provincial Assessor's
-review). **L5 complete.** LAM forms approved in the dev database (2026-10-02). **L3 design drafted**
-(`docs/analysis/assessment-listing-exemptions.md`, Q1–Q15 awaiting decisions; no code before approval). L3 design after L5. The paragraphs below are the earlier
+review). **L5 complete.** LAM forms approved in the dev database (2026-10-02). **L3 decisions recorded**
+(`docs/analysis/assessment-listing-exemptions.md`, Q1–Q15 accepted). **L3-1a done** (exemption types and claims;
+migration `Exemptions`, local database only). **L3-1b done** (taxability per assessment line; partly exempt TDs;
+rolls by line with the exemption's legal basis; an exemption approved or ended after the assessment opens a draft
+reassessment; migration `LineTaxability`, local database only). **L3-2 done** (statutory maximum assessment levels as
+content; a level above the ceiling in force is refused at creation and approval; migration `AssessmentLevelCeilings`,
+local database only). **L3-3 done** (court-order and machinery-relocation kinds; restoring a cancelled TD by a new
+TD; the no-rank code rule made explicit; the LAM's eleven codes as untracked content, approved in the dev database;
+migration `CourtOrderAndRelocation`, local database only). **L3-4 done** (an unlifted annotation of a type that
+blocks cancellation stops any cancellation or replacement of its TD; Notices of Cancellation drafted on approval of a
+motu proprio cancellation and for a previous owner's cancelled assessment, issued and served like the NOA; discovery
+summonses with due dates, a second after non-compliance, then the inter-agency verification; migration
+`SummonsAndNoticesOfCancellation`, local database only). **L3 complete.** **L6 decisions recorded**
+(`docs/analysis/smv-preparation-general-revision.md`, Q1–Q18 accepted; order L6-1 → L6-6 → L6-3 → L6-2 → L6-4 → L6-5 →
+L6-7). **L6-1 done** (market transactions with review, transfer prefill, CSV import, abstracts of building permits and
+machinery registrations with discovery leads, abstracts and the sales report; migration `MarketData`, local database
+only). **L6-6a done** (general revision programme: scope, items with previous and new values and failure reasons, compile
+and value runs as background jobs in PIN order, re-runs, suspension, cancellation; migration `GeneralRevisionProgrammes`,
+local database only). **L6-6b done** (field review assignments and inspections; batch submit, approve, reject and post of the
+revision's assessments and batch submit and approve of their TDs, as background runs in PIN order that call the ordinary
+single-record actions, so the chain and maker-checker hold per item; per-item run issues; migration
+`GeneralRevisionReviewAndBatches`, local database only). **L6-6c done, so L6-6 is complete** (notices generated, issued and
+served in bulk; the roll gate per city/municipality with a recorded override; the revision's rolls, TMCRs and Ownership Record
+Forms; units taken out with a reason; the GRI checklist as content with gates PRIME checks; completion; completion and status
+reports; the old start endpoint retired; migrations `GeneralRevisionRecords`, `GeneralRevisionCompletion`, local database only).
+Next per the L6 order: L6-3 (engine rate source and compute-only mode, simulation runs, valuation testing). The paragraphs below are the earlier
 history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so

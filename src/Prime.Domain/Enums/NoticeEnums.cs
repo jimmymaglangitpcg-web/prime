@@ -37,3 +37,20 @@ public enum NoticeServiceMode
     /// <summary>By email to the declarant's address (LAM Annex I-L p.176; records-and-forms.md Q11).</summary>
     Email = 3,
 }
+
+/// <summary>Why a Notice of Cancellation is given (LAM 2025 Book III p.89 C; assessment-listing-exemptions.md Q11).</summary>
+public enum CancellationNoticeGround
+{
+    /// <summary>The assessor cancelled the declaration on its own motion (a transaction type flagged so).</summary>
+    MotuProprio = 0,
+    /// <summary>A reassessment cancelled the assessment declared in the name of someone no longer an owner.</summary>
+    PreviousOwner = 1,
+}
+
+/// <summary>How a discovery summons ended (assessment-listing-exemptions.md Q10).</summary>
+public enum SummonsOutcome
+{
+    Pending = 0,
+    Complied = 1,
+    NotComplied = 2,
+}

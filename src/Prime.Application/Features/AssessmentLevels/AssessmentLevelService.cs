@@ -31,6 +31,12 @@ public sealed class AssessmentLevelService(
         {
             return Result.Failure<AssessmentLevelDto>("PROPERTY_TYPE_NOT_FOUND", "The specified property type does not exist.");
         }
+        // Not above the statutory maximum in force (assessment-listing-exemptions.md §4.2, Q6).
+        if (await AssessmentLevelCeilingService.ViolationAsync(db, request.PropertyTypeId, request.ClassificationId, request.ActualUseId,
+                request.LowerValue, request.UpperValue, request.AssessmentPercentage, request.EffectiveDate, cancellationToken) is { } above)
+        {
+            return Result.Failure<AssessmentLevelDto>("ASSESSMENT_LEVEL_ABOVE_CEILING", above);
+        }
 
         // Never overwrite (CLAUDE.md §29): a new level closes the open levels of the same
         // classification/actual use/property type whose value range it overlaps. Levels with
@@ -89,6 +95,13 @@ public sealed class AssessmentLevelService(
         if (currentUser.AppUserId is not null && assessmentLevel.CreatedBy == currentUser.AppUserId)
         {
             return Result.Failure<AssessmentLevelDto>("CANNOT_APPROVE_OWN_ASSESSMENT_LEVEL", "The assessment level's creator cannot also approve it.");
+        }
+
+        // A ceiling approved since the level was drafted counts too (Q6).
+        if (await AssessmentLevelCeilingService.ViolationAsync(db, assessmentLevel.PropertyTypeId, assessmentLevel.ClassificationId, assessmentLevel.ActualUseId,
+                assessmentLevel.LowerValue, assessmentLevel.UpperValue, assessmentLevel.AssessmentPercentage, assessmentLevel.EffectiveDate, cancellationToken) is { } above)
+        {
+            return Result.Failure<AssessmentLevelDto>("ASSESSMENT_LEVEL_ABOVE_CEILING", above);
         }
 
         // Two approved levels may never both apply to one value on one day.

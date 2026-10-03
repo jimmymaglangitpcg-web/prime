@@ -10,7 +10,8 @@ public sealed record CreateTransactionTypeRequest(
     string LegalBasis, DateOnly EffectiveDate, string? Remarks,
     string Code, string Name, PropertyTransactionKind Kind, int? Rank, string? Description,
     IReadOnlyList<TransactionRequirementRequest> Requirements,
-    EffectivityRule? EffectivityRule = null, string? EffectivityLegalBasis = null, int? CauseWindowDays = null, bool AllowsNewDepreciation = false);
+    EffectivityRule? EffectivityRule = null, string? EffectivityLegalBasis = null, int? CauseWindowDays = null, bool AllowsNewDepreciation = false,
+    bool CancelsMotuProprio = false);
 
 public sealed record TransactionRequirementDto(int Sequence, string Code, string Label, bool IsMandatory, string? LegalBasis);
 
@@ -19,7 +20,8 @@ public sealed record TransactionTypeDto(
     IReadOnlyList<TransactionRequirementDto> Requirements,
     string LegalBasis, DateOnly EffectiveDate, DateOnly? EndDate, WorkflowStatus Status,
     Guid? CreatedBy, DateTimeOffset CreatedAt, Guid? ApprovedBy, DateTimeOffset? ApprovedAt, string? Remarks,
-    EffectivityRule? EffectivityRule = null, string? EffectivityLegalBasis = null, int? CauseWindowDays = null, bool AllowsNewDepreciation = false);
+    EffectivityRule? EffectivityRule = null, string? EffectivityLegalBasis = null, int? CauseWindowDays = null, bool AllowsNewDepreciation = false,
+    bool CancelsMotuProprio = false);
 
 // --- Transactions ---
 
@@ -35,7 +37,9 @@ public sealed record OpenTransactionRequest(
     IReadOnlyList<NewPartyRequest>? NewParties = null,
     IReadOnlyList<Guid>? CancelTaxDeclarationIds = null,
     IReadOnlyList<RelatedPropertyRequest>? RelatedProperties = null,
-    Guid? TransferRpuId = null);
+    Guid? TransferRpuId = null,
+    /// <summary>A machinery relocation: the machinery unit moving here from another property (Q7).</summary>
+    Guid? RelocatedRpuId = null);
 
 public sealed record SatisfyRequirementRequest(string EvidenceReference, string? Note);
 
@@ -62,12 +66,13 @@ public sealed record PropertyTransactionDto(
     IReadOnlyList<TransactionTdDto> CancelledTaxDeclarations,
     IReadOnlyList<TransactionPropertyDto> RelatedProperties,
     Guid? TransferRpuId,
-    TransferTaxClearanceDto? TaxClearance = null);
+    TransferTaxClearanceDto? TaxClearance = null,
+    Guid? RelocatedRpuId = null);
 
 /// <summary>The BIR clearance and taxes paid on a transfer (MRPAAO Annex A).</summary>
 public sealed record TransferTaxClearanceDto(
     string? CarNumber, DateOnly? CarDate, string? TransferorName, string? TransferorTin, string? TransfereeTin,
     decimal? CapitalGainsTax, string? CapitalGainsTaxReceipt, DateOnly? CapitalGainsTaxDate,
     decimal? DocumentaryStampTax, string? DocumentaryStampTaxReceipt, DateOnly? DocumentaryStampTaxDate,
-    decimal? TransferTax, string? TransferTaxReceipt, DateOnly? TransferTaxDate, string? Remarks);
+    decimal? TransferTax, string? TransferTaxReceipt, DateOnly? TransferTaxDate, string? Remarks, decimal? Consideration = null);
 

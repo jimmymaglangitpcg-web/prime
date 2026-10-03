@@ -98,6 +98,10 @@ public sealed class FormService(
         FormSubjectType.StatementOfAccount => await db.Properties.AnyAsync(x => x.Id == id, ct),
         FormSubjectType.Register => await db.RegisterRuns.AnyAsync(x => x.Id == id, ct),
         FormSubjectType.SwornStatement => await db.SwornStatements.AnyAsync(x => x.Id == id, ct),
+        FormSubjectType.NoticeOfCancellation => await db.NoticesOfCancellation.AnyAsync(x => x.Id == id, ct),
+        FormSubjectType.DiscoverySummons => await db.DiscoverySummonses.AnyAsync(x => x.Id == id, ct),
+        FormSubjectType.MarketDataReport => await db.MarketDataReportRuns.AnyAsync(x => x.Id == id, ct),
+        FormSubjectType.GeneralRevision => await db.GeneralRevisionProgrammes.AnyAsync(x => x.Id == id, ct),
         _ => true,
     };
 

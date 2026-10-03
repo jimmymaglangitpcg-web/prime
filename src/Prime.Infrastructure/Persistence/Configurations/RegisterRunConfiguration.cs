@@ -26,5 +26,8 @@ public sealed class RegisterRunConfiguration : IEntityTypeConfiguration<Register
         builder.HasOne(x => x.Classification).WithMany().HasForeignKey(x => x.ClassificationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Taxpayer).WithMany().HasForeignKey(x => x.TaxpayerId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => new { x.Kind, x.CreatedAt });
+        builder.Property(x => x.RollGateOverrideReason).HasMaxLength(500);
+        builder.HasOne<Prime.Domain.Entities.GeneralRevisionProgramme>().WithMany().HasForeignKey(x => x.GeneralRevisionProgrammeId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.GeneralRevisionProgrammeId);
     }
 }

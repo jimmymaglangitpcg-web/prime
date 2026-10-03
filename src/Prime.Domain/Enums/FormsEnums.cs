@@ -21,6 +21,10 @@ public enum NumberedDocumentKind
     Remittance = 9,
     /// <summary>A temporary PIN before tax mapping, e.g. MM-BBBB-NNNN (MRPAAO Ch. II §2 D.1.b(2); docs/analysis/property-identification.md).</summary>
     TemporaryPin = 10,
+    /// <summary>A Notice of Cancellation (assessment-listing-exemptions.md §4.4).</summary>
+    NoticeOfCancellation = 11,
+    /// <summary>A discovery summons (assessment-listing-exemptions.md §4.4).</summary>
+    DiscoverySummons = 12,
 }
 
 /// <summary>Who prescribes a form version (docs/FORMS-REVISION-PLAN.md §4.1).</summary>
@@ -59,6 +63,14 @@ public enum FormSubjectType
     SwornStatement = 7,
     /// <summary>A collection's official receipt (docs/analysis/collection.md §5); the subject id is the payment.</summary>
     Payment = 8,
+    /// <summary>A Notice of Cancellation; the subject id is the notice (L3-4).</summary>
+    NoticeOfCancellation = 9,
+    /// <summary>A discovery summons; the subject id is the summons (L3-4).</summary>
+    DiscoverySummons = 10,
+    /// <summary>A market-data abstract or the sales report (docs/analysis/smv-preparation-general-revision.md §4.1).</summary>
+    MarketDataReport = 11,
+    /// <summary>A general revision's completion or status report; the subject id is the programme (L6-6c).</summary>
+    GeneralRevision = 12,
 }
 
 /// <summary>Whose staff signs an approval step (docs/analysis/province-wide-operation.md §3.4).</summary>

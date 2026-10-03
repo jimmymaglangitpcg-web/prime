@@ -67,7 +67,13 @@ public sealed partial class ContentPackVersionedContent(
     AssessmentLevels.IAssessmentLevelService levels,
     Smv.IAdjustmentFactorService factors,
     Smv.IBuildingCostTableService buildingTables,
-    Valuation.IMachineryIndexService machineryIndices)
+    Valuation.IMachineryIndexService machineryIndices,
+    IValidator<Exemptions.CreateExemptionTypeRequest> exemptionTypeValidator,
+    Exemptions.IExemptionService exemptions,
+    IValidator<AssessmentLevels.CreateAssessmentLevelCeilingRequest> ceilingValidator,
+    AssessmentLevels.IAssessmentLevelCeilingService ceilings,
+    IValidator<GeneralRevision.CreateChecklistStepDefinitionRequest> checklistValidator,
+    GeneralRevision.IGeneralRevisionCompletionService generalRevisions)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
 
@@ -83,7 +89,7 @@ public sealed partial class ContentPackVersionedContent(
 
     private sealed record TypeItem(string? Code, string? Name, string? Kind, int? Rank, string? Description, string? LegalBasis, string? EffectiveDate,
         string? Remarks, List<RequirementItem>? Requirements, string? Source, string? EffectivityRule = null, string? EffectivityLegalBasis = null,
-        int? CauseWindowDays = null, bool? AllowsNewDepreciation = null);
+        int? CauseWindowDays = null, bool? AllowsNewDepreciation = null, bool? CancelsMotuProprio = null);
 
     private sealed record RequirementItem(string? Code, string? Label, bool? Mandatory, string? LegalBasis);
 
@@ -128,6 +134,10 @@ public sealed partial class ContentPackVersionedContent(
                 ContentFileKinds.DepreciationRates => await DepreciationAsync(Parse<DepreciationItem>(bytes), fileSource, pending ?? PackPending.None, result, ct),
                 ContentFileKinds.ExchangeRates => await ExchangeRatesAsync(bytes, fileSource, result, ct),
                 ContentFileKinds.PriceIndices => await PriceIndicesAsync(bytes, fileSource, result, ct),
+                ContentFileKinds.ExemptionTypes => await ExemptionTypesAsync(Parse<ExemptionTypeItem>(bytes), fileSource, exemptionTypeValidator, result, ct),
+                ContentFileKinds.AssessmentLevelCeilings => await LevelCeilingsAsync(Parse<LevelCeilingItem>(bytes), fileSource, pending ?? PackPending.None,
+                    ceilingValidator, result, ct),
+                ContentFileKinds.GeneralRevisionChecklist => await ChecklistAsync(Parse<ChecklistStepItem>(bytes), fileSource, checklistValidator, result, ct),
                 _ => throw new InvalidOperationException($"Not a versioned kind: {kind}"),
             };
         }
@@ -158,6 +168,9 @@ public sealed partial class ContentPackVersionedContent(
         PackDepreciationSchedule r => await CreateDepreciationScheduleAsync(r, ct),
         Valuation.CreateExchangeRateRequest r => Map("ExchangeRate", await machineryIndices.CreateExchangeRateAsync(r, ct), x => x.Id),
         Valuation.CreatePriceIndexRequest r => Map("PriceIndex", await machineryIndices.CreatePriceIndexAsync(r, ct), x => x.Id),
+        Exemptions.CreateExemptionTypeRequest r => Map("ExemptionType", await exemptions.CreateTypeAsync(r, ct), x => x.Id),
+        PackLevelCeiling r => await CreateLevelCeilingAsync(r, ceilings, ct),
+        GeneralRevision.CreateChecklistStepDefinitionRequest r => Map("GeneralRevisionChecklistStepDefinition", await generalRevisions.CreateStepDefinitionAsync(r, ct), x => x.Id),
         _ => throw new InvalidOperationException("Unknown planned version."),
     };
 
@@ -215,7 +228,7 @@ public sealed partial class ContentPackVersionedContent(
                 r.Mandatory ?? true, Trim(r.LegalBasis))).ToList();
             var request = new CreateTransactionTypeRequest(Trim(x.LegalBasis) ?? "", effective, Trim(x.Remarks), Trim(x.Code) ?? "", Trim(x.Name) ?? "",
                 kindValue, x.Rank, Trim(x.Description), requirements, rule, Trim(x.EffectivityLegalBasis), x.CauseWindowDays,
-                x.AllowsNewDepreciation ?? false);
+                x.AllowsNewDepreciation ?? false, x.CancelsMotuProprio ?? false);
             if (!await ValidAsync(typeValidator, request, result, n, ct) || !Unique(result, seen, request.Code, n, "code"))
             {
                 continue;
@@ -232,12 +245,14 @@ public sealed partial class ContentPackVersionedContent(
             Diff(changes, "effectivityLegalBasis", current?.EffectivityLegalBasis, request.EffectivityLegalBasis);
             Diff(changes, "causeWindowDays", current?.CauseWindowDays?.ToString(CultureInfo.InvariantCulture), request.CauseWindowDays?.ToString(CultureInfo.InvariantCulture));
             Diff(changes, "allowsNewDepreciation", current is null ? null : current.AllowsNewDepreciation ? "true" : "false", request.AllowsNewDepreciation ? "true" : "false");
+            Diff(changes, "cancelsMotuProprio", current is null ? null : current.CancelsMotuProprio ? "true" : "false", request.CancelsMotuProprio ? "true" : "false");
             Diff(changes, "requirements", current is null ? null : Requirements(current.Requirements.OrderBy(r => r.Sequence)
                 .Select(r => (r.Code, r.Label, r.IsMandatory, r.LegalBasis))), Requirements(requirements.Select(r => (r.Code, r.Label, r.IsMandatory, r.LegalBasis))));
             if (Same(scope, s => Equal(s.Name, request.Name) && s.Kind == request.Kind && s.Rank == request.Rank && Equal(s.Description, request.Description)
                     && Equal(s.LegalBasis, request.LegalBasis)
                     && s.EffectivityRule == request.EffectivityRule && Equal(s.EffectivityLegalBasis, request.EffectivityLegalBasis)
                     && s.CauseWindowDays == request.CauseWindowDays && s.AllowsNewDepreciation == request.AllowsNewDepreciation
+                    && s.CancelsMotuProprio == request.CancelsMotuProprio
                     && Requirements(s.Requirements.OrderBy(r => r.Sequence).Select(r => (r.Code, r.Label, r.IsMandatory, r.LegalBasis)))
                         == Requirements(requirements.Select(r => (r.Code, r.Label, r.IsMandatory, r.LegalBasis)))))
             {

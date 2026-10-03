@@ -1,0 +1,40 @@
+{% comment %}
+  PRIME provisional layout (docs/analysis/assessment-listing-exemptions.md §4.4, Q11). The LAM requires a Notice of
+  Cancellation for a cancellation on the assessor's own motion (Book III p.89 C) but gives no annex form; this
+  neutral layout states only the recorded cancellation, watermarked until the province supplies its own form.
+{% endcomment %}
+{% assign n = notice %}{% assign p = property %}
+<style>
+  .hdr { text-align: center; margin-bottom: 10px; }
+  .hdr .lgu { font-weight: bold; font-size: 12pt; }
+  .hdr h1 { font-size: 15pt; margin: 6px 0 2px; }
+  p { font-size: 10.5pt; line-height: 1.5; margin: 6px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+  th, td { border: 1px solid #555; padding: 3px 5px; font-size: 10pt; vertical-align: top; text-align: left; }
+  th { background: #eee; width: 30%; }
+  .draft { border: 2px solid #b00; color: #b00; font-weight: bold; text-align: center; padding: 4px; margin: 6px 0; }
+  .sig { margin-top: 36px; width: 280px; border-top: 1px solid #000; text-align: center; font-size: 9.5pt; padding-top: 2px; }
+  .foot { font-size: 8pt; color: #333; margin-top: 14px; }
+</style>
+<div class="hdr">
+  {% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% else %}<div class="lgu">[LGU name not configured]</div>{% endif %}
+  {% if lgu.office %}<div>{{ lgu.office }}</div>{% endif %}
+  <h1>NOTICE OF CANCELLATION</h1>
+  <div>No. {{ n.noticeNumber | default: "(unnumbered)" }}</div>
+</div>
+{% if n.status == "Draft" %}<div class="draft">DRAFT — NOT YET ISSUED</div>{% endif %}
+{% if n.status == "Cancelled" %}<div class="draft">CANCELLED — {{ n.cancellationReason }}</div>{% endif %}
+<p>To: <b>{{ n.addresseeNames }}</b>{% if n.addresseeAddress %}<br>{{ n.addresseeAddress }}{% endif %}</p>
+<p>{% if n.ground == "PreviousOwner" %}You are notified that the assessment of the real property below, declared in your name, was cancelled by a reassessment.
+   {% else %}You are notified that the Tax Declaration of the real property below was cancelled by the Office of the Assessor.{% endif %}</p>
+<table>
+  <tr><th>Cancelled Tax Declaration</th><td>{{ n.taxDeclarationNumber }}</td></tr>
+  <tr><th>Replaced by</th><td>{{ n.replacedByTaxDeclarationNumber | default: "—" }}</td></tr>
+  <tr><th>Cancelled on</th><td>{{ n.cancelledOn | date_ph }}</td></tr>
+  <tr><th>Reason</th><td>{{ n.reason }}</td></tr>
+  <tr><th>Property Identification No.</th><td>{{ p.pin }}</td></tr>
+  <tr><th>Location</th><td>{{ p.street | default: "" }} {{ p.barangay }}, {{ p.municipality }}, {{ p.province }}</td></tr>
+</table>
+<div class="sig">Assessor</div>
+{% if n.receivedDate %}<p style="font-size:9pt">Received {{ n.receivedDate | date_ph }} by {{ n.servedTo }} ({{ n.serviceMode }}, proof {{ n.proofReference }}).</p>{% endif %}
+<div class="foot">{{ form.title }} — form {{ form.code }} v{{ form.version }}. {{ form.legalBasis }}. Printed {{ issue.issuedAt | datetime_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}.</div>

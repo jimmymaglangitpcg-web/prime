@@ -250,6 +250,39 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
 
     private DateOnly Entered(TaxDeclaration td) => clock.LocalDate(td.ApprovedAt ?? td.CreatedAt);
 
+    /// <summary>A FAAS's values split into its taxable and exempt parts, and the legal bases of its exemptions.</summary>
+    private sealed record Split(decimal? TaxableMv, decimal? TaxableAv, decimal? ExemptMv, decimal? ExemptAv, string? LegalBasis)
+    {
+        public bool Partly => TaxableAv is not null && ExemptAv is not null;
+    }
+
+    /// <summary>
+    /// The taxable and exempt parts of a FAAS (assessment-listing-exemptions.md §4.1, Q4): by its assessment's lines
+    /// when the TD declares one; else, for a TD declared without one, wholly as the TD says.
+    /// </summary>
+    private async Task<Split> SplitAsync(TaxDeclaration td, Assessment? assessment, CancellationToken ct)
+    {
+        if (td.AssessmentId is { } id)
+        {
+            var lines = await db.AssessmentLines.AsNoTracking().Where(l => l.AssessmentId == id)
+                .Select(l => new { l.Taxability, l.MarketValue, l.AssessedValue, LegalBasis = l.Taxability == Taxability.Exempt && l.PropertyExemption != null
+                    ? l.PropertyExemption.ExemptionType!.LegalBasis : null })
+                .ToListAsync(ct);
+            if (lines.Count > 0)
+            {
+                var taxable = lines.Where(l => l.Taxability == Taxability.Taxable).ToList();
+                var exempt = lines.Where(l => l.Taxability == Taxability.Exempt).ToList();
+                var bases = exempt.Select(l => l.LegalBasis).OfType<string>().Distinct().ToList();
+                return new Split(
+                    taxable.Count > 0 ? taxable.Sum(l => l.MarketValue) : null, taxable.Count > 0 ? taxable.Sum(l => l.AssessedValue) : null,
+                    exempt.Count > 0 ? exempt.Sum(l => l.MarketValue) : null, exempt.Count > 0 ? exempt.Sum(l => l.AssessedValue) : null,
+                    bases.Count > 0 ? string.Join("; ", bases) : null);
+            }
+        }
+        var (mv, av) = (assessment?.MarketValue, assessment?.AssessedValue);
+        return td.Taxability == Taxability.Taxable ? new Split(mv, av ?? 0, null, null, null) : new Split(null, null, mv, av ?? 0, null);
+    }
+
     private async Task<int?> RevisionYearAsync(RegisterRun run, CancellationToken ct) =>
         run.BarangayId is not { } b ? null
             : await db.Assessments.Where(a => a.Status == WorkflowStatus.Posted && a.Property!.BarangayId == b && a.Valuation!.Smv != null)
@@ -479,10 +512,16 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
         var perPage = registers.Value.AssessmentRollRowsPerPage;
         var rows = new List<object>();
         var lines = new List<RollLine>();
-        foreach (var f in all.Where(x => taxability == Taxability.Taxable ? x.Td.Taxability == Taxability.Taxable : x.Td.Taxability != Taxability.Taxable)
-                     .Where(x => run.FromDate is not { } from || x.EnteredOn >= from)
+        foreach (var f in all.Where(x => run.FromDate is not { } from || x.EnteredOn >= from)
                      .OrderBy(x => x.Td.Rpu!.RpuNumber))
         {
+            // Each roll lists its part of the FAAS; a partly exempt one is on both (Q4).
+            var split = await SplitAsync(f.Td, f.Assessment, ct);
+            var part = taxability == Taxability.Taxable ? split.TaxableAv : split.ExemptAv;
+            if (part is null)
+            {
+                continue;
+            }
             var p = await PropertyAsync(f.Td.PropertyId, ct);
             var (owners, address) = await OwnersAsync(f.Td.PropertyId, f.Td.RpuId, run.AsOf, ct);
             var (administrator, administratorAddress) = await AdministratorAsync(f.Td.PropertyId, f.Td.RpuId, run.AsOf, ct);
@@ -496,12 +535,18 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
                 arpNumber = Arp(f), tdNumber = f.Td.TaxDeclarationNumber,
                 pin = await UnitPinAsync(p, f.Td.Rpu!, run.AsOf, ct),
                 lotBlock = $"{p.LotNumber ?? "—"} / {p.BlockNumber ?? "—"}", owner = owners, ownerAddress = address,
-                kind = KindCode(f.Td.Rpu!.RpuType), classCode = f.Td.Classification!.Code, assessedValue = f.Assessment?.AssessedValue,
+                kind = KindCode(f.Td.Rpu!.RpuType), classCode = f.Td.Classification!.Code,
+                assessedValue = f.Assessment is null && part == 0 ? (decimal?)null : part,
                 previousArpNumber = f.Td.PreviousTaxDeclaration is { } prev
                     ? faas.Value.NumberSource == FaasNumberSource.TaxDeclaration ? prev.TaxDeclarationNumber : prev.Assessment?.FaasNumber : null, previousTdNumber = f.Td.PreviousTaxDeclaration?.TaxDeclarationNumber,
-                legalBasis = (string?)null, // exemptions are not yet modelled (CLAUDE.md §43)
+                legalBasis = taxability == Taxability.Exempt ? split.LegalBasis : null,
                 effectivity = Effectivity(f.Td.EffectivityDate), remarks = f.Td.TransactionCode, enteredOn = f.EnteredOn,
-                lam = new { administrator, administratorAddress, page = line.Page, line = line.Line, sectionIndex = section, parcelNumber = parcel, actualUseCode = useCode },
+                lam = new
+                {
+                    administrator, administratorAddress, page = line.Page, line = line.Line, sectionIndex = section, parcelNumber = parcel, actualUseCode = useCode,
+                    // Partly exempt: this roll lists only its part; the whole FAAS's assessed value for reference.
+                    partlyExempt = split.Partly, wholeAssessedValue = f.Assessment?.AssessedValue,
+                },
             });
         }
         return (rows, lines);
@@ -614,7 +659,9 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
             var (owners, _) = await OwnersAsync(td.PropertyId, td.RpuId, Entered(td), ct);
             var (area, _) = td.Rpu!.RpuType == RpuType.Land ? await AreaAsync(td, ct) : (null, null);
             var kind = KindCode(td.Rpu.RpuType);
-            var taxable = td.Taxability == Taxability.Taxable;
+            var split = await SplitAsync(td, assessment, ct);
+            // The MRPAAO layout marks a FAAS taxable or not; a partly exempt one counts as taxable, the LAM columns split it.
+            var taxable = split.TaxableAv is not null;
             var mv = assessment?.MarketValue;
             var av = assessment?.AssessedValue;
             rows.Add(new
@@ -630,8 +677,9 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
                 {
                     sectionParcel = await SectionParcelAsync(p.Id, Entered(td), ct),
                     buildingArea = kind == "B" ? (await AreaAsync(td, ct)).Area : null,
-                    marketValueTaxable = taxable ? mv : null, marketValueExempt = taxable ? null : mv,
-                    assessedValueTaxable = taxable ? av : null, assessedValueExempt = taxable ? null : av,
+                    marketValueTaxable = split.TaxableMv, marketValueExempt = split.ExemptMv,
+                    assessedValueTaxable = assessment is null ? null : split.TaxableAv, assessedValueExempt = assessment is null ? null : split.ExemptAv,
+                    legalBasis = split.LegalBasis,
                 },
             });
         }

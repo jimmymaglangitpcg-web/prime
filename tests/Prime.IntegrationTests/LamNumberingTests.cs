@@ -36,6 +36,9 @@ public class LamNumberingTests(WebApplicationFactory<Program> factory) : IClassF
         var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PrimeDbContext>();
         var transaction = await db.Database.BeginTransactionAsync();
+        // The test's own numbering schemes start today; set aside the database's approved ones (rolled back with the test).
+        await db.NumberingSchemes.Where(x => x.Status == WorkflowStatus.Approved)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, WorkflowStatus.Cancelled).SetProperty(x => x.ApprovedAt, (DateTimeOffset?)null));
         var used = await db.Provinces.Where(x => x.PinIndexNumber != null).Select(x => x.PinIndexNumber!).ToListAsync();
         var provinceIndex = Enumerable.Range(900, 99).Select(i => i.ToString()).First(i => !used.Contains(i));
         var province = new Province { PsgcCode = $"P{Guid.NewGuid():N}"[..10], Name = "DEMO Province", PinIndexNumber = provinceIndex };

@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Alert, Layout, Menu, Select, Tag, Tooltip, Typography } from 'antd';
-import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined, NumberOutlined, CloudUploadOutlined, ApartmentOutlined, CheckSquareOutlined, SendOutlined } from '@ant-design/icons';
+import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined, NumberOutlined, CloudUploadOutlined, ApartmentOutlined, CheckSquareOutlined, SendOutlined, SafetyCertificateOutlined, LineChartOutlined, SyncOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { devActAsAvailable, getDevActAs, setDevActAs, subscribeDevActAs } from '../lib/devActAs';
@@ -16,6 +16,9 @@ const navItems = [
   { key: '/taxpayers', icon: <TeamOutlined />, label: 'Taxpayers' },
   { key: '/gis', icon: <GlobalOutlined />, label: 'Tax Map' },
   { key: '/sworn-statements', icon: <AuditOutlined />, label: 'Sworn Statements' },
+  { key: '/exemptions', icon: <SafetyCertificateOutlined />, label: 'Exemptions' },
+  { key: '/market-data', icon: <LineChartOutlined />, label: 'Market Data' },
+  { key: '/general-revision', icon: <SyncOutlined />, label: 'General Revision' },
   { key: '/registers', icon: <BookOutlined />, label: 'Registers' },
   { key: '/collection', icon: <DollarOutlined />, label: 'Collection' },
   { key: '/admin/offices', icon: <ApartmentOutlined />, label: 'Offices' },

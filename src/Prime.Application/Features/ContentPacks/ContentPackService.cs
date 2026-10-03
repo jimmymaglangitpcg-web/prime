@@ -97,6 +97,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         L("structural-parts", d => d.StructuralParts),
         L("structural-materials", d => d.StructuralMaterials),
         L("annotation-types", d => d.AnnotationTypes),
+        L("conveyance-modes", d => d.ConveyanceModes),
     }.ToDictionary(x => x.Name);
 
     public static IReadOnlyCollection<string> LookupNames => Lookups.Keys.ToList();
@@ -587,7 +588,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
         var isMaterial = work.Entry.Lookup == "structural-materials";
         var isAnnotation = work.Entry.Lookup == "annotation-types";
         string[] required = isMaterial ? ["code", "name", "part_code"] : ["code", "name"];
-        string[] optional = isAnnotation ? ["description", "sort_order", "is_active", "source", "carries_over"] : ["description", "sort_order", "is_active", "source"];
+        string[] optional = isAnnotation ? ["description", "sort_order", "is_active", "source", "carries_over", "blocks_cancellation"] : ["description", "sort_order", "is_active", "source"];
         if (!Columns(work, required, optional))
         {
             return;
@@ -630,7 +631,7 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
             }
             if (!CheckName(work, row, out var name) || !CheckLength(work, row, "description", 1000, out var description)
                 || !CheckInt(work, row, "sort_order", out var sortOrder) || !CheckBool(work, row, "is_active", out var isActive) || !CheckSource(work, row)
-                || !CheckBool(work, row, "carries_over", out var carriesOver))
+                || !CheckBool(work, row, "carries_over", out var carriesOver) || !CheckBool(work, row, "blocks_cancellation", out var blocksCancellation))
             {
                 continue;
             }
@@ -667,6 +668,9 @@ public sealed partial class ContentPackService(IApplicationDbContext db, IConten
                 // records-and-forms.md §4.4: a new type carries over unless the pack says otherwise.
                 AddChange(changes, "carries_over", current is AnnotationType t ? Bool(t.CarriesOver) : null,
                     carriesOver is null ? (current is null ? Bool(true) : null) : Bool(carriesOver.Value), keepWhenNull: true);
+                // assessment-listing-exemptions.md Q12: a type blocks cancellation only when the pack says so.
+                AddChange(changes, "blocks_cancellation", current is AnnotationType b ? Bool(b.BlocksCancellation) : null,
+                    blocksCancellation is null ? (current is null ? Bool(false) : null) : Bool(blocksCancellation.Value), keepWhenNull: true);
             }
             Tally(work, row, code, name, current is null, changes);
         }

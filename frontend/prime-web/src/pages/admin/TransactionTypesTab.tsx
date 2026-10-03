@@ -47,6 +47,7 @@ export function TransactionTypesTab() {
             ),
           },
           { title: 'Building depreciation', dataIndex: 'allowsNewDepreciation', render: (v: boolean) => (v ? 'New for the age' : 'Kept') },
+          { title: 'Notice of Cancellation', dataIndex: 'cancelsMotuProprio', render: (v: boolean) => (v ? 'Yes (motu proprio)' : '—') },
           {
             title: 'Requirements', render: (_, t) => t.requirements.length === 0 ? '—' : (
               <ol style={{ margin: 0, paddingLeft: 18 }}>
@@ -74,6 +75,7 @@ export function TransactionTypesTab() {
             effectivityLegalBasis: v.effectivityRule ? v.effectivityLegalBasis : null,
             causeWindowDays: v.effectivityRule === 'NextQuarter' ? v.causeWindowDays ?? null : null,
             allowsNewDepreciation: !!v.allowsNewDepreciation,
+            cancelsMotuProprio: !!v.cancelsMotuProprio,
             requirements: (v.requirements ?? []).map((r: { code: string; label: string; isMandatory?: boolean; legalBasis?: string }, i: number) =>
               ({ ...r, isMandatory: r.isMandatory ?? true, sequence: i + 1 })),
           }, { onSuccess: () => { form.resetFields(); setOpen(false); } })}>
@@ -103,6 +105,10 @@ export function TransactionTypesTab() {
           </Space>
           <Form.Item name="allowsNewDepreciation" label="Buildings take a new depreciation" valuePropName="checked"
             extra="On for a first declaration, a general revision or the owner's request (LAM Bk III p.73); off, a building keeps the depreciation of its last posted valuation.">
+            <Switch />
+          </Form.Item>
+          <Form.Item name="cancelsMotuProprio" label="Cancels TDs on the assessor's own motion" valuePropName="checked"
+            extra="On approval, a Notice of Cancellation is drafted for the declarants and others with a legal interest in each TD it cancels (LAM Bk III p.89).">
             <Switch />
           </Form.Item>
           <Typography.Text strong>Prerequisites (checklist)</Typography.Text>

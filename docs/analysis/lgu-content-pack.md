@@ -70,6 +70,9 @@ lgu-content/                         (gitignored)
     │   ├── depreciation-rates.json  kind "depreciation-rates" (L1-5): smv, structuralType, reading, minimumRemainingPercent, rows[]
     │   ├── exchange-rates.csv       kind "exchange-rates" (L1-6): currency, rate-date, pesos-per-unit, source, remarks
     │   ├── price-indices.csv        kind "price-indices" (L1-6): series, year, value, source, remarks
+    │   ├── exemption-types.json     kind "exemption-types" (L3-1a): code, name, description, appliesTo (Land/Building/Machinery/OtherImprovement), requiresProof, assessedValueCeiling, legalBasis, effectiveDate
+    │   ├── general-revision-checklist.json  kind "general-revision-checklist" (L6-6c): code, sequence, title, description, gate (optional: Compiled, Valued, Approved, Posted, TaxDeclarationsApproved, NoticesServed, RollWaitElapsed, AssessmentRollRun, OwnershipRecordsRun, CompletionReportIssued), legalBasis, effectiveDate
+    │   ├── assessment-level-ceilings.json  kind "assessment-level-ceilings" (L3-2): code, propertyType, classification?, actualUse?, lowerValue, upperValue?, maximumPercentage, description, legalBasis, effectiveDate
     │   └── assessment-levels.csv    kind "assessment-levels"
     └── gis/
         └── <layer>.geojson

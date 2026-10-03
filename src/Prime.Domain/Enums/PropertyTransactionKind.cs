@@ -21,6 +21,17 @@ public enum PropertyTransactionKind
     RemovalOfImprovement = 11,
     /// <summary>A created LGU or a transferred territory: new PINs under new index numbers (LAM Bk II p.40; identification-numbering.md §4.3).</summary>
     TerritorialChange = 12,
+    /// <summary>
+    /// A cancellation, restoration or revival ordered by a court (LAM Bk III p.88 A.1; assessment-listing-exemptions.md §4.3).
+    /// A restored declaration is a new TD naming the cancelled one, never the cancelled one reopened. The order is a
+    /// mandatory requirement of the type.
+    /// </summary>
+    CourtOrder = 13,
+    /// <summary>
+    /// A machine moved to another property (Q7): filed on the receiving property; its unit there continues the moved
+    /// unit (<c>PreviousRpuId</c>), whose TD it cancels across properties, and the moved unit is retired.
+    /// </summary>
+    MachineryRelocation = 14,
 }
 
 /// <summary>How another property takes part in a transaction.</summary>

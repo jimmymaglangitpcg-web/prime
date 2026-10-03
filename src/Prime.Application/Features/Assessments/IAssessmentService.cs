@@ -14,5 +14,8 @@ public interface IAssessmentService
     Task<Result<AssessmentDto>> RejectAsync(Guid assessmentId, string reason, CancellationToken cancellationToken = default);
     Task<Result<AssessmentDto>> PostAsync(Guid assessmentId, CancellationToken cancellationToken = default);
     Task<Result<AssessmentDto>> GetByIdAsync(Guid assessmentId, CancellationToken cancellationToken = default);
+    /// <summary>A Draft reassessment re-marking the unit's taxability after an exemption decision (assessment-listing-exemptions.md Q3); the caller saves.</summary>
+    Task<(Domain.Entities.Assessment? Draft, string Note)> ReassessTaxabilityAsync(Guid rpuId, DateOnly from, string reason, string? transactionCode,
+        CancellationToken cancellationToken = default);
     Task<Result<IReadOnlyList<AssessmentDto>>> ListByRpuAsync(Guid rpuId, DateOnly? asOfDate, CancellationToken cancellationToken = default);
 }

@@ -41,6 +41,12 @@ public sealed class TransactionType : EffectiveDatedConfiguration
     /// depreciation percent of its last posted valuation is kept (docs/analysis/valuation-foundation.md §4.5, Q10).
     /// </summary>
     public bool AllowsNewDepreciation { get; set; }
+
+    /// <summary>
+    /// The assessor cancels on its own motion under this type: approving a transaction of it gives each cancelled TD's
+    /// declarants a Notice of Cancellation (LAM Bk III p.89 C; assessment-listing-exemptions.md Q11).
+    /// </summary>
+    public bool CancelsMotuProprio { get; set; }
 }
 
 /// <summary>One prerequisite of a transaction type, e.g. proof of transfer-tax payment (LGC §135(b)).</summary>
@@ -86,6 +92,16 @@ public sealed class PropertyTransaction : AuditableEntity
     /// whose parties change. Null: the whole property's parties change.
     /// </summary>
     public Guid? TransferRpuId { get; set; }
+
+    /// <summary>For a machinery relocation: the machinery unit on the property it leaves, retired on approval.</summary>
+    public Guid? RelocatedRpuId { get; set; }
+
+    /// <summary>
+    /// A new discovery whose owner did not answer two summonses: the verification made with other agencies (LAM Bk III
+    /// p.86 d), recorded before the assessor declares the property.
+    /// </summary>
+    public string? InterAgencyVerification { get; set; }
+    public DateOnly? VerificationRecordedOn { get; set; }
 
     public WorkflowStatus Status { get; set; } = WorkflowStatus.Draft;
     public DateTimeOffset? SubmittedAt { get; set; }
@@ -171,6 +187,11 @@ public sealed class TransferTaxClearance : AuditableEntity
     public string? TransferorName { get; set; }
     public string? TransferorTin { get; set; }
     public string? TransfereeTin { get; set; }
+    /// <summary>
+    /// The consideration stated in the deed. When recorded, approving the transfer prefills an unreviewed market
+    /// transaction (docs/analysis/smv-preparation-general-revision.md §4.1, Q3).
+    /// </summary>
+    public decimal? Consideration { get; set; }
     public decimal? CapitalGainsTax { get; set; }
     public string? CapitalGainsTaxReceipt { get; set; }
     public DateOnly? CapitalGainsTaxDate { get; set; }

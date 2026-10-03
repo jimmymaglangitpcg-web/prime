@@ -15,6 +15,7 @@ public sealed class TaxDeclarationConfiguration : IEntityTypeConfiguration<TaxDe
         builder.Property(x => x.TaxDeclarationNumber).HasMaxLength(50).IsRequired();
         builder.Property(x => x.CancellationReason).HasMaxLength(1000);
         builder.HasOne<TaxDeclaration>().WithMany().HasForeignKey(x => x.SupersededByTaxDeclarationId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<TaxDeclaration>().WithMany().HasForeignKey(x => x.RestoresTaxDeclarationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Prime.Domain.Entities.Transactions.PropertyTransaction>().WithMany().HasForeignKey(x => x.PropertyTransactionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => x.PropertyTransactionId);
         builder.HasOne(x => x.Assessment).WithMany().HasForeignKey(x => x.AssessmentId).OnDelete(DeleteBehavior.Restrict);

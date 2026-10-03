@@ -1,0 +1,38 @@
+{% comment %}
+  PRIME provisional layout (docs/analysis/assessment-listing-exemptions.md §4.4, Q10). The LAM describes the discovery
+  summons (Book III pp.85–86) but gives no annex form; this neutral layout states only recorded facts and the
+  configured period and legal basis, watermarked until the province supplies its own form.
+{% endcomment %}
+{% assign s = summons %}{% assign p = property %}
+<style>
+  .hdr { text-align: center; margin-bottom: 10px; }
+  .hdr .lgu { font-weight: bold; font-size: 12pt; }
+  .hdr h1 { font-size: 15pt; margin: 6px 0 2px; }
+  p { font-size: 10.5pt; line-height: 1.5; margin: 6px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+  th, td { border: 1px solid #555; padding: 3px 5px; font-size: 10pt; vertical-align: top; text-align: left; }
+  th { background: #eee; width: 30%; }
+  .sig { margin-top: 36px; width: 280px; border-top: 1px solid #000; text-align: center; font-size: 9.5pt; padding-top: 2px; }
+  .foot { font-size: 8pt; color: #333; margin-top: 14px; }
+</style>
+<div class="hdr">
+  {% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% else %}<div class="lgu">[LGU name not configured]</div>{% endif %}
+  {% if lgu.office %}<div>{{ lgu.office }}</div>{% endif %}
+  <h1>SUMMONS{% if s.sequence == 2 %} (SECOND){% endif %}</h1>
+  <div>No. {{ s.summonsNumber | default: "(unnumbered)" }} · Issued {{ s.issuedOn | date_ph }}</div>
+</div>
+<p>To: <b>{{ s.addresseeName }}</b>{% if s.addresseeAddress %}<br>{{ s.addresseeAddress }}{% endif %}</p>
+<p>The Office of the Assessor has found the real property described below, which is not declared for assessment in its records.
+  You are summoned to declare it, or to show that it is declared, within <b>{{ s.periodDays }}</b> days of your receipt of this summons.</p>
+<table>
+  <tr><th>Property Identification No.</th><td>{{ p.pin }}</td></tr>
+  <tr><th>Location</th><td>{{ p.street | default: "" }} {{ p.barangay }}, {{ p.municipality }}, {{ p.province }}</td></tr>
+  <tr><th>Lot / Block / Survey</th><td>{{ p.lotNumber | default: "—" }} / {{ p.blockNumber | default: "—" }} / {{ p.surveyNumber | default: "—" }}</td></tr>
+  <tr><th>Title</th><td>{{ p.titleNumber | default: "—" }}</td></tr>
+  <tr><th>Discovery record</th><td>{{ transaction.code }} {{ transaction.number | default: "" }} — {{ transaction.description }}</td></tr>
+</table>
+{% if s.sequence == 2 %}<p>This is a second summons: the first was not complied with within its period.</p>{% endif %}
+<p>Legal basis: {{ legalBasis }}.</p>
+<div class="sig">Assessor</div>
+{% if s.receivedOn %}<p style="font-size:9pt">Received {{ s.receivedOn | date_ph }} by {{ s.servedTo }} ({{ s.serviceMode }}, proof {{ s.proofReference }}); due {{ s.dueDate | date_ph }}.</p>{% endif %}
+<div class="foot">{{ form.title }} — form {{ form.code }} v{{ form.version }}. {{ form.legalBasis }}. Printed {{ issue.issuedAt | datetime_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}.</div>

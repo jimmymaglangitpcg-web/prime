@@ -48,6 +48,10 @@ public static class ContentFileKinds
     public const string DepreciationRates = "depreciation-rates";
     public const string ExchangeRates = "exchange-rates";
     public const string PriceIndices = "price-indices";
+    public const string ExemptionTypes = "exemption-types";
+    public const string AssessmentLevelCeilings = "assessment-level-ceilings";
+    /// <summary>The general revision instructions' checklist (L6-6c).</summary>
+    public const string GeneralRevisionChecklist = "general-revision-checklist";
 
     /// <summary>CSV tables (step C1–C2).</summary>
     public static readonly IReadOnlySet<string> Csv = new HashSet<string> { Provinces, Municipalities, Barangays, Lookup };
@@ -59,7 +63,8 @@ public static class ContentFileKinds
     /// From step L1-3: SMVs (JSON), their unit values and assessment levels (CSV), as Draft records.
     public static readonly IReadOnlySet<string> Versioned = new HashSet<string>
         { TransactionTypes, NumberingSchemes, ApprovalChains, Forms, Offices, Smv, SmvSchedules, AssessmentLevels, AdjustmentFactors,
-          BuildingCosts, ExtraItemCosts, DepreciationRates, ExchangeRates, PriceIndices };
+          BuildingCosts, ExtraItemCosts, DepreciationRates, ExchangeRates, PriceIndices, ExemptionTypes, AssessmentLevelCeilings,
+          GeneralRevisionChecklist };
 
     /// <summary>Kinds PRIME reads and imports; GeoJSON map layers from step C5.</summary>
     public static readonly IReadOnlySet<string> Supported = Csv.Union(Versioned).Append(GisLayer).ToHashSet();

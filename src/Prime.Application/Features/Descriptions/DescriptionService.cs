@@ -33,7 +33,7 @@ public sealed record SetTransferTaxClearanceRequest(
     string? CarNumber, DateOnly? CarDate, string? TransferorName, string? TransferorTin, string? TransfereeTin,
     decimal? CapitalGainsTax, string? CapitalGainsTaxReceipt, DateOnly? CapitalGainsTaxDate,
     decimal? DocumentaryStampTax, string? DocumentaryStampTaxReceipt, DateOnly? DocumentaryStampTaxDate,
-    decimal? TransferTax, string? TransferTaxReceipt, DateOnly? TransferTaxDate, string? Remarks);
+    decimal? TransferTax, string? TransferTaxReceipt, DateOnly? TransferTaxDate, string? Remarks, decimal? Consideration = null);
 
 public interface IDescriptionService
 {
@@ -217,9 +217,9 @@ public sealed class DescriptionService(IApplicationDbContext db, ICurrentUserSer
         {
             return Result.Failure("VALIDATION_FAILED", problem);
         }
-        if (r.CapitalGainsTax < 0 || r.DocumentaryStampTax < 0 || r.TransferTax < 0)
+        if (r.CapitalGainsTax < 0 || r.DocumentaryStampTax < 0 || r.TransferTax < 0 || r.Consideration < 0)
         {
-            return Result.Failure("VALIDATION_FAILED", "Tax amounts cannot be negative.");
+            return Result.Failure("VALIDATION_FAILED", "Tax amounts and the consideration cannot be negative.");
         }
         var tx = await db.PropertyTransactions.Include(x => x.TaxClearance).FirstOrDefaultAsync(x => x.Id == transactionId, cancellationToken);
         if (tx is null)
@@ -245,6 +245,7 @@ public sealed class DescriptionService(IApplicationDbContext db, ICurrentUserSer
         c.TransferorName = Clean(r.TransferorName);
         c.TransferorTin = Clean(r.TransferorTin);
         c.TransfereeTin = Clean(r.TransfereeTin);
+        c.Consideration = r.Consideration;
         c.CapitalGainsTax = r.CapitalGainsTax;
         c.CapitalGainsTaxReceipt = Clean(r.CapitalGainsTaxReceipt);
         c.CapitalGainsTaxDate = r.CapitalGainsTaxDate;

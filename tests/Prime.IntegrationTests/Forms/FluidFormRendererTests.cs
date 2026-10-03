@@ -82,12 +82,18 @@ public class FluidFormRendererTests
     [InlineData("FAAS_BUILDING.v2.liquid")]
     [InlineData("FAAS_MACHINERY.v2.liquid")]
     [InlineData("NOTICE_OF_ASSESSMENT.v2.liquid")]
+    [InlineData("TAX_DECLARATION.v5.liquid")]
+    [InlineData("FAAS_LAND.v3.liquid")]
+    [InlineData("FAAS_BUILDING.v3.liquid")]
+    [InlineData("FAAS_MACHINERY.v3.liquid")]
     [InlineData("TMCR.v1.liquid")]
     [InlineData("AR_TAXABLE.v1.liquid")]
     [InlineData("AR_EXEMPT.v1.liquid")]
     [InlineData("ORC.v1.liquid")]
     [InlineData("ROA.v1.liquid")]
     [InlineData("SWORN_STATEMENT.v1.liquid")]
+    [InlineData("DISCOVERY_SUMMONS.v1.liquid")]
+    [InlineData("NOTICE_OF_CANCELLATION.v1.liquid")]
     public void ProvisionalTemplates_AreEmbeddedAndParse(string file) =>
         renderer.Validate(ProvisionalFormSeeder.ReadTemplate(file)).ShouldBeNull();
 
@@ -118,6 +124,39 @@ public class FluidFormRendererTests
 
         html.ShouldContain("DEMO Office Order 1 dated 2026-01-02 of DEMO Provincial Assessor");
         html.ShouldContain("nder delegation"); // "Under delegation" (FAAS) or "under delegation" (TD)
+    }
+
+    [Theory]
+    [InlineData("TAX_DECLARATION.v5.liquid")]
+    [InlineData("FAAS_LAND.v3.liquid")]
+    [InlineData("FAAS_BUILDING.v3.liquid")]
+    [InlineData("FAAS_MACHINERY.v3.liquid")]
+    public void PartlyExempt_TicksBothBoxes_AndMarksTheExemptRow(string file)
+    {
+        // docs/analysis/assessment-listing-exemptions.md Q2; DEMO values.
+        JsonObject Line(string use, string taxability, string? basis) => new()
+        {
+            ["classification"] = "DEMO Class", ["actualUse"] = use, ["marketValue"] = 1000m, ["assessmentLevelPercent"] = 20m, ["assessedValue"] = 200m,
+            ["taxability"] = taxability, ["legalBasis"] = basis,
+        };
+        JsonArray Lines() => [Line("DEMO Leased", "Taxable", null), Line("DEMO School", "Exempt", "DEMO basis 1")];
+        var data = new JsonObject
+        {
+            ["form"] = new JsonObject { ["title"] = "DEMO" },
+            ["td"] = new JsonObject { ["taxability"] = "PartlyExempt" },
+            ["assessment"] = new JsonObject { ["lines"] = Lines(), ["marketValue"] = 2000m, ["assessedValue"] = 400m },
+            ["faas"] = new JsonObject { ["taxability"] = "PartlyExempt", ["effectivity"] = new JsonObject() },
+            ["appraisal"] = new JsonObject { ["assessment"] = new JsonObject { ["lines"] = Lines() } },
+        };
+
+        var html = renderer.Render(ProvisionalFormSeeder.ReadTemplate(file), data, provisional: false);
+
+        // Only the school row is marked: "DEMO School[ (DEMO Class)] — exempt (DEMO basis 1)".
+        html.Split("<i>exempt (DEMO basis 1)</i>").Length.ShouldBe(2);
+        html.IndexOf("DEMO School", StringComparison.Ordinal).ShouldBeLessThan(html.IndexOf("<i>exempt", StringComparison.Ordinal));
+        html.IndexOf("DEMO Leased", StringComparison.Ordinal).ShouldBeLessThan(html.IndexOf("DEMO School", StringComparison.Ordinal));
+        html.ShouldContain("<span class=\"box\">X</span> Taxable");
+        html.ShouldContain("<span class=\"box\">X</span> Exempt");
     }
 
     [Theory]
