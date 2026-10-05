@@ -81,3 +81,15 @@ public sealed class DisputedArea : SpatialLayerFeature
     public string? Name { get; set; }
     public MultiPolygon Geometry { get; set; } = null!;
 }
+
+/// <summary>
+/// A sub-market area drawn or imported for the land value map (LAM 2025 Book IV p.110; docs/analysis/smv-preparation-general-revision.md
+/// §4.4, Q11): an area a sub-class covers, shown where there are no parcels yet. Keyed by its own code; the name says what it is
+/// (e.g. the sub-class and place). Shown only; never used to value a property.
+/// </summary>
+public sealed class SubMarketArea : SpatialLayerFeature
+{
+    public string Code { get; set; } = string.Empty;
+    public string? Name { get; set; }
+    public MultiPolygon Geometry { get; set; } = null!;
+}

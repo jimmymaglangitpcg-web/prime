@@ -53,7 +53,8 @@ function CreateModal({ onClose }: { onClose: (id?: string) => void }) {
   const create = useCreateGeneralRevision();
   const { data: smvs } = useSmvs();
   const { data: municipalities = [] } = useAllMunicipalities();
-  const approved = (smvs?.items ?? []).filter((s) => s.status === 'Approved');
+  // A general revision applies the SMV itself; its amendments apply through it (smv-preparation-general-revision.md §4.7).
+  const approved = (smvs?.items ?? []).filter((s) => s.status === 'Approved' && s.basis !== 'Amendment');
   return (
     <Modal open title="New general revision" footer={null} width={720} destroyOnHidden onCancel={() => onClose()}>
       <Typography.Paragraph type="secondary">

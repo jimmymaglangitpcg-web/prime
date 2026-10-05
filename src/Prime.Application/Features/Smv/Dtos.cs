@@ -19,7 +19,10 @@ public sealed record CreateSmvRequest(
     string? CertificationReference = null,
     DateOnly? PublishedOn = null,
     string? PublicationReference = null,
-    IReadOnlyList<Guid>? MunicipalityIds = null);
+    IReadOnlyList<Guid>? MunicipalityIds = null,
+    /// <summary>An <see cref="SmvBasis.Amendment"/>: the approved SMV it amends (§4.7).</summary>
+    Guid? AmendsSmvId = null,
+    SmvAmendmentGround? AmendmentGround = null);
 
 public sealed record SmvCoverageDto(Guid MunicipalityId, string MunicipalityName);
 
@@ -44,7 +47,10 @@ public sealed record SmvDto(
     DateOnly? PublishedOn = null,
     string? PublicationReference = null,
     /// <summary>Empty: the whole province.</summary>
-    IReadOnlyList<SmvCoverageDto>? Coverage = null);
+    IReadOnlyList<SmvCoverageDto>? Coverage = null,
+    Guid? AmendsSmvId = null,
+    string? AmendsSmvReference = null,
+    SmvAmendmentGround? AmendmentGround = null);
 
 /// <param name="ActualUseId">Optional: a rate naming the actual use beats one that does not (§4.3).</param>
 /// <param name="SubClassificationId">The sub-class the unit value is for; null: any.</param>
@@ -61,7 +67,10 @@ public sealed record CreateSmvScheduleRequest(
     DateOnly EffectiveDate,
     Guid? ImprovementKindId = null,
     Guid? SubClassificationId = null,
-    Guid? BarangayId = null);
+    Guid? BarangayId = null,
+    /// <summary>Printed on SMV Forms 5 and 9 (docs/analysis/smv-preparation-general-revision.md §4.2); never used to select a rate.</summary>
+    string? LocationDescription = null,
+    string? CropDescription = null);
 
 public sealed record SmvScheduleDto(
     Guid Id,
@@ -87,4 +96,8 @@ public sealed record SmvScheduleDto(
     Guid? SubClassificationId = null,
     string? SubClassificationName = null,
     Guid? BarangayId = null,
-    string? BarangayName = null);
+    string? BarangayName = null,
+    string? LocationDescription = null,
+    string? CropDescription = null,
+    /// <summary>An amendment's row: the amended SMV's value for the same key, which it replaces; null when it adds a row.</summary>
+    decimal? ReplacesMarketValue = null);

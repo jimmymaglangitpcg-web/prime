@@ -18,4 +18,14 @@ public interface IAssessmentService
     Task<(Domain.Entities.Assessment? Draft, string Note)> ReassessTaxabilityAsync(Guid rpuId, DateOnly from, string reason, string? transactionCode,
         CancellationToken cancellationToken = default);
     Task<Result<IReadOnlyList<AssessmentDto>>> ListByRpuAsync(Guid rpuId, DateOnly? asOfDate, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// The assessment rows of valuation rows, stored or not (smv-preparation-general-revision.md §4.3): grouped by
+    /// classification and use, at the levels in force on <paramref name="effectiveDate"/>, marked taxable or exempt.
+    /// Nothing is saved.
+    /// </summary>
+    Task<Result<List<Domain.Entities.AssessmentLine>>> AssessLinesAsync(Guid rpuId, Domain.Enums.ValuationSourceType sourceType,
+        IReadOnlyList<AssessableLine> lines, DateOnly effectiveDate, CancellationToken cancellationToken = default);
 }
+
+/// <summary>One valuation row to assess; a null classification or use is the unit's Tax Declaration's.</summary>
+public sealed record AssessableLine(Guid? ClassificationId, Guid? ActualUseId, decimal MarketValue);

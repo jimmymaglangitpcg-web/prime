@@ -252,7 +252,8 @@ public sealed partial class ContentPackVersionedContent
     // --- Helpers ---
 
     private async Task<Dictionary<string, Guid>> SmvIdsAsync(CancellationToken ct) =>
-        (await db.Smvs.AsNoTracking().Select(x => new { x.Id, x.OrdinanceNumber, x.CertificationReference }).ToListAsync(ct))
+        (await db.Smvs.AsNoTracking().Where(x => x.OrdinanceNumber != null || x.CertificationReference != null)
+            .Select(x => new { x.Id, x.OrdinanceNumber, x.CertificationReference }).ToListAsync(ct))
             .ToDictionary(x => x.OrdinanceNumber ?? x.CertificationReference ?? "", x => x.Id, StringComparer.Ordinal);
 
     private async Task<Guid?> SmvIdAsync(string reference, CancellationToken ct) =>

@@ -11,8 +11,8 @@ import {
 } from '../../api/referenceData';
 import { formatMoney } from '../../lib/format';
 import {
-  adjustmentRuleKinds, distanceReferences, type AdjustmentFactorDto, type AdjustmentRuleKind, type AssessmentLevelCeilingDto, type AssessmentLevelDto, type SmvBasis,
-  type SmvDto, type SmvScheduleDto,
+  adjustmentRuleKinds, distanceReferences, smvAmendmentGrounds, type AdjustmentFactorDto, type AdjustmentRuleKind, type AssessmentLevelCeilingDto,
+  type AssessmentLevelDto, type SmvBasis, type SmvDto, type SmvScheduleDto,
 } from '../../lib/types';
 import { day, errorText, lookup, pct, period, statusTag, useToast } from './ruleHelpers';
 import { ApproveButton } from './ApproveButton';
@@ -56,6 +56,9 @@ const stages: { name: keyof SmvDto & string; label: string }[] = [
   { name: 'publishedOn', label: 'Published' },
 ];
 
+const groundLabel = (g: string | null) => smvAmendmentGrounds.find((x) => x.value === g)?.label ?? g ?? '—';
+const basisColor: Record<SmvBasis, string> = { Certified: 'blue', Ordinance: 'default', Amendment: 'purple' };
+
 const coverageText = (s: SmvDto) => (s.coverage.length === 0 ? 'Whole province' : s.coverage.map((c) => c.municipalityName).join(', '));
 
 function SmvTab() {
@@ -69,13 +72,21 @@ function SmvTab() {
       {context}
       <Typography.Paragraph type="secondary">
         Approving an SMV here confirms it was entered correctly; it does not stand in for its certification or ordinance.
-        The engine uses the latest SMV in force that covers the property&apos;s municipality.
+        The engine uses the latest SMV in force that covers the property&apos;s municipality. An amendment&apos;s unit values take the place
+        of the amended SMV&apos;s values for the same key from its effectivity; elsewhere the amended SMV still applies.
       </Typography.Paragraph>
       <Table<SmvDto> rowKey="id" size="small" loading={isLoading} dataSource={data?.items ?? []} pagination={false} scroll={{ x: true }}
         expandable={{ expandedRowRender: (s) => <SmvStages smv={s} /> }}
         columns={[
-          { title: 'Reference', dataIndex: 'reference' },
-          { title: 'Basis', dataIndex: 'basis', render: (b: SmvBasis) => <Tag color={b === 'Certified' ? 'blue' : 'default'}>{b}</Tag> },
+          { title: 'Reference', render: (_, s) => s.reference || <Typography.Text type="secondary">not yet certified</Typography.Text> },
+          {
+            title: 'Basis', render: (_, s) => (
+              <Space size={4} wrap>
+                <Tag color={basisColor[s.basis]}>{s.basis}</Tag>
+                {s.amendsSmvReference && <Typography.Text type="secondary">of {s.amendsSmvReference}</Typography.Text>}
+              </Space>
+            ),
+          },
           { title: 'Effective', dataIndex: 'effectivityDate' },
           { title: 'Revision year', dataIndex: 'revisionYear' },
           { title: 'Coverage', render: (_, s) => coverageText(s) },
@@ -99,6 +110,8 @@ function SmvStages({ smv: s }: { smv: SmvDto }) {
   return (
     <Descriptions size="small" column={{ xs: 1, md: 3 }}>
       {s.basis === 'Ordinance' && <Descriptions.Item label="Ordinance">{s.ordinanceNumber} ({s.ordinanceDate}{s.approvalDate ? `, approved ${s.approvalDate}` : ''})</Descriptions.Item>}
+      {s.basis === 'Amendment' && <Descriptions.Item label="Amends">{s.amendsSmvReference}</Descriptions.Item>}
+      {s.basis === 'Amendment' && <Descriptions.Item label="Ground">{groundLabel(s.amendmentGround)}</Descriptions.Item>}
       {s.certificationReference && <Descriptions.Item label="Certification">{s.certificationReference}</Descriptions.Item>}
       {stages.map((st) => <Descriptions.Item key={st.name} label={st.label}>{(s[st.name] as string | null) ?? '—'}</Descriptions.Item>)}
       <Descriptions.Item label="Publication">{s.publicationReference ?? '—'}</Descriptions.Item>
@@ -112,6 +125,11 @@ function CreateSmvModal({ onClose }: { onClose: () => void }) {
   const [form] = Form.useForm();
   const basis = (Form.useWatch('basis', form) as SmvBasis | undefined) ?? 'Certified';
   const { data: municipalities = [] } = useAllMunicipalities();
+  const { data: smvs } = useSmvs();
+  // An amendment amends an approved SMV that is not itself an amendment, within its coverage (§4.7).
+  const amendable = (smvs?.items ?? []).filter((s) => s.status === 'Approved' && s.basis !== 'Amendment');
+  const amendsId = Form.useWatch('amendsSmvId', form) as string | undefined;
+  const amended = amendable.find((s) => s.id === amendsId);
   return (
     <Modal open title="New SMV" okText="Create" onCancel={onClose} okButtonProps={{ loading: create.isPending }} onOk={() => form.submit()} width={760} destroyOnHidden>
       {create.isError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Not created" description={errorText(create.error)} />}
@@ -119,18 +137,40 @@ function CreateSmvModal({ onClose }: { onClose: () => void }) {
         basis: v.basis,
         ordinanceNumber: v.basis === 'Ordinance' ? v.ordinanceNumber : null, ordinanceDate: v.basis === 'Ordinance' ? day(v.ordinanceDate) : null,
         approvalDate: v.basis === 'Ordinance' ? day(v.approvalDate) : null,
-        certificationReference: v.basis === 'Certified' ? v.certificationReference : null,
-        effectivityDate: day(v.effectivityDate)!, revisionYear: v.revisionYear, description: v.description || null,
+        certificationReference: v.basis === 'Ordinance' ? null : v.certificationReference || null,
+        effectivityDate: day(v.effectivityDate)!, revisionYear: v.basis === 'Amendment' ? 0 : v.revisionYear, description: v.description || null,
+        amendsSmvId: v.basis === 'Amendment' ? v.amendsSmvId : null, amendmentGround: v.basis === 'Amendment' ? v.amendmentGround : null,
         publicationReference: v.publicationReference || null, municipalityIds: v.municipalityIds ?? [],
         ...Object.fromEntries(stages.map((st) => [st.name, day(v[st.name])])),
       }, { onSuccess: onClose })}>
         <Row gutter={12}>
           <Col xs={24} md={8}>
             <Form.Item name="basis" label="Basis" extra="RA 12001: certified by the Secretary of Finance. Earlier SMVs: by ordinance.">
-              <Select options={[{ value: 'Certified', label: 'Certified (RA 12001)' }, { value: 'Ordinance', label: 'Ordinance' }]} />
+              <Select options={[
+                { value: 'Certified', label: 'Certified (RA 12001)' }, { value: 'Ordinance', label: 'Ordinance' },
+                { value: 'Amendment', label: 'Amendment of an SMV' },
+              ]} />
             </Form.Item>
           </Col>
-          {basis === 'Certified' ? (
+          {basis === 'Amendment' ? (
+            <>
+              <Col xs={24} md={8}>
+                <Form.Item name="amendsSmvId" label="Amends" rules={[{ required: true }]}
+                  extra={amended ? `Revision ${amended.revisionYear}; ${coverageText(amended)}` : 'An approved SMV'}>
+                  <Select showSearch optionFilterProp="label" notFoundContent="No approved SMV"
+                    options={amendable.map((s) => ({ value: s.id, label: `${s.reference} (${s.revisionYear})` }))} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item name="amendmentGround" label="Ground" rules={[{ required: true }]}><Select options={smvAmendmentGrounds} /></Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item name="certificationReference" label="Certification reference" rules={[{ max: 100 }]} extra="Required before it is approved">
+                  <Input />
+                </Form.Item>
+              </Col>
+            </>
+          ) : basis === 'Certified' ? (
             <Col xs={24} md={16}>
               <Form.Item name="certificationReference" label="Certification reference" rules={[{ required: true }, { max: 100 }]}><Input /></Form.Item>
             </Col>
@@ -142,13 +182,18 @@ function CreateSmvModal({ onClose }: { onClose: () => void }) {
             </>
           )}
           <Col xs={12} md={8}><Form.Item name="effectivityDate" label="Effective" rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
-          <Col xs={12} md={8}><Form.Item name="revisionYear" label="Revision year" rules={[{ required: true }]}><InputNumber min={1900} max={2200} precision={0} style={{ width: '100%' }} /></Form.Item></Col>
+          {basis !== 'Amendment' && (
+            <Col xs={12} md={8}><Form.Item name="revisionYear" label="Revision year" rules={[{ required: true }]}><InputNumber min={1900} max={2200} precision={0} style={{ width: '100%' }} /></Form.Item></Col>
+          )}
           <Col xs={24} md={8}><Form.Item name="publicationReference" label="Published in"><Input maxLength={200} placeholder="Official Gazette, newspaper" /></Form.Item></Col>
           {stages.map((st) => (
             <Col key={st.name} xs={12} md={8}><Form.Item name={st.name} label={st.label}><DatePicker style={{ width: '100%' }} /></Form.Item></Col>
           ))}
           <Col span={24}>
-            <Form.Item name="municipalityIds" label="Coverage" extra="Leave empty for the whole province. A change of coverage is a new SMV.">
+            <Form.Item name="municipalityIds" label="Coverage"
+              extra={basis === 'Amendment'
+                ? 'Only municipalities the amended SMV covers; empty only when it covers the whole province.'
+                : 'Leave empty for the whole province. A change of coverage is a new SMV.'}>
               <Select mode="multiple" allowClear showSearch optionFilterProp="label" placeholder="Whole province"
                 options={municipalities.map((m) => ({ value: m.id, label: m.name }))} />
             </Form.Item>
@@ -171,6 +216,8 @@ function SchedulesModal({ smv, onClose }: { smv: SmvDto; onClose: () => void }) 
       <Typography.Paragraph type="secondary">
         A land&apos;s unit value is found in this order: sub-class + zone, sub-class + barangay, sub-class, zone, barangay, neither.
         At each step a value naming the land&apos;s actual use comes before one that does not. Coverage: {coverageText(smv)}.
+        {smv.basis === 'Amendment' && <> This amendment of {smv.amendsSmvReference} carries only the values it changes: each takes the place of
+          the amended SMV&apos;s value for the same key from {smv.effectivityDate}.</>}
       </Typography.Paragraph>
       <Button icon={<PlusOutlined />} style={{ marginBottom: 12 }} onClick={() => setCreating(true)}>New unit value</Button>
       <Table<SmvScheduleDto> rowKey="id" size="small" loading={isLoading} dataSource={data} pagination={false} scroll={{ x: true }}
@@ -181,8 +228,13 @@ function SchedulesModal({ smv, onClose }: { smv: SmvDto; onClose: () => void }) 
           { title: 'Type', dataIndex: 'propertyTypeName' },
           { title: 'Zone', dataIndex: 'zoneName', render: (v: string | null) => v ?? 'any' },
           { title: 'Barangay', dataIndex: 'barangayName', render: (v: string | null) => v ?? 'any' },
+          { title: 'Location / crop', render: (_: unknown, r: SmvScheduleDto) => [r.locationDescription, r.cropDescription].filter(Boolean).join('; ') || '—' },
           { title: 'Improvement', dataIndex: 'improvementKindName', render: (v: string | null) => v ?? '—' },
           { title: 'Market value', align: 'right', render: (_, s) => `${formatMoney(s.marketValue)} / ${s.unit}` },
+          ...(smv.basis === 'Amendment' ? [{
+            title: 'Replaces', align: 'right' as const,
+            render: (_: unknown, s: SmvScheduleDto) => (s.replacesMarketValue == null ? <Tag>new key</Tag> : formatMoney(s.replacesMarketValue)),
+          }] : []),
           { title: 'Period', render: (_, s) => period(s.effectiveDate, s.endDate) },
           { title: 'Status', dataIndex: 'status', render: statusTag },
           { title: '', render: (_, s) => <ApproveButton status={s.status} pending={approve.isPending} onApprove={() => approve.mutate(s.id, { onError: fail })} /> },
@@ -214,6 +266,7 @@ function CreateScheduleModal({ smv, onClose }: { smv: SmvDto; onClose: () => voi
         propertyTypeId: v.propertyTypeId, zoneId: v.zoneId ?? null, barangayId: v.barangayId ?? null,
         unit: v.unit, marketValue: v.marketValue, minimumValue: v.minimumValue ?? null, maximumValue: v.maximumValue ?? null,
         effectiveDate: day(v.effectiveDate)!, improvementKindId: v.improvementKindId ?? null,
+        locationDescription: v.locationDescription ?? null, cropDescription: v.cropDescription ?? null,
       }, { onSuccess: onClose })}>
         <Row gutter={12}>
           <Col xs={24} md={8}><Form.Item name="classificationId" label="Classification" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={lookup(classifications)} /></Form.Item></Col>
@@ -234,6 +287,8 @@ function CreateScheduleModal({ smv, onClose }: { smv: SmvDto; onClose: () => voi
           <Col xs={12} md={6}><Form.Item name="marketValue" label="Unit value" rules={[{ required: true }]}><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
           <Col xs={12} md={6}><Form.Item name="minimumValue" label="Minimum"><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
           <Col xs={12} md={6}><Form.Item name="maximumValue" label="Maximum"><InputNumber min={0} precision={2} style={{ width: '100%' }} /></Form.Item></Col>
+          <Col xs={24} md={12}><Form.Item name="locationDescription" label="Location (SMV Form 5)" extra="Street, side, from–to; printed only"><Input maxLength={300} /></Form.Item></Col>
+          <Col xs={24} md={12}><Form.Item name="cropDescription" label="Crop and productivity (SMV Form 9)" extra="Printed only"><Input maxLength={300} /></Form.Item></Col>
         </Row>
       </Form>
     </Modal>

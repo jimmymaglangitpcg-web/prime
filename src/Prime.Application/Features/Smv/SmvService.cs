@@ -36,6 +36,35 @@ public sealed class SmvService(
         {
             return Result.Failure<SmvDto>("MUNICIPALITY_NOT_FOUND", "A municipality in the coverage of the SMV does not exist.");
         }
+        var revisionYear = request.RevisionYear;
+        if (request.AmendsSmvId is { } amendedId)
+        {
+            // An amendment amends an approved SMV that is not itself an amendment, from a later date, within its coverage; it
+            // carries the amended SMV's revision year (LAM 2025 Book IV Ch. III §4; smv-preparation-general-revision.md §4.7).
+            var amended = await db.Smvs.AsNoTracking().Include(x => x.Coverage).FirstOrDefaultAsync(x => x.Id == amendedId, cancellationToken);
+            if (amended is null)
+            {
+                return Result.Failure<SmvDto>("SMV_NOT_FOUND", "The SMV to amend does not exist.");
+            }
+            if (amended.Basis == SmvBasis.Amendment)
+            {
+                return Result.Failure<SmvDto>("SMV_AMENDMENT_OF_AMENDMENT", "Amend the SMV itself, not one of its amendments; a later amendment takes precedence over an earlier one.");
+            }
+            if (amended.Status != WorkflowStatus.Approved)
+            {
+                return Result.Failure<SmvDto>("SMV_NOT_APPROVED", "Only an approved SMV can be amended.");
+            }
+            if (request.EffectivityDate <= amended.EffectivityDate)
+            {
+                return Result.Failure<SmvDto>("SMV_AMENDMENT_EFFECTIVITY", "An amendment takes effect after the SMV it amends.");
+            }
+            var amendedCoverage = amended.Coverage.Select(c => c.MunicipalityId).ToList();
+            if (amendedCoverage.Count > 0 && (municipalityIds.Count == 0 || municipalityIds.Any(m => !amendedCoverage.Contains(m))))
+            {
+                return Result.Failure<SmvDto>("SMV_AMENDMENT_COVERAGE", "An amendment covers only municipalities the amended SMV covers.");
+            }
+            revisionYear = amended.RevisionYear;
+        }
 
         var smv = new Domain.Entities.Smv
         {
@@ -52,8 +81,10 @@ public sealed class SmvService(
             PublishedOn = request.PublishedOn,
             PublicationReference = string.IsNullOrWhiteSpace(request.PublicationReference) ? null : request.PublicationReference.Trim(),
             EffectivityDate = request.EffectivityDate,
-            RevisionYear = request.RevisionYear,
+            RevisionYear = revisionYear,
             Description = request.Description,
+            AmendsSmvId = request.AmendsSmvId,
+            AmendmentGround = request.AmendmentGround,
             Status = WorkflowStatus.Draft,
             Coverage = municipalityIds.Select(id => new Domain.Entities.SmvCoverage { MunicipalityId = id }).ToList(),
         };
@@ -80,6 +111,20 @@ public sealed class SmvService(
         {
             return Result.Failure<SmvDto>("CANNOT_APPROVE_OWN_SMV", "The SMV's creator cannot also approve it.");
         }
+        // A certified SMV is entered with its certification; one prepared in PRIME once it is published, so its effectivity is
+        // known (docs/analysis/smv-preparation-general-revision.md §4.2).
+        if (smv.Basis is SmvBasis.Certified or SmvBasis.Amendment && string.IsNullOrWhiteSpace(smv.CertificationReference))
+        {
+            return Result.Failure<SmvDto>("SMV_CERTIFICATION_REQUIRED", "A certified SMV or an amendment is approved with its certification's reference.");
+        }
+        if (smv.AmendsSmvId is { } amendedId && !await db.Smvs.AnyAsync(x => x.Id == amendedId && x.Status == WorkflowStatus.Approved, cancellationToken))
+        {
+            return Result.Failure<SmvDto>("SMV_NOT_APPROVED", "The amended SMV is no longer approved.");
+        }
+        if (await db.SmvPreparations.AnyAsync(x => x.ProposedSmvId == smvId && x.Status != Domain.Entities.SmvPreparationStatus.Published, cancellationToken))
+        {
+            return Result.Failure<SmvDto>("SMV_NOT_PUBLISHED", "The SMV's preparation has not recorded the publication of the certified SMV.");
+        }
 
         smv.Status = WorkflowStatus.Approved;
         smv.ApprovedBy = currentUser.AppUserId;
@@ -97,11 +142,11 @@ public sealed class SmvService(
     }
 
     private async Task<SmvDto> MapSmvAsync(Guid id, CancellationToken ct) =>
-        ToDto(await db.Smvs.AsNoTracking().Include(x => x.Coverage).ThenInclude(c => c.Municipality).SingleAsync(x => x.Id == id, ct));
+        ToDto(await db.Smvs.AsNoTracking().Include(x => x.AmendsSmv).Include(x => x.Coverage).ThenInclude(c => c.Municipality).SingleAsync(x => x.Id == id, ct));
 
     public async Task<Result<PagedResult<SmvDto>>> ListAsync(PagedRequest request, CancellationToken cancellationToken = default)
     {
-        var query = db.Smvs.AsNoTracking().Include(x => x.Coverage).ThenInclude(c => c.Municipality);
+        var query = db.Smvs.AsNoTracking().Include(x => x.AmendsSmv).Include(x => x.Coverage).ThenInclude(c => c.Municipality);
         var total = await query.CountAsync(cancellationToken);
         var rows = await query.OrderByDescending(x => x.EffectivityDate).ThenByDescending(x => x.CreatedAt)
             .Skip((request.Page - 1) * request.PageSize).Take(request.PageSize).ToListAsync(cancellationToken);
@@ -196,6 +241,8 @@ public sealed class SmvService(
             ImprovementKindId = request.ImprovementKindId,
             SubClassificationId = request.SubClassificationId,
             BarangayId = request.BarangayId,
+            LocationDescription = string.IsNullOrWhiteSpace(request.LocationDescription) ? null : request.LocationDescription.Trim(),
+            CropDescription = string.IsNullOrWhiteSpace(request.CropDescription) ? null : request.CropDescription.Trim(),
             Unit = request.Unit,
             MarketValue = request.MarketValue,
             MinimumValue = request.MinimumValue,
@@ -244,7 +291,21 @@ public sealed class SmvService(
             .OrderByDescending(x => x.EffectiveDate)
             .ToListAsync(cancellationToken);
 
-        return Result.Success<IReadOnlyList<SmvScheduleDto>>(schedules.Select(ProjectScheduleToDto).ToList());
+        var dtos = schedules.Select(ProjectScheduleToDto).ToList();
+        // An amendment's rows show the amended SMV's value each replaces: its open, approved row with the same key (§4.7).
+        var amendedId = await db.Smvs.Where(x => x.Id == smvId).Select(x => x.AmendsSmvId).FirstOrDefaultAsync(cancellationToken);
+        if (amendedId is not null)
+        {
+            var amended = (await db.SmvSchedules.AsNoTracking()
+                    .Where(x => x.SmvId == amendedId && x.Status == WorkflowStatus.Approved && x.EndDate == null).ToListAsync(cancellationToken))
+                .GroupBy(Domain.DomainServices.SmvRateSelector.RowKey)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.EffectiveDate).First().MarketValue);
+            dtos = schedules.Zip(dtos, (e, d) => d with
+            {
+                ReplacesMarketValue = amended.TryGetValue(Domain.DomainServices.SmvRateSelector.RowKey(e), out var replaced) ? replaced : null,
+            }).ToList();
+        }
+        return Result.Success<IReadOnlyList<SmvScheduleDto>>(dtos);
     }
 
     private async Task<SmvScheduleDto?> MapScheduleToDto(Guid id, CancellationToken cancellationToken)
@@ -282,7 +343,10 @@ public sealed class SmvService(
         smv.CertificationReference,
         smv.PublishedOn,
         smv.PublicationReference,
-        smv.Coverage.Select(c => new SmvCoverageDto(c.MunicipalityId, c.Municipality?.Name ?? "")).OrderBy(c => c.MunicipalityName).ToList());
+        smv.Coverage.Select(c => new SmvCoverageDto(c.MunicipalityId, c.Municipality?.Name ?? "")).OrderBy(c => c.MunicipalityName).ToList(),
+        smv.AmendsSmvId,
+        smv.AmendsSmv?.Reference,
+        smv.AmendmentGround);
 
     private static SmvScheduleDto ProjectScheduleToDto(Domain.Entities.SmvSchedule x) => new(
         x.Id,
@@ -308,5 +372,7 @@ public sealed class SmvService(
         x.SubClassificationId,
         x.SubClassification?.Name,
         x.BarangayId,
-        x.Barangay?.Name);
+        x.Barangay?.Name,
+        x.LocationDescription,
+        x.CropDescription);
 }

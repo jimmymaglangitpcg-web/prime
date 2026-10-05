@@ -12,6 +12,8 @@ public enum ReferenceLayer
     Sections,
     /// <summary>Areas in dispute, hatched on tax maps (LAM Bk II pp.50–52; docs/analysis/identification-numbering.md §4.3). Keyed by "code".</summary>
     DisputedAreas,
+    /// <summary>Sub-market areas of the land value map (smv-preparation-general-revision.md §4.4). Keyed by "code".</summary>
+    SubMarketAreas,
 }
 
 /// <summary>

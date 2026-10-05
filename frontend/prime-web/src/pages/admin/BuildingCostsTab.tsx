@@ -112,7 +112,7 @@ function SmvSelect(props: { value?: string; onChange?: (v: string) => void }) {
   const { data: smvs } = useSmvs();
   return (
     <Select {...props} showSearch optionFilterProp="label"
-      options={(smvs?.items ?? []).map((s) => ({ value: s.id, label: `${s.reference} (${s.revisionYear})` }))} />
+      options={(smvs?.items ?? []).filter((s) => s.basis !== 'Amendment').map((s) => ({ value: s.id, label: `${s.reference} (${s.revisionYear})` }))} />
   );
 }
 

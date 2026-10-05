@@ -71,6 +71,14 @@ public enum FormSubjectType
     MarketDataReport = 11,
     /// <summary>A general revision's completion or status report; the subject id is the programme (L6-6c).</summary>
     GeneralRevision = 12,
+    /// <summary>A valuation test of an SMV; the subject id is the test (docs/analysis/smv-preparation-general-revision.md §4.3).</summary>
+    ValuationTest = 13,
+    /// <summary>An SMV's own forms (SMV Forms 1, 5, 9–12); the subject id is the SMV (docs/analysis/smv-preparation-general-revision.md §4.2).</summary>
+    Smv = 14,
+    /// <summary>A sales analysis's forms (SMV Forms 2–4, 6–8); the subject id is the analysis.</summary>
+    SalesAnalysis = 15,
+    /// <summary>A revenue compliance and tax impact study's report (RTIR); the subject id is the study (smv-preparation-general-revision.md §4.5).</summary>
+    RevenueImpactStudy = 16,
 }
 
 /// <summary>Whose staff signs an approval step (docs/analysis/province-wide-operation.md §3.4).</summary>

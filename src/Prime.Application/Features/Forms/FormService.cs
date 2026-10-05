@@ -102,6 +102,8 @@ public sealed class FormService(
         FormSubjectType.DiscoverySummons => await db.DiscoverySummonses.AnyAsync(x => x.Id == id, ct),
         FormSubjectType.MarketDataReport => await db.MarketDataReportRuns.AnyAsync(x => x.Id == id, ct),
         FormSubjectType.GeneralRevision => await db.GeneralRevisionProgrammes.AnyAsync(x => x.Id == id, ct),
+        FormSubjectType.ValuationTest => await db.ValuationTestScopes.AnyAsync(x => x.ValuationTestRunId == id
+            && jurisdiction.MunicipalityIds.Contains(x.MunicipalityId), ct),
         _ => true,
     };
 

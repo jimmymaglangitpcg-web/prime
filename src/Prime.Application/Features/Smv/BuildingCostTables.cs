@@ -120,9 +120,9 @@ public sealed class BuildingCostTableService(IApplicationDbContext db, ICurrentU
         {
             return Result.Failure<ExtraItemCostDto>("VALIDATION_FAILED", "unit (max 30) and a unitCost above 0 are required; legalBasis (max 500) and effectiveDate too.");
         }
-        if (!await db.Smvs.AnyAsync(x => x.Id == request.SmvId, ct))
+        if (await SmvProblemAsync(request.SmvId, ct) is { } smvProblem)
         {
-            return Result.Failure<ExtraItemCostDto>("SMV_NOT_FOUND", "No SMV was found with the given id.");
+            return Result.Failure<ExtraItemCostDto>(smvProblem.Code!, smvProblem.Message!);
         }
         if (!await db.BuildingComponentTypes.AnyAsync(x => x.Id == request.ComponentTypeId, ct))
         {
@@ -214,11 +214,24 @@ public sealed class BuildingCostTableService(IApplicationDbContext db, ICurrentU
     private static string? CommonProblem(string? legalBasis, DateOnly effectiveDate) =>
         string.IsNullOrWhiteSpace(legalBasis) || legalBasis.Length > 500 || effectiveDate == default ? "invalid" : null;
 
+    /// <summary>
+    /// The SMV exists and is not an amendment: an amendment carries unit values and adjustment factors; the engine does not
+    /// merge building tables across an SMV and its amendments (smv-preparation-general-revision.md §4.7).
+    /// </summary>
+    private async Task<Result?> SmvProblemAsync(Guid smvId, CancellationToken ct) =>
+        await db.Smvs.Where(x => x.Id == smvId).Select(x => (SmvBasis?)x.Basis).FirstOrDefaultAsync(ct) switch
+        {
+            null => Result.Failure("SMV_NOT_FOUND", "No SMV was found with the given id."),
+            SmvBasis.Amendment => Result.Failure("SMV_AMENDMENT_TABLES_UNSUPPORTED",
+                "An amendment carries unit values and adjustment factors only; building tables are changed by a new SMV."),
+            _ => null,
+        };
+
     private async Task<Result?> ReferenceProblemAsync(Guid smvId, Guid structuralTypeId, CancellationToken ct)
     {
-        if (!await db.Smvs.AnyAsync(x => x.Id == smvId, ct))
+        if (await SmvProblemAsync(smvId, ct) is { } smvProblem)
         {
-            return Result.Failure("SMV_NOT_FOUND", "No SMV was found with the given id.");
+            return smvProblem;
         }
         if (!await db.StructuralTypes.AnyAsync(x => x.Id == structuralTypeId, ct))
         {

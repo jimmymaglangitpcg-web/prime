@@ -149,6 +149,10 @@ public sealed class GeneralRevisionProgrammeService(
             return Fail("SMV_NOT_FOUND", "The specified SMV does not exist.");
         }
         // GRI 2: the approved (certified) SMV is applied; it must be in force at the revision's effectivity and cover the scope.
+        if (smv.Basis == SmvBasis.Amendment)
+        {
+            return Fail("SMV_NOT_APPLICABLE", "A general revision applies the SMV itself; its amendments in force apply through it.");
+        }
         if (smv.Status != WorkflowStatus.Approved || smv.EffectivityDate > r.EffectiveDate)
         {
             return Fail("SMV_NOT_APPLICABLE", "The SMV must be approved in PRIME and in force on the revision's effective date.");

@@ -1,0 +1,35 @@
+{% comment %}
+  PRIME provisional layout (docs/analysis/smv-preparation-general-revision.md §4.2, L6-2c): statement of the sales values gathered, by location and sub-class.
+  LAM 2025 Book IV pp.114–115 lists the form; its layout (Annex IV-B) is loaded as content and is not reproduced here.
+  DOMAIN VERIFICATION REQUIRED: its columns.
+{% endcomment %}
+<style>
+  h1 { font-size: 12pt; text-align: center; margin: 4px 0 2px; }
+  h2 { font-size: 9.5pt; margin: 8px 0 3px; }
+  .lgu { text-align: center; font-weight: bold; }
+  .sub { text-align: center; font-size: 9pt; margin-bottom: 4px; }
+  .flag { text-align: center; font-weight: bold; letter-spacing: 1px; border: 1px solid #000; padding: 2px; margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 6px; }
+  td, th { border: 1px solid #000; padding: 2px 4px; font-size: 7.5pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: left; }
+  .num { text-align: right; white-space: nowrap; }
+  .pre { white-space: pre-wrap; }
+  .muted { color: #555; font-size: 7.5pt; }
+  .sig { margin-top: 26px; width: 240px; border-top: 1px solid #000; text-align: center; font-size: 8.5pt; padding-top: 2px; display: inline-block; margin-right: 50px; }
+  .foot { font-size: 7.5pt; margin-top: 6px; }
+</style>
+{% assign a = analysis %}
+{% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% endif %}{% if lgu.office %}<div class="sub">{{ lgu.office }}</div>{% endif %}
+<h1>SMV FORM NO. 2 — STATEMENT OF SALES VALUES OF RESIDENTIAL, COMMERCIAL AND INDUSTRIAL LANDS</h1>
+<div class="sub">Classification: {{ a.classification }}{% if a.use %} — {{ a.use }}{% endif %} · {{ a.marketAreas | join: ", " }} · Revision {{ a.revisionYear }}
+ · base valuation date {% if a.baseValuationDate %}{{ a.baseValuationDate | date_ph }}{% else %}not set{% endif %}</div>
+{% for w in a.warnings %}<div class="muted">{{ w }}</div>{% endfor %}
+
+<table>
+  <tr><th>Date</th><th>Location</th><th>TD No.</th><th>PIN</th><th>Sub-class</th><th class="num">Area ({{ a.areaUnit }})</th><th class="num">Land price</th><th class="num">Unit sales value</th><th>Remarks</th></tr>
+  {% for s in sales %}<tr><td>{{ s.date | date_ph }}</td><td>{{ s.location }}</td><td>{{ s.td }}</td><td>{{ s.pin }}</td><td>{{ s.subClass }}</td>
+    <td class="num">{{ s.area }}</td><td class="num">{% if s.price %}{{ s.price | money }}{% endif %}</td><td class="num">{% if s.unitPrice %}{{ s.unitPrice | money }}{% endif %}</td>
+    <td>{% if s.excluded %}{% if s.leftOut %}Left out: {% endif %}{{ s.excluded }}{% endif %}</td></tr>{% endfor %}
+</table>
+<div class="sig">Prepared by</div><div class="sig">Noted by: Assessor</div>
+<div class="foot">{{ form.title }} — form {{ form.code }} v{{ form.version }}. {{ form.legalBasis }}. Printed {{ issue.issuedAt | datetime_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}.</div>

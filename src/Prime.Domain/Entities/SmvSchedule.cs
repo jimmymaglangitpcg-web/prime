@@ -45,6 +45,11 @@ public sealed class SmvSchedule : AuditableEntity
     public Guid? ImprovementKindId { get; set; }
     public ImprovementKind? ImprovementKind { get; set; }
 
+    /// <summary>Where the value applies, as SMV Form 5 prints it (street, side, from–to); printed, never used to select a rate.</summary>
+    public string? LocationDescription { get; set; }
+    /// <summary>The crop and productivity class, as SMV Form 9 prints it; printed, never used to select a rate.</summary>
+    public string? CropDescription { get; set; }
+
     public string Unit { get; set; } = "per sqm";
     public decimal MarketValue { get; set; }
     public decimal? MinimumValue { get; set; }

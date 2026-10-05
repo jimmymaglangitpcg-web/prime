@@ -306,7 +306,20 @@ export interface ParcelFeatureCollection {
   limit: number;
 }
 
-export type ReferenceLayerName = 'barangays' | 'zones' | 'roads' | 'sections';
+export type ReferenceLayerName = 'barangays' | 'zones' | 'roads' | 'sections' | 'submarketareas';
+
+/** One land parcel on the land value map (docs/analysis/smv-preparation-general-revision.md §4.4). */
+export interface LandValueFeatureProperties {
+  parcelId: string; propertyId: string; pin: string; barangayName: string; classification: string | null; subClass: string | null;
+  actualUse: string | null; unitValue: number | null; unit: string | null; smvReference: string | null; problem: string | null;
+}
+
+export interface LandValueFeatureCollection {
+  type: 'FeatureCollection';
+  features: { type: 'Feature'; id: string; geometry: unknown; properties: LandValueFeatureProperties }[];
+  truncated: boolean; limit: number; asOf: string; smvId: string | null; smvReference: string | null;
+  legend: { classification: string; subClass: string | null; parcels: number; minimumValue: number | null; maximumValue: number | null; unit: string | null }[];
+}
 
 export interface ReferenceLayerFeatureProperties {
   /** PSGC code, zone code, road code, or "psgcCode/section". */
@@ -1924,7 +1937,16 @@ export interface AssessmentPreviewDto {
 }
 
 /** How an SMV came into force: by ordinance (before RA 12001) or certified by the Secretary of Finance. */
-export type SmvBasis = 'Ordinance' | 'Certified';
+export type SmvBasis = 'Ordinance' | 'Certified' | 'Amendment';
+
+/** Why an SMV is amended between revisions (LAM 2025 Book IV Ch. III §4). */
+export type SmvAmendmentGround = 'Infrastructure' | 'Calamity' | 'PandemicOrEmergency' | 'CorrectionOfErrors';
+export const smvAmendmentGrounds: { value: SmvAmendmentGround; label: string }[] = [
+  { value: 'Infrastructure', label: 'Roads or similar infrastructure' },
+  { value: 'Calamity', label: 'Calamity or disaster' },
+  { value: 'PandemicOrEmergency', label: 'Pandemic or public health emergency' },
+  { value: 'CorrectionOfErrors', label: 'Correction of errors and inequalities' },
+];
 
 export interface SmvDto {
   id: string; ordinanceNumber: string | null; ordinanceDate: string | null; approvalDate: string | null; effectivityDate: string;
@@ -1934,6 +1956,8 @@ export interface SmvDto {
   certifiedOn: string | null; certificationReference: string | null; publishedOn: string | null; publicationReference: string | null;
   /** Empty: the whole province. */
   coverage: { municipalityId: string; municipalityName: string }[];
+  /** An amendment: the SMV it amends and why. */
+  amendsSmvId: string | null; amendsSmvReference: string | null; amendmentGround: SmvAmendmentGround | null;
 }
 
 export interface CreateSmvRequest {
@@ -1942,6 +1966,7 @@ export interface CreateSmvRequest {
   proposedOn?: string | null; publishedForCommentOn?: string | null; consultationsHeldOn?: string | null; submittedToBlgfOn?: string | null;
   certifiedOn?: string | null; certificationReference?: string | null; publishedOn?: string | null; publicationReference?: string | null;
   municipalityIds?: string[];
+  amendsSmvId?: string | null; amendmentGround?: SmvAmendmentGround | null;
 }
 
 export interface SmvScheduleDto {
@@ -1950,12 +1975,17 @@ export interface SmvScheduleDto {
   improvementKindId: string | null; improvementKindName: string | null; unit: string; marketValue: number;
   minimumValue: number | null; maximumValue: number | null; effectiveDate: string; endDate: string | null; status: WorkflowStatus; createdAt: string;
   subClassificationId: string | null; subClassificationName: string | null; barangayId: string | null; barangayName: string | null;
+  /** Printed on SMV Forms 5 and 9; never used to select a rate. */
+  locationDescription: string | null; cropDescription: string | null;
+  /** An amendment's row: the amended SMV's value it replaces; null when it adds a row. */
+  replacesMarketValue: number | null;
 }
 
 export interface CreateSmvScheduleRequest {
   classificationId: string; actualUseId: string | null; propertyTypeId: string; zoneId: string | null; unit: string; marketValue: number;
   minimumValue: number | null; maximumValue: number | null; effectiveDate: string; improvementKindId: string | null;
   subClassificationId: string | null; barangayId: string | null;
+  locationDescription?: string | null; cropDescription?: string | null;
 }
 
 export interface AssessmentLevelDto {

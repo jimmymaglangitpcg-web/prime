@@ -42,7 +42,8 @@ public sealed partial class ContentPackVersionedContent
 {
     private sealed record SmvItem(string? Basis, string? OrdinanceNumber, string? OrdinanceDate, string? ApprovalDate, string? CertificationReference,
         string? CertifiedOn, string? ProposedOn, string? PublishedForCommentOn, string? ConsultationsHeldOn, string? SubmittedToBlgfOn, string? PublishedOn,
-        string? PublicationReference, string? EffectivityDate, int? RevisionYear, string? Description, List<string>? Municipalities, string? Source);
+        string? PublicationReference, string? EffectivityDate, int? RevisionYear, string? Description, List<string>? Municipalities, string? Source,
+        string? Amends = null, string? AmendmentGround = null);
 
     // --- SMVs (key: the ordinance number or certification reference) ---
 
@@ -70,15 +71,43 @@ public sealed partial class ContentPackVersionedContent
                     null, $"[{n}].municipalities"));
                 continue;
             }
-            var request = new CreateSmvRequest(Trim(x.OrdinanceNumber), dates["ordinanceDate"], dates["approvalDate"], effective, x.RevisionYear ?? 0,
+            // An amendment (smv-preparation-general-revision.md §4.7) names an SMV already in PRIME by its reference, and its ground.
+            Guid? amendsId = null;
+            SmvAmendmentGround? ground = null;
+            var revisionYear = x.RevisionYear ?? 0;
+            if (basis == SmvBasis.Amendment)
+            {
+                if (existing.FirstOrDefault(s => Trim(x.Amends) is { } amends && s.Reference == amends) is not { } amended)
+                {
+                    result.Issues.Add(Error("SMV_NOT_FOUND", $"Item {n}: an amendment names, in amends, the reference of an SMV already in PRIME.", null, $"[{n}].amends"));
+                    continue;
+                }
+                if (amended.Status != WorkflowStatus.Approved || amended.Basis == SmvBasis.Amendment)
+                {
+                    result.Issues.Add(Error("SMV_NOT_APPROVED", $"Item {n}: SMV {amended.Reference} is not an approved SMV that can be amended.", null, $"[{n}].amends"));
+                    continue;
+                }
+                if (!TryEnum<SmvAmendmentGround>(result, n, "amendmentGround", x.AmendmentGround ?? "", out var parsed))
+                {
+                    continue;
+                }
+                (amendsId, ground, revisionYear) = (amended.Id, parsed, amended.RevisionYear);
+                if (Trim(x.CertificationReference) is null)
+                {
+                    result.Issues.Add(Error("VALIDATION_FAILED", $"Item {n}: an amendment in a content pack is entered with its certification reference.",
+                        null, $"[{n}].certificationReference"));
+                    continue;
+                }
+            }
+            var request = new CreateSmvRequest(Trim(x.OrdinanceNumber), dates["ordinanceDate"], dates["approvalDate"], effective, revisionYear,
                 Trim(x.Description), basis, dates["proposedOn"], dates["publishedForCommentOn"], dates["consultationsHeldOn"], dates["submittedToBlgfOn"],
                 dates["certifiedOn"], Trim(x.CertificationReference), dates["publishedOn"], Trim(x.PublicationReference),
-                codes.Where(municipalities.ContainsKey).Select(c => municipalities[c]).ToList());
+                codes.Where(municipalities.ContainsKey).Select(c => municipalities[c]).ToList(), amendsId, ground);
             if (!await ValidAsync(smvValidator, request, result, n, ct))
             {
                 continue;
             }
-            var reference = basis == SmvBasis.Certified ? request.CertificationReference! : request.OrdinanceNumber!;
+            var reference = basis == SmvBasis.Ordinance ? request.OrdinanceNumber! : request.CertificationReference!;
             if (!Unique(result, seen, reference, n, "reference"))
             {
                 continue;
@@ -86,7 +115,8 @@ public sealed partial class ContentPackVersionedContent
             var coverage = string.Join(",", codes.Order(StringComparer.Ordinal));
             if (existing.FirstOrDefault(s => s.Reference == reference) is { } current)
             {
-                var same = current.Basis == basis && current.EffectivityDate == effective && current.RevisionYear == request.RevisionYear
+                var same = current.Basis == basis && current.EffectivityDate == effective
+                    && (basis == SmvBasis.Amendment ? current.AmendsSmvId == amendsId && current.AmendmentGround == ground : current.RevisionYear == request.RevisionYear)
                     && string.Join(",", current.Coverage.Select(c => c.Municipality!.PsgcCode).Order(StringComparer.Ordinal)) == coverage;
                 if (same)
                 {
@@ -141,7 +171,7 @@ public sealed partial class ContentPackVersionedContent
 
     private static readonly string[] ScheduleColumns =
         ["smv", "classification", "sub-classification", "actual-use", "property-type", "zone", "barangay", "improvement-kind", "unit", "market-value",
-         "minimum-value", "maximum-value", "effective-date", "source"];
+         "minimum-value", "maximum-value", "effective-date", "location-description", "crop-description", "source"];
 
     private async Task<VersionedPreview> SchedulesAsync(byte[] bytes, string? fileSource, PackPending pending, VersionedPreview result, CancellationToken ct)
     {
@@ -149,7 +179,8 @@ public sealed partial class ContentPackVersionedContent
         {
             return result;
         }
-        var smvs = (await db.Smvs.AsNoTracking().Select(x => new { x.Id, x.OrdinanceNumber, x.CertificationReference }).ToListAsync(ct))
+        var smvs = (await db.Smvs.AsNoTracking().Where(x => x.OrdinanceNumber != null || x.CertificationReference != null)
+            .Select(x => new { x.Id, x.OrdinanceNumber, x.CertificationReference }).ToListAsync(ct))
             .ToDictionary(x => x.OrdinanceNumber ?? x.CertificationReference ?? "", x => x.Id, StringComparer.Ordinal);
         var codes = await CodesAsync(ct);
         var barangays = await db.Barangays.AsNoTracking().ToDictionaryAsync(x => x.PsgcCode, x => x.Id, StringComparer.Ordinal, ct);
@@ -189,7 +220,7 @@ public sealed partial class ContentPackVersionedContent
             }
             var values = new CreateSmvScheduleRequest(ids["classification"] ?? Guid.NewGuid(), ids["actual-use"], ids["property-type"] ?? Guid.NewGuid(),
                 ids["zone"], row.Get("unit") ?? "per sqm", value, min, max, effective, ids["improvement-kind"], ids["sub-classification"],
-                barangay is not null && barangays.TryGetValue(barangay, out var bId) ? bId : null);
+                barangay is not null && barangays.TryGetValue(barangay, out var bId) ? bId : null, row.Get("location-description"), row.Get("crop-description"));
             if (!await ValidAsync(scheduleValidator, values, result, line, ct))
             {
                 continue;
@@ -205,7 +236,8 @@ public sealed partial class ContentPackVersionedContent
             if (allKnown && existing.Any(s => s.SmvId == smvId && s.ClassificationId == values.ClassificationId && s.SubClassificationId == values.SubClassificationId
                     && s.ActualUseId == values.ActualUseId && s.PropertyTypeId == values.PropertyTypeId && s.ZoneId == values.ZoneId && s.BarangayId == values.BarangayId
                     && s.ImprovementKindId == values.ImprovementKindId && s.EffectiveDate == effective && s.MarketValue == value && s.Unit == values.Unit
-                    && s.MinimumValue == min && s.MaximumValue == max))
+                    && s.MinimumValue == min && s.MaximumValue == max
+                    && s.LocationDescription == values.LocationDescription && s.CropDescription == values.CropDescription))
             {
                 unchanged++;
                 continue;
@@ -294,7 +326,8 @@ public sealed partial class ContentPackVersionedContent
 
     private async Task<VersionedPreview> FactorsAsync(List<FactorItem> items, string? fileSource, PackPending pending, VersionedPreview result, CancellationToken ct)
     {
-        var smvIds = (await db.Smvs.AsNoTracking().Select(x => new { x.Id, x.OrdinanceNumber, x.CertificationReference }).ToListAsync(ct))
+        var smvIds = (await db.Smvs.AsNoTracking().Where(x => x.OrdinanceNumber != null || x.CertificationReference != null)
+            .Select(x => new { x.Id, x.OrdinanceNumber, x.CertificationReference }).ToListAsync(ct))
             .ToDictionary(x => x.OrdinanceNumber ?? x.CertificationReference ?? "", x => x.Id, StringComparer.Ordinal);
         var existing = await db.AdjustmentFactors.AsNoTracking().Include(x => x.Rows).ToListAsync(ct);
         var codes = await CodesAsync(ct);

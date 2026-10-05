@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<ITaxpayerService, TaxpayerService>();
         services.AddScoped<IParcelService, ParcelService>();
         services.AddScoped<IGisService, GisService>();
+        services.AddScoped<ILandValueMapService, LandValueMapService>();
         services.AddScoped<IReferenceLayerService, ReferenceLayerService>();
         services.AddScoped<ITaxMapSheetService, TaxMapSheetService>();
         services.AddScoped<IBillingRuleService, BillingRuleService>();
@@ -107,6 +108,18 @@ public static class DependencyInjection
         services.AddScoped<Features.GeneralRevision.IGeneralRevisionCompletionService, Features.GeneralRevision.GeneralRevisionCompletionService>();
         services.AddScoped<IFormDataProvider, Features.GeneralRevision.GeneralRevisionReportFormDataProvider>();
         services.AddScoped<Features.GeneralRevision.GeneralRevisionProgrammeRunner>();
+        services.AddScoped<Features.Smv.ISmvPreparationService, Features.Smv.SmvPreparationService>();
+        services.AddScoped<Features.Smv.ISalesAnalysisService, Features.Smv.SalesAnalysisService>();
+        services.AddScoped<Features.Smv.ISmvSubClassCriteriaService, Features.Smv.SmvSubClassCriteriaService>();
+        services.AddScoped<IFormDataProvider, Features.Smv.SmvFormDataProvider>();
+        services.AddScoped<IFormDataProvider, Features.Smv.SalesAnalysisFormDataProvider>();
+        services.AddScoped<Features.SmvSimulations.SmvSimulator>();
+        services.AddScoped<Features.SmvSimulations.ISmvSimulationService, Features.SmvSimulations.SmvSimulationService>();
+        services.AddScoped<Features.SmvSimulations.SmvSimulationRunner>();
+        services.AddScoped<Features.SmvSimulations.IValuationTestService, Features.SmvSimulations.ValuationTestService>();
+        services.AddScoped<IFormDataProvider, Features.SmvSimulations.ValuationTestFormDataProvider>();
+        services.AddScoped<Features.SmvSimulations.IRevenueImpactStudyService, Features.SmvSimulations.RevenueImpactStudyService>();
+        services.AddScoped<IFormDataProvider, Features.SmvSimulations.RevenueImpactFormDataProvider>();
 
         return services;
     }

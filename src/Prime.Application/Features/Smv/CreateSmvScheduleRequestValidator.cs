@@ -17,5 +17,7 @@ public sealed class CreateSmvScheduleRequestValidator : AbstractValidator<Create
             .Must(x => x.MinimumValue is null || x.MaximumValue is null || x.MinimumValue <= x.MaximumValue)
             .WithMessage("MinimumValue must not exceed MaximumValue.");
         RuleFor(x => x.EffectiveDate).NotEmpty();
+        RuleFor(x => x.LocationDescription).MaximumLength(300);
+        RuleFor(x => x.CropDescription).MaximumLength(300);
     }
 }

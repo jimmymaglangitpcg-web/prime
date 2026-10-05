@@ -82,3 +82,16 @@ public sealed class DisputedAreaConfiguration : IEntityTypeConfiguration<Dispute
         builder.HasIndex(x => x.Code).IsUnique().HasFilter("\"EndDate\" IS NULL").HasDatabaseName("UX_DisputedAreas_Current");
     }
 }
+
+/// <summary>Sub-market areas of the land value map (smv-preparation-general-revision.md §4.4): one current version per code.</summary>
+public sealed class SubMarketAreaConfiguration : IEntityTypeConfiguration<SubMarketArea>
+{
+    public void Configure(EntityTypeBuilder<SubMarketArea> builder)
+    {
+        SpatialLayerMapping.ConfigureCommon(builder, "SubMarketAreas", "MultiPolygon");
+        builder.Property(x => x.Code).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.Name).HasMaxLength(200);
+        builder.HasIndex(x => new { x.Code, x.EffectiveDate });
+        builder.HasIndex(x => x.Code).IsUnique().HasFilter("\"EndDate\" IS NULL").HasDatabaseName("UX_SubMarketAreas_Current");
+    }
+}

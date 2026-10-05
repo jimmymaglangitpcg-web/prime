@@ -4180,6 +4180,76 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.Gis.SubMarketArea", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EffectiveDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<MultiPolygon>("Geometry")
+                        .IsRequired()
+                        .HasColumnType("geometry(MultiPolygon,4326)");
+
+                    b.Property<Guid>("ImportBatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("SourceReference")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SubMarketAreas_Current")
+                        .HasFilter("\"EndDate\" IS NULL");
+
+                    b.HasIndex("Geometry");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Geometry"), "GIST");
+
+                    b.HasIndex("ImportBatchId");
+
+                    b.HasIndex("Code", "EffectiveDate");
+
+                    b.ToTable("SubMarketAreas", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SubMarketAreas_EndDate", "\"EndDate\" IS NULL OR \"EndDate\" > \"EffectiveDate\"");
+                        });
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Gis.ZoneBoundary", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8329,10 +8399,438 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.RevenueImpactOption", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("RatePercent")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
+                    b.Property<Guid>("RevenueImpactStudyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RevenueImpactStudyId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("RevenueImpactOptions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_RevenueImpactOptions_Rate", "\"RatePercent\" >= 0 AND \"RatePercent\" <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.RevenueImpactOptionLevel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActualUseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("LowerValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("Percent")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
+                    b.Property<Guid>("RevenueImpactOptionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("UpperValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActualUseId");
+
+                    b.HasIndex("ClassificationId");
+
+                    b.HasIndex("RevenueImpactOptionId");
+
+                    b.ToTable("RevenueImpactOptionLevels", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_RevenueImpactOptionLevels_Values", "\"Percent\" >= 0 AND \"Percent\" <= 100 AND \"LowerValue\" >= 0 AND (\"UpperValue\" IS NULL OR \"UpperValue\" > \"LowerValue\")");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.RevenueImpactRate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("RatePercent")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
+                    b.Property<Guid>("RevenueImpactStudyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RevenueImpactStudyId");
+
+                    b.ToTable("RevenueImpactRates", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_RevenueImpactRates_Rate", "\"RatePercent\" >= 0 AND \"RatePercent\" <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.RevenueImpactStudy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("ActualCollection")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("CollectionSource")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Discounts")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("IncludeAllTaxableUnits")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateOnly>("ReferenceDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("SmvSimulationRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SmvSimulationRunId");
+
+                    b.ToTable("RevenueImpactStudies", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_RevenueImpactStudies_Collection", "(\"ActualCollection\" IS NULL) = (\"Discounts\" IS NULL) AND COALESCE(\"ActualCollection\", 0) >= 0 AND COALESCE(\"Discounts\", 0) >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SalesAnalysis", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActualUseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AreaUnit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("ClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<decimal?>("RangeWidthPercent")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
+                    b.Property<decimal>("RoundingIncrement")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateOnly?>("SalesFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("SalesTo")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("SmvPreparationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActualUseId");
+
+                    b.HasIndex("ClassificationId");
+
+                    b.HasIndex("SmvPreparationId", "ClassificationId", "ActualUseId")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("SmvPreparationId", "ClassificationId", "ActualUseId"), false);
+
+                    b.ToTable("SalesAnalyses", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SalesAnalyses_Parameters", "\"RoundingIncrement\" >= 0 AND (\"RangeWidthPercent\" IS NULL OR (\"RangeWidthPercent\" > 0 AND \"RangeWidthPercent\" <= 100))");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SalesAnalysisGroup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("AdoptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("AdoptedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AdoptedValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Basis")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("FromValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("SalesAnalysisId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SmvScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SubClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("ToValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SalesAnalysisId");
+
+                    b.HasIndex("SmvScheduleId");
+
+                    b.HasIndex("SubClassificationId");
+
+                    b.ToTable("SalesAnalysisGroups", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SalesAnalysisGroups_Adopted", "\"AdoptedAt\" IS NULL OR (\"SmvScheduleId\" IS NOT NULL AND \"SubClassificationId\" IS NOT NULL AND \"AdoptedValue\" > 0)");
+
+                            t.HasCheckConstraint("CK_SalesAnalysisGroups_Bounds", "\"FromValue\" >= 0 AND \"FromValue\" <= \"ToValue\"");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SalesAnalysisSale", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("AdjustedUnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("Area")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid?>("BarangayId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExclusionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("LeftOut")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("MarketTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MunicipalityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal>("OtherAdjustmentPercent")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)");
+
+                    b.Property<string>("Pin")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("RoundedUnitValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("SalesAnalysisId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SubClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TaxDeclarationNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("TimeFactor")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<DateOnly>("TransactionDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BarangayId");
+
+                    b.HasIndex("MarketTransactionId");
+
+                    b.HasIndex("MunicipalityId");
+
+                    b.HasIndex("SubClassificationId");
+
+                    b.HasIndex("SalesAnalysisId", "MarketTransactionId")
+                        .IsUnique();
+
+                    b.ToTable("SalesAnalysisSales", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SalesAnalysisSales_LeftOut", "NOT \"LeftOut\" OR \"ExclusionReason\" IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_SalesAnalysisSales_ValueOrReason", "(\"RoundedUnitValue\" IS NULL) = (\"ExclusionReason\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SalesAnalysisScope", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MunicipalityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SalesAnalysisId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MunicipalityId");
+
+                    b.HasIndex("SalesAnalysisId", "MunicipalityId")
+                        .IsUnique();
+
+                    b.ToTable("SalesAnalysisScopes", (string)null);
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Smv", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AmendmentGround")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("AmendsSmvId")
                         .HasColumnType("uuid");
 
                     b.Property<DateOnly?>("ApprovalDate")
@@ -8411,6 +8909,8 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AmendsSmvId");
+
                     b.HasIndex("CertificationReference")
                         .IsUnique();
 
@@ -8421,7 +8921,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.ToTable("Smvs", t =>
                         {
-                            t.HasCheckConstraint("CK_Smvs_CertifiedBasis", "\"Basis\" <> 'Certified' OR \"CertificationReference\" IS NOT NULL");
+                            t.HasCheckConstraint("CK_Smvs_AmendmentBasis", "(\"Basis\" = 'Amendment') = (\"AmendsSmvId\" IS NOT NULL AND \"AmendmentGround\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_Smvs_CertifiedBasis", "\"Basis\" NOT IN ('Certified', 'Amendment') OR \"CertificationReference\" IS NOT NULL OR \"Status\" IN ('Draft', 'Cancelled')");
 
                             t.HasCheckConstraint("CK_Smvs_OrdinanceBasis", "\"Basis\" <> 'Ordinance' OR (\"OrdinanceNumber\" IS NOT NULL AND \"OrdinanceDate\" IS NOT NULL)");
                         });
@@ -8511,6 +9013,60 @@ namespace Prime.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_SmvBuildingCosts_Cost", "\"CostPerSquareMetre\" > 0");
 
                             t.HasCheckConstraint("CK_SmvBuildingCosts_EndDate", "\"EndDate\" IS NULL OR \"EndDate\" >= \"EffectiveDate\"");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvConsultation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("Attendance")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("HeldOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("MinutesReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("SmvPreparationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Venue")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SmvPreparationId");
+
+                    b.ToTable("SmvConsultations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SmvConsultations_Attendance", "\"Attendance\" IS NULL OR \"Attendance\" >= 0");
                         });
                 });
 
@@ -8731,6 +9287,116 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.SmvPreparation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("BaseValuationDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("DateOfValuation")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<Guid>("ProposedSmvId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("RevisionYear")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProposedSmvId")
+                        .IsUnique();
+
+                    b.HasIndex("RevisionYear")
+                        .IsUnique()
+                        .HasFilter("\"Status\" <> 'Cancelled'");
+
+                    b.ToTable("SmvPreparations", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SmvPreparations_Cancelled", "(\"Status\" = 'Cancelled') = (\"CancellationReason\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvPreparationEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateOnly>("OccurredOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("SmvPreparationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SmvPreparationId", "OccurredOn");
+
+                    b.ToTable("SmvPreparationEvents", (string)null);
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.SmvSchedule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8758,6 +9424,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CropDescription")
+                        .HasColumnType("text");
+
                     b.Property<DateOnly>("EffectiveDate")
                         .HasColumnType("date");
 
@@ -8766,6 +9435,9 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("ImprovementKindId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("LocationDescription")
+                        .HasColumnType("text");
 
                     b.Property<decimal>("MarketValue")
                         .HasPrecision(18, 2)
@@ -8826,6 +9498,324 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("ClassificationId", "ActualUseId", "PropertyTypeId", "ZoneId", "EffectiveDate");
 
                     b.ToTable("SmvSchedules");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvSimulationResult", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BarangayId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("CurrentAssessedValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("CurrentAssessmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CurrentClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("CurrentMarketValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("MunicipalityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Pin")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PropertyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RpuId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RpuNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("RpuType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal?>("SimulatedAssessedValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("SimulatedClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("SimulatedMarketValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("SimulatedTaxableAssessedValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("SmvSimulationRunId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BarangayId");
+
+                    b.HasIndex("CurrentAssessmentId");
+
+                    b.HasIndex("CurrentClassificationId");
+
+                    b.HasIndex("MunicipalityId");
+
+                    b.HasIndex("PropertyId");
+
+                    b.HasIndex("RpuId");
+
+                    b.HasIndex("SimulatedClassificationId");
+
+                    b.HasIndex("SmvSimulationRunId", "BarangayId");
+
+                    b.HasIndex("SmvSimulationRunId", "Pin");
+
+                    b.HasIndex("SmvSimulationRunId", "RpuId")
+                        .IsUnique();
+
+                    b.ToTable("SmvSimulationResults", (string)null);
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvSimulationResultLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActualUseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AssessedValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("ClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("MarketValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SmvSimulationResultId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Taxable")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActualUseId");
+
+                    b.HasIndex("ClassificationId");
+
+                    b.HasIndex("SmvSimulationResultId", "Sequence");
+
+                    b.ToTable("SmvSimulationResultLines", (string)null);
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvSimulationRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("AsOf")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("FailedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProcessedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("SmvId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("StartedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("TotalCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SmvId");
+
+                    b.ToTable("SmvSimulationRuns", (string)null);
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvSimulationScope", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MunicipalityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SmvSimulationRunId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MunicipalityId");
+
+                    b.HasIndex("SmvSimulationRunId", "MunicipalityId")
+                        .IsUnique();
+
+                    b.ToTable("SmvSimulationScopes", (string)null);
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvSubClassCriterion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Criteria")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SmvId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SubClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClassificationId");
+
+                    b.HasIndex("SubClassificationId");
+
+                    b.HasIndex("SmvId", "ClassificationId", "SubClassificationId")
+                        .IsUnique();
+
+                    b.ToTable("SmvSubClassCriteria", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SmvSubClassCriteria_Sequence", "\"Sequence\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvTimeAdjustmentFactor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Factor")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<DateOnly>("PeriodFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("PeriodTo")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("SmvPreparationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SmvPreparationId", "PeriodFrom");
+
+                    b.ToTable("SmvTimeAdjustmentFactors", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SmvTimeAdjustmentFactors_Valid", "\"PeriodFrom\" <= \"PeriodTo\" AND \"Factor\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.SwornStatements.SwornStatement", b =>
@@ -10366,6 +11356,163 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_ValuationLines_Sequence", "\"Sequence\" >= 1");
                         });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.ValuationTestRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("AsOf")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateOnly?>("SalesFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("SalesTo")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("SmvId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SmvId");
+
+                    b.ToTable("ValuationTestRuns", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ValuationTestRuns_SalesPeriod", "\"SalesFrom\" IS NULL OR \"SalesTo\" IS NULL OR \"SalesFrom\" <= \"SalesTo\"");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.ValuationTestSale", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActualUseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BarangayId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExclusionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal?>("LandArea")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("LandAreaUnit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("MarketTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MunicipalityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("RateUnit")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<decimal?>("Ratio")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid?>("SmvScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SubClassificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("TransactionDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal?>("UnitValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("ValuationTestRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Value")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActualUseId");
+
+                    b.HasIndex("BarangayId");
+
+                    b.HasIndex("ClassificationId");
+
+                    b.HasIndex("MarketTransactionId");
+
+                    b.HasIndex("MunicipalityId");
+
+                    b.HasIndex("SmvScheduleId");
+
+                    b.HasIndex("SubClassificationId");
+
+                    b.HasIndex("ValuationTestRunId", "MarketTransactionId")
+                        .IsUnique();
+
+                    b.ToTable("ValuationTestSales", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ValuationTestSales_RatioOrReason", "(\"Ratio\" IS NULL) = (\"ExclusionReason\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.ValuationTestScope", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MunicipalityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ValuationTestRunId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MunicipalityId");
+
+                    b.HasIndex("ValuationTestRunId", "MunicipalityId")
+                        .IsUnique();
+
+                    b.ToTable("ValuationTestScopes", (string)null);
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.Workflow.ApprovalChain", b =>
@@ -12534,6 +13681,166 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Taxpayer");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.RevenueImpactOption", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.RevenueImpactStudy", null)
+                        .WithMany("Options")
+                        .HasForeignKey("RevenueImpactStudyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.RevenueImpactOptionLevel", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.ActualUse", "ActualUse")
+                        .WithMany()
+                        .HasForeignKey("ActualUseId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Classification", "Classification")
+                        .WithMany()
+                        .HasForeignKey("ClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.RevenueImpactOption", null)
+                        .WithMany("Levels")
+                        .HasForeignKey("RevenueImpactOptionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ActualUse");
+
+                    b.Navigation("Classification");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.RevenueImpactRate", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.RevenueImpactStudy", null)
+                        .WithMany("Rates")
+                        .HasForeignKey("RevenueImpactStudyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.RevenueImpactStudy", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.SmvSimulationRun", "SmvSimulationRun")
+                        .WithMany()
+                        .HasForeignKey("SmvSimulationRunId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SmvSimulationRun");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SalesAnalysis", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.ActualUse", "ActualUse")
+                        .WithMany()
+                        .HasForeignKey("ActualUseId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Classification", "Classification")
+                        .WithMany()
+                        .HasForeignKey("ClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.SmvPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("SmvPreparationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ActualUse");
+
+                    b.Navigation("Classification");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SalesAnalysisGroup", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.SalesAnalysis", null)
+                        .WithMany("Groups")
+                        .HasForeignKey("SalesAnalysisId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.SmvSchedule", null)
+                        .WithMany()
+                        .HasForeignKey("SmvScheduleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Reference.SubClassification", "SubClassification")
+                        .WithMany()
+                        .HasForeignKey("SubClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("SubClassification");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SalesAnalysisSale", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.Barangay", "Barangay")
+                        .WithMany()
+                        .HasForeignKey("BarangayId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.MarketData.MarketTransaction", null)
+                        .WithMany()
+                        .HasForeignKey("MarketTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Municipality", null)
+                        .WithMany()
+                        .HasForeignKey("MunicipalityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.SalesAnalysis", null)
+                        .WithMany("Sales")
+                        .HasForeignKey("SalesAnalysisId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Reference.SubClassification", "SubClassification")
+                        .WithMany()
+                        .HasForeignKey("SubClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Barangay");
+
+                    b.Navigation("SubClassification");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SalesAnalysisScope", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.Municipality", "Municipality")
+                        .WithMany()
+                        .HasForeignKey("MunicipalityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.SalesAnalysis", null)
+                        .WithMany("Scope")
+                        .HasForeignKey("SalesAnalysisId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Municipality");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.Smv", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Smv", "AmendsSmv")
+                        .WithMany()
+                        .HasForeignKey("AmendsSmvId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AmendsSmv");
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.SmvBuildingCost", b =>
                 {
                     b.HasOne("Prime.Domain.Entities.Reference.BuildingType", "BuildingType")
@@ -12565,6 +13872,15 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Smv");
 
                     b.Navigation("StructuralType");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvConsultation", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.SmvPreparation", null)
+                        .WithMany("Consultations")
+                        .HasForeignKey("SmvPreparationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.SmvCoverage", b =>
@@ -12631,6 +13947,26 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Smv");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.SmvPreparation", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Smv", "ProposedSmv")
+                        .WithMany()
+                        .HasForeignKey("ProposedSmvId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ProposedSmv");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvPreparationEvent", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.SmvPreparation", null)
+                        .WithMany("Events")
+                        .HasForeignKey("SmvPreparationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.SmvSchedule", b =>
                 {
                     b.HasOne("Prime.Domain.Entities.Reference.ActualUse", "ActualUse")
@@ -12691,6 +14027,141 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("SubClassification");
 
                     b.Navigation("Zone");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvSimulationResult", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.Barangay", null)
+                        .WithMany()
+                        .HasForeignKey("BarangayId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Assessment", null)
+                        .WithMany()
+                        .HasForeignKey("CurrentAssessmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Classification", "CurrentClassification")
+                        .WithMany()
+                        .HasForeignKey("CurrentClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Municipality", null)
+                        .WithMany()
+                        .HasForeignKey("MunicipalityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.PropertyEntity", null)
+                        .WithMany()
+                        .HasForeignKey("PropertyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.RealPropertyUnit", null)
+                        .WithMany()
+                        .HasForeignKey("RpuId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Classification", "SimulatedClassification")
+                        .WithMany()
+                        .HasForeignKey("SimulatedClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.SmvSimulationRun", null)
+                        .WithMany()
+                        .HasForeignKey("SmvSimulationRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CurrentClassification");
+
+                    b.Navigation("SimulatedClassification");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvSimulationResultLine", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.ActualUse", null)
+                        .WithMany()
+                        .HasForeignKey("ActualUseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Classification", null)
+                        .WithMany()
+                        .HasForeignKey("ClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.SmvSimulationResult", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("SmvSimulationResultId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvSimulationRun", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Smv", "Smv")
+                        .WithMany()
+                        .HasForeignKey("SmvId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Smv");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvSimulationScope", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.Municipality", "Municipality")
+                        .WithMany()
+                        .HasForeignKey("MunicipalityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.SmvSimulationRun", null)
+                        .WithMany("Scope")
+                        .HasForeignKey("SmvSimulationRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Municipality");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvSubClassCriterion", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.Classification", "Classification")
+                        .WithMany()
+                        .HasForeignKey("ClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Smv", null)
+                        .WithMany()
+                        .HasForeignKey("SmvId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Reference.SubClassification", "SubClassification")
+                        .WithMany()
+                        .HasForeignKey("SubClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Classification");
+
+                    b.Navigation("SubClassification");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvTimeAdjustmentFactor", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.SmvPreparation", null)
+                        .WithMany()
+                        .HasForeignKey("SmvPreparationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.SwornStatements.SwornStatement", b =>
@@ -13147,6 +14618,86 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("SubClassification");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.ValuationTestRun", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Smv", "Smv")
+                        .WithMany()
+                        .HasForeignKey("SmvId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Smv");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.ValuationTestSale", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.ActualUse", null)
+                        .WithMany()
+                        .HasForeignKey("ActualUseId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Barangay", "Barangay")
+                        .WithMany()
+                        .HasForeignKey("BarangayId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Classification", "Classification")
+                        .WithMany()
+                        .HasForeignKey("ClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.MarketData.MarketTransaction", null)
+                        .WithMany()
+                        .HasForeignKey("MarketTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.Reference.Municipality", null)
+                        .WithMany()
+                        .HasForeignKey("MunicipalityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.SmvSchedule", null)
+                        .WithMany()
+                        .HasForeignKey("SmvScheduleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Reference.SubClassification", "SubClassification")
+                        .WithMany()
+                        .HasForeignKey("SubClassificationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.ValuationTestRun", null)
+                        .WithMany("Sales")
+                        .HasForeignKey("ValuationTestRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Barangay");
+
+                    b.Navigation("Classification");
+
+                    b.Navigation("SubClassification");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.ValuationTestScope", b =>
+                {
+                    b.HasOne("Prime.Domain.Entities.Reference.Municipality", "Municipality")
+                        .WithMany()
+                        .HasForeignKey("MunicipalityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.ValuationTestRun", null)
+                        .WithMany("Scope")
+                        .HasForeignKey("ValuationTestRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Municipality");
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Workflow.ApprovalChain", b =>
                 {
                     b.HasOne("Prime.Domain.Entities.Offices.Office", "Office")
@@ -13309,6 +14860,27 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Navigation("Items");
                 });
 
+            modelBuilder.Entity("Prime.Domain.Entities.RevenueImpactOption", b =>
+                {
+                    b.Navigation("Levels");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.RevenueImpactStudy", b =>
+                {
+                    b.Navigation("Options");
+
+                    b.Navigation("Rates");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SalesAnalysis", b =>
+                {
+                    b.Navigation("Groups");
+
+                    b.Navigation("Sales");
+
+                    b.Navigation("Scope");
+                });
+
             modelBuilder.Entity("Prime.Domain.Entities.Smv", b =>
                 {
                     b.Navigation("Coverage");
@@ -13317,6 +14889,23 @@ namespace Prime.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Prime.Domain.Entities.SmvDepreciationSchedule", b =>
                 {
                     b.Navigation("Rows");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvPreparation", b =>
+                {
+                    b.Navigation("Consultations");
+
+                    b.Navigation("Events");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvSimulationResult", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.SmvSimulationRun", b =>
+                {
+                    b.Navigation("Scope");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.SwornStatements.SwornStatement", b =>
@@ -13357,6 +14946,13 @@ namespace Prime.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Prime.Domain.Entities.Valuation", b =>
                 {
                     b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Prime.Domain.Entities.ValuationTestRun", b =>
+                {
+                    b.Navigation("Sales");
+
+                    b.Navigation("Scope");
                 });
 
             modelBuilder.Entity("Prime.Domain.Entities.Workflow.ApprovalChain", b =>

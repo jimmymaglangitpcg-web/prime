@@ -66,6 +66,23 @@ public sealed class ProvisionalFormSeeder(IServiceScopeFactory scopes, ILogger<P
         ("MARKET_SALES_REPORT", 1, "Report of Lowest to Highest Recorded Sales of Real Properties", FormSubjectType.MarketDataReport, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book I p.25 describes the report"),
         // L6-6c: the general revision's reports, printed from the programme (docs/analysis/smv-preparation-general-revision.md §4.6).
         ("GR_COMPLETION_REPORT", 1, "General Revision — Completion Report", FormSubjectType.GeneralRevision, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV p.125 (GRI 19) requires the report"),
+        // L6-2c: the SMV forms (docs/analysis/smv-preparation-general-revision.md §4.2); the LAM's layouts are loaded as content.
+        ("SMV_FORM_1", 1, "Sub-Classification Criteria", FormSubjectType.Smv, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.114–115 lists the form (Annex IV-A)"),
+        ("SMV_FORM_2", 1, "Statement of Sales Values of Residential, Commercial and Industrial Lands", FormSubjectType.SalesAnalysis, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.114–115 lists the form (Annex IV-B)"),
+        ("SMV_FORM_3", 1, "Tabulation of Sales Values (Residential, Commercial and Industrial Lands)", FormSubjectType.SalesAnalysis, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.114–115 lists the form (Annex IV-C)"),
+        ("SMV_FORM_4", 1, "Computation for the Unit Base Market Value", FormSubjectType.SalesAnalysis, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.114–115 lists the form (Annex IV-D)"),
+        ("SMV_FORM_5", 1, "Schedule of Base Unit Market Values for Residential, Commercial and Industrial Lands", FormSubjectType.Smv, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.114–115 lists the form (Annex IV-E)"),
+        ("SMV_FORM_6", 1, "Statement of Sales Values of Agricultural Lands", FormSubjectType.SalesAnalysis, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.114–115 lists the form (Annex IV-F)"),
+        ("SMV_FORM_7", 1, "Tabulation of Sales Values of Agricultural Lands", FormSubjectType.SalesAnalysis, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.114–115 lists the form (Annex IV-G)"),
+        ("SMV_FORM_8", 1, "Computation for the Unit Base Market Value of Agricultural Lands", FormSubjectType.SalesAnalysis, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.114–115 lists the form (Annex IV-H)"),
+        ("SMV_FORM_9", 1, "Schedule of Base Unit Market Values for Agricultural Lands", FormSubjectType.Smv, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.114–115 lists the form (Annex IV-I)"),
+        ("SMV_FORM_10", 1, "Schedule of Base Unit Construction Cost for Buildings", FormSubjectType.Smv, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.114–115 lists the form (Annex IV-J)"),
+        ("SMV_FORM_11", 1, "Schedule of Physical Depreciation", FormSubjectType.Smv, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.114–115 lists the form (Annex IV-K)"),
+        ("SMV_FORM_12", 1, "Schedule of Unit Cost for Extra Items as Component Parts of Building", FormSubjectType.Smv, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.114–115 lists the form (Annex IV-L)"),
+        // L6-5: the LAM describes the study and its report but gives no form (smv-preparation-general-revision.md §4.5).
+        ("REVENUE_TAX_IMPACT_REPORT", 1, "Revenue and Tax Impact Report", FormSubjectType.RevenueImpactStudy, FormAuthority.PrimeProvisional, "PRIME provisional template; RA 12001 §17 and LAM 2025 Book IV pp.116–118 describe the study"),
+        // L6-3: the LAM describes valuation testing but gives no form (docs/analysis/smv-preparation-general-revision.md §4.3).
+        ("VALUATION_TEST_REPORT", 1, "Valuation Testing Report", FormSubjectType.ValuationTest, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book IV pp.115–116 describes valuation testing"),
         ("GR_STATUS_REPORT", 1, "General Revision Status Report", FormSubjectType.GeneralRevision, FormAuthority.PrimeProvisional, "PRIME provisional template; LAM 2025 Book I p.25 describes the report"),
         ("SWORN_STATEMENT", 1, "Sworn Statement of the True Current and Fair Market Value of Real Properties", FormSubjectType.SwornStatement, FormAuthority.Mrpaao, "MRPAAO Attachment 11 (p.243–244)"),
     ];

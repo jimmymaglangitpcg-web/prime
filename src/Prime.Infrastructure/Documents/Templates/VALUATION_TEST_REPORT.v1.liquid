@@ -1,0 +1,54 @@
+{% comment %}
+  PRIME provisional layout (docs/analysis/smv-preparation-general-revision.md §4.3, L6-3): the valuation testing report of an
+  SMV — median value-to-price ratio and coefficient of dispersion per group of sales (LAM 2025 Book IV pp.115–116 describes
+  the test; it gives no form). Benchmarks are the province's configuration; none is printed when none is configured.
+  DOMAIN VERIFICATION REQUIRED: its fields. Values as frozen when the test was made; no party names.
+{% endcomment %}
+{% assign t = test %}
+<style>
+  h1 { font-size: 12.5pt; text-align: center; margin: 4px 0 2px; }
+  h2 { font-size: 10pt; margin: 8px 0 3px; }
+  .lgu { text-align: center; font-weight: bold; }
+  .sub { text-align: center; font-size: 9pt; margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 6px; }
+  td, th { border: 1px solid #000; padding: 2px 4px; font-size: 7.5pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: left; }
+  .num { text-align: right; white-space: nowrap; }
+  .head th { width: 32%; }
+  .muted { color: #555; }
+  .sig { margin-top: 26px; width: 260px; border-top: 1px solid #000; text-align: center; font-size: 8.5pt; padding-top: 2px; display: inline-block; margin-right: 60px; }
+  .foot { font-size: 7.5pt; margin-top: 6px; }
+</style>
+{% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% endif %}{% if lgu.office %}<div class="sub">{{ lgu.office }}</div>{% endif %}
+<h1>VALUATION TESTING REPORT</h1>
+<div class="sub">{{ t.scope | join: ", " }}</div>
+<table class="head">
+  <tr><th>Schedule of market values tested</th><td>{{ t.smv }} ({{ t.revisionYear }}; {{ t.smvStatus }} in PRIME)</td></tr>
+  <tr><th>Unit values read as of</th><td>{{ t.asOf | date_ph }}</td></tr>
+  <tr><th>Sales period</th><td>{% if t.salesFrom %}{{ t.salesFrom | date_ph }}{% else %}first recorded{% endif %} to {% if t.salesTo %}{{ t.salesTo | date_ph }}{% else %}latest recorded{% endif %}</td></tr>
+  <tr><th>Accepted land sales / tested</th><td>{{ t.salesCount }} / {{ t.testedCount }}</td></tr>
+  <tr><th>Benchmarks</th><td>{% if t.benchmarks.configured %}median ratio {% if t.benchmarks.medianLow %}from {{ t.benchmarks.medianLow }}{% endif %}{% if t.benchmarks.medianHigh %} to {{ t.benchmarks.medianHigh }}{% endif %}{% if t.benchmarks.codMax %}; coefficient of dispersion at most {{ t.benchmarks.codMax }}%{% endif %}{% else %}none configured{% endif %}</td></tr>
+  {% if t.description %}<tr><th>Remarks</th><td>{{ t.description }}</td></tr>{% endif %}
+</table>
+<div class="muted foot">Value = land area × the SMV's unit value for the sale's class, sub-class and use, without lot adjustments. Ratio = value ÷ land price (as recorded). Coefficient of dispersion = average absolute deviation of the ratios from their median, as a percent of the median.</div>
+
+<h2>Results by group</h2>
+<table>
+  <tr><th>Group</th><th>Name</th><th class="num">Sales</th><th class="num">Median ratio</th><th class="num">Coefficient of dispersion (%)</th>{% if t.benchmarks.configured %}<th>Within benchmarks</th>{% endif %}</tr>
+  {% for g in groups %}
+  <tr><td>{{ g.level }}</td><td>{{ g.name }}</td><td class="num">{{ g.count }}</td><td class="num">{{ g.median }}</td><td class="num">{{ g.cod }}</td>{% if t.benchmarks.configured %}<td>{% if g.medianOk == false %}median outside{% elsif g.codOk == false %}dispersion above{% elsif g.medianOk or g.codOk %}yes{% endif %}{% if g.medianOk == false and g.codOk == false %}; dispersion above{% endif %}</td>{% endif %}</tr>
+  {% endfor %}
+</table>
+
+<h2>Sales</h2>
+<table>
+  <tr><th>Date</th><th>Location</th><th>Class / sub-class</th><th class="num">Area</th><th class="num">Land price</th><th class="num">Unit value</th><th class="num">Value</th><th class="num">Ratio</th><th>Left out because</th></tr>
+  {% for s in sales %}
+  <tr><td>{{ s.date | date_ph }}</td><td>{{ s.barangay }}{% if s.barangay %}, {% endif %}{{ s.municipality }}</td><td>{{ s.classification }}{% if s.subClass %} — {{ s.subClass }}{% endif %}</td>
+    <td class="num">{{ s.area }} {{ s.areaUnit }}</td><td class="num">{% if s.price %}{{ s.price | money }}{% endif %}</td>
+    <td class="num">{% if s.unitValue %}{{ s.unitValue | money }} {{ s.rateUnit }}{% endif %}</td><td class="num">{% if s.value %}{{ s.value | money }}{% endif %}</td>
+    <td class="num">{{ s.ratio }}</td><td>{{ s.excluded }}</td></tr>
+  {% endfor %}
+</table>
+<div class="sig">Prepared by</div><div class="sig">Assessor</div>
+<div class="foot">{{ form.title }} — form {{ form.code }} v{{ form.version }}. {{ form.legalBasis }}. Printed {{ issue.issuedAt | datetime_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}.</div>

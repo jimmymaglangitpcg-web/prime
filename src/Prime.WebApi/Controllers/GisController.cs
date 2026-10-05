@@ -3,8 +3,17 @@ using Prime.Application.Features.Gis;
 
 namespace Prime.WebApi.Controllers;
 
-public class GisController(IGisService gisService, ITaxMapSheetService sheets) : ApiControllerBase
+public class GisController(IGisService gisService, ITaxMapSheetService sheets, ILandValueMapService valueMap) : ApiControllerBase
 {
+    /// <summary>
+    /// The land value map: land parcels in a WGS84 extent with the unit value each takes under the SMV (smvId: a proposed SMV, any
+    /// status; none: the approved SMV in force on asOf, default today). docs/analysis/smv-preparation-general-revision.md §4.4.
+    /// </summary>
+    [HttpGet("value-map")]
+    public async Task<ActionResult<LandValueFeatureCollection>> ValueMap([FromQuery] string? bbox, [FromQuery] Guid? smvId, [FromQuery] DateOnly? asOf,
+        [FromQuery] int? limit, CancellationToken cancellationToken) =>
+        HandleResult(await valueMap.GetAsync(bbox, smvId, asOf, limit, cancellationToken));
+
     /// <summary>Active parcels in a WGS84 extent, as GeoJSON. bbox = "minLon,minLat,maxLon,maxLat".</summary>
     [HttpGet("parcels")]
     public async Task<ActionResult<ParcelFeatureCollection>> ParcelsInExtent([FromQuery] string? bbox, [FromQuery] int? limit, CancellationToken cancellationToken) =>

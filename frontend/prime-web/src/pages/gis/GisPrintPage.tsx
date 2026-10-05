@@ -14,7 +14,11 @@ import {
   MAP_PROJECTION,
   createBaseLayer,
   createDataLayers,
+  valueBands,
+  valueLegend,
   type MapLayerName,
+  type ValueLegendEntry,
+  type ValueMapOptions,
 } from '../../lib/mapLayers';
 import { LegendSwatch } from './LegendSwatch';
 
@@ -30,6 +34,9 @@ interface PrintParams {
   zoom: number;
   layers: MapLayerName[];
   asOf: string;
+  /** The land value map's SMV (null: the approved one in force) and colouring. */
+  valueSmv: string | null;
+  colorBy: ValueMapOptions['colorBy'];
 }
 
 function parseParams(params: URLSearchParams): PrintParams | null {
@@ -46,7 +53,7 @@ function parseParams(params: URLSearchParams): PrintParams | null {
   ) {
     return null;
   }
-  return { center: [center[0], center[1]], zoom, layers, asOf };
+  return { center: [center[0], center[1]], zoom, layers, asOf, valueSmv: params.get('valueSmv'), colorBy: params.get('colorBy') === 'value' ? 'value' : 'subClass' };
 }
 
 /**
@@ -67,6 +74,7 @@ export function GisPrintPage() {
   const [zoom, setZoom] = useState<number | null>(null);
   const [sources, setSources] = useState<string[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
+  const [valueKey, setValueKey] = useState<ValueLegendEntry[]>([]);
   const printedAt = useMemo(() => new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' }), []);
 
   useEffect(() => {
@@ -74,6 +82,7 @@ export function GisPrintPage() {
       return;
     }
 
+    const valueOptions: ValueMapOptions = { smvId: params.valueSmv, colorBy: params.colorBy, bands: [] };
     const dataLayers = createDataLayers(
       () => params.asOf,
       (name, status) => {
@@ -83,7 +92,15 @@ export function GisPrintPage() {
           setErrors((e) => [...e, `${LAYERS[name].title}: too many features for one sheet — some are missing; print a smaller area.`]);
         }
       },
+      () => valueOptions,
     );
+    const valuesSource = dataLayers.values.getSource()!;
+    valuesSource.on('featuresloadend', () => {
+      const features = valuesSource.getFeatures();
+      valueOptions.bands = valueBands(features.map((f) => f.get('unitValue') as number | null).filter((v): v is number => v != null));
+      dataLayers.values.changed();
+      setValueKey(valueLegend(features, valueOptions));
+    });
     for (const name of LAYER_ORDER) {
       dataLayers[name].setVisible(params.layers.includes(name));
     }
@@ -102,7 +119,7 @@ export function GisPrintPage() {
     // Provenance: the sources of the reference shapes actually on this sheet.
     map.on('rendercomplete', () => {
       const found = new Set<string>();
-      for (const name of ['zones', 'barangays', 'sections', 'roads'] as const) {
+      for (const name of ['zones', 'barangays', 'sections', 'roads', 'submarketareas'] as const) {
         if (!dataLayers[name].getVisible()) {
           continue;
         }
@@ -160,7 +177,7 @@ export function GisPrintPage() {
               <div style={{ fontSize: 20, fontWeight: 700 }}>Tax Map</div>
             </div>
             <div style={{ fontSize: 11, textAlign: 'right' }}>
-              <div>Boundaries as of {params.asOf}</div>
+              <div>Boundaries{params.layers.includes('values') ? ' and land values' : ''} as of {params.asOf}</div>
               <div>Printed {printedAt}</div>
               <div>PRIME — Property Registry, Information, Mapping &amp; Evaluation System</div>
             </div>
@@ -185,10 +202,19 @@ export function GisPrintPage() {
                   {hiddenAtScale.includes(name) && <em> — not shown at this scale</em>}
                 </div>
               ))}
+              {params.layers.includes('values') && valueKey.map((e) => (
+                <div key={`${e.color}-${e.label}`} style={{ paddingLeft: 12 }}>
+                  <span aria-hidden style={{ display: 'inline-block', width: 14, height: 10, background: e.color, border: '1px solid #374151', verticalAlign: 'middle',
+                    printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }} /> {e.label} ({e.parcels})
+                </div>
+              ))}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600, marginBottom: 2 }}>Data sources</div>
               {params.layers.includes('parcels') && <div>Parcels: PRIME parcel registry (current records at time of printing)</div>}
+              {params.layers.includes('values') && (
+                <div>Land values: {params.valueSmv ? 'the chosen SMV' : 'the approved SMV in force'} on {params.asOf}, each parcel at its land's principal class, sub-class and use; no lot adjustments.</div>
+              )}
               {sources.map((s) => (
                 <div key={s}>{s}</div>
               ))}

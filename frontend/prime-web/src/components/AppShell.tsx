@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Alert, Layout, Menu, Select, Tag, Tooltip, Typography } from 'antd';
-import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined, NumberOutlined, CloudUploadOutlined, ApartmentOutlined, CheckSquareOutlined, SendOutlined, SafetyCertificateOutlined, LineChartOutlined, SyncOutlined } from '@ant-design/icons';
+import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined, NumberOutlined, CloudUploadOutlined, ApartmentOutlined, CheckSquareOutlined, SendOutlined, SafetyCertificateOutlined, LineChartOutlined, SyncOutlined, ExperimentOutlined, ScheduleOutlined, FundOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { devActAsAvailable, getDevActAs, setDevActAs, subscribeDevActAs } from '../lib/devActAs';
@@ -18,6 +18,9 @@ const navItems = [
   { key: '/sworn-statements', icon: <AuditOutlined />, label: 'Sworn Statements' },
   { key: '/exemptions', icon: <SafetyCertificateOutlined />, label: 'Exemptions' },
   { key: '/market-data', icon: <LineChartOutlined />, label: 'Market Data' },
+  { key: '/smv-preparation', icon: <ScheduleOutlined />, label: 'SMV Preparation' },
+  { key: '/smv-testing', icon: <ExperimentOutlined />, label: 'SMV Testing' },
+  { key: '/smv-impact', icon: <FundOutlined />, label: 'Tax Impact Study' },
   { key: '/general-revision', icon: <SyncOutlined />, label: 'General Revision' },
   { key: '/registers', icon: <BookOutlined />, label: 'Registers' },
   { key: '/collection', icon: <DollarOutlined />, label: 'Collection' },

@@ -9,7 +9,7 @@ import { bbox as bboxStrategy } from 'ol/loadingstrategy';
 import { transformExtent } from 'ol/proj';
 import { Fill, Stroke, Style, Text } from 'ol/style';
 import { mapConfig } from './mapConfig';
-import { fetchParcelsInExtent, fetchReferenceLayer } from '../api/gis';
+import { fetchParcelsInExtent, fetchReferenceLayer, fetchValueMap } from '../api/gis';
 import type { ReferenceLayerName } from './types';
 
 /**
@@ -20,7 +20,7 @@ import type { ReferenceLayerName } from './types';
 export const MAP_PROJECTION = 'EPSG:3857';
 export const DATA_PROJECTION = 'EPSG:4326';
 
-export type MapLayerName = 'parcels' | ReferenceLayerName;
+export type MapLayerName = 'parcels' | 'values' | ReferenceLayerName;
 
 export interface LayerStatus {
   truncated: boolean;
@@ -43,9 +43,85 @@ export const LAYERS: Record<MapLayerName, LayerDefinition> = {
   barangays: { title: 'Barangay boundaries', minZoom: 11, stroke: '#7c3aed', lineDash: [8, 4], width: 2 },
   roads: { title: 'Roads', minZoom: 13, stroke: '#b45309', width: 2.5 },
   sections: { title: 'Tax map sections', minZoom: 13, stroke: '#be123c', lineDash: [12, 4, 2, 4], width: 2 },
+  values: { title: 'Land values', minZoom: mapConfig.parcelMinZoom, stroke: '#374151', fill: 'rgba(37, 99, 235, 0.45)', width: 0.5 },
+  submarketareas: { title: 'Sub-market areas', minZoom: 12, stroke: '#0e7490', fill: 'rgba(14, 116, 144, 0.05)', lineDash: [4, 4], width: 2 },
 };
 
-export const LAYER_ORDER: MapLayerName[] = ['zones', 'barangays', 'sections', 'roads', 'parcels'];
+export const LAYER_ORDER: MapLayerName[] = ['zones', 'barangays', 'submarketareas', 'sections', 'roads', 'values', 'parcels'];
+
+/** How the land value map is drawn: under which SMV (null: the approved SMV in force) and coloured by what. */
+export interface ValueMapOptions {
+  smvId: string | null;
+  colorBy: 'subClass' | 'value';
+  /** Upper bounds of the value bands but the last, ascending (colorBy 'value'). */
+  bands: number[];
+}
+
+// Categorical colours for sub-classes, and a light-to-dark sequence for value bands.
+const CATEGORY_COLORS = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#dc2626', '#0891b2', '#65a30d', '#db2777', '#4f46e5', '#ca8a04'];
+const BAND_COLORS = ['#fef3c7', '#fcd34d', '#f59e0b', '#d97706', '#92400e'];
+export const NO_VALUE_COLOR = '#9ca3af';
+
+const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+
+/** The colour of one value-map feature: its sub-class's, its value band's, or grey when it has no value. */
+export function valueColor(props: { classification: string | null; subClass: string | null; unitValue: number | null }, options: ValueMapOptions): string {
+  if (props.unitValue == null) {
+    return NO_VALUE_COLOR;
+  }
+  if (options.colorBy === 'subClass') {
+    return CATEGORY_COLORS[hash(`${props.classification}|${props.subClass ?? ''}`) % CATEGORY_COLORS.length];
+  }
+  const band = options.bands.findIndex((upper) => props.unitValue! <= upper);
+  return BAND_COLORS[band === -1 ? options.bands.length : band] ?? BAND_COLORS[BAND_COLORS.length - 1];
+}
+
+/** Up to five quantile bands of the values loaded, as upper bounds but the last. */
+export function valueBands(values: number[]): number[] {
+  const sorted = [...new Set(values)].sort((a, b) => a - b);
+  if (sorted.length <= 1) {
+    return [];
+  }
+  const count = Math.min(5, sorted.length);
+  const bounds = Array.from({ length: count - 1 }, (_, i) => sorted[Math.floor(((i + 1) * sorted.length) / count) - 1]);
+  return [...new Set(bounds)];
+}
+
+export interface ValueLegendEntry { color: string; label: string; parcels: number }
+
+/** The legend of the loaded value-map features. */
+export function valueLegend(features: Feature[], options: ValueMapOptions): ValueLegendEntry[] {
+  const fmt = (n: number) => n.toLocaleString('en-PH', { maximumFractionDigits: 2 });
+  const entries = new Map<string, ValueLegendEntry & { order: number }>();
+  for (const f of features) {
+    const p = f.getProperties() as { classification: string | null; subClass: string | null; unitValue: number | null; unit: string | null };
+    const color = valueColor(p, options);
+    let label: string;
+    let order: number;
+    if (p.unitValue == null) {
+      label = 'No unit value';
+      order = Number.MAX_SAFE_INTEGER;
+    } else if (options.colorBy === 'subClass') {
+      label = `${p.classification ?? ''}${p.subClass ? ` — ${p.subClass}` : ''}: ${fmt(p.unitValue)} ${p.unit ?? ''}`.trim();
+      order = -p.unitValue;
+    } else {
+      const band = options.bands.findIndex((upper) => p.unitValue! <= upper);
+      const i = band === -1 ? options.bands.length : band;
+      const low = i === 0 ? null : options.bands[i - 1];
+      const high = i < options.bands.length ? options.bands[i] : null;
+      label = low == null && high == null ? `${fmt(p.unitValue)}` : low == null ? `up to ${fmt(high!)}` : high == null ? `over ${fmt(low)}` : `over ${fmt(low)} to ${fmt(high)}`;
+      order = i;
+    }
+    const key = `${color}|${label}`;
+    const entry = entries.get(key);
+    if (entry) {
+      entry.parcels += 1;
+    } else {
+      entries.set(key, { color, label, parcels: 1, order });
+    }
+  }
+  return [...entries.values()].sort((a, b) => a.order - b.order).map(({ color, label, parcels }) => ({ color, label, parcels }));
+}
 
 export const highlightStyle = new Style({
   stroke: new Stroke({ color: '#ea580c', width: 3 }),
@@ -84,7 +160,7 @@ function layerStyle(name: MapLayerName): Style | ((feature: FeatureLike, resolut
   }
 
   return (feature, resolution) => {
-    const label = name === 'zones' ? (feature.get('key') as string) : (feature.get('name') as string | null);
+    const label = name === 'zones' || name === 'submarketareas' ? ((feature.get('name') as string | null) ?? (feature.get('key') as string)) : (feature.get('name') as string | null);
     if (!label || resolution > LABEL_MAX_RESOLUTION) {
       return base;
     }
@@ -172,16 +248,38 @@ function createExtentLoadedLayer(
  * through `getAsOf` at load time; after changing it, call
  * `layer.getSource()?.refresh()` to reload.
  */
-export function createDataLayers(getAsOf: () => string, onStatus: (name: MapLayerName, status: LayerStatus) => void) {
+export function createDataLayers(
+  getAsOf: () => string,
+  onStatus: (name: MapLayerName, status: LayerStatus) => void,
+  getValueOptions: () => ValueMapOptions = () => ({ smvId: null, colorBy: 'subClass', bands: [] }),
+) {
   const reference = (name: ReferenceLayerName) =>
     createExtentLoadedLayer(name, (bbox) => fetchReferenceLayer(name, bbox, getAsOf()), onStatus);
+  const values = createExtentLoadedLayer('values', (bbox) => fetchValueMap(bbox, getValueOptions().smvId, getAsOf()), onStatus);
+  // The land value map: each parcel filled by its sub-class or value band, labelled with both when zoomed in.
+  values.setStyle((feature, resolution) => {
+    const p = feature.getProperties() as { classification: string | null; subClass: string | null; unitValue: number | null };
+    const color = valueColor(p, getValueOptions());
+    const label = p.unitValue == null || resolution > PARCEL_LABEL_MAX_RESOLUTION * 2 ? undefined
+      : `${p.subClass ?? ''}\n${p.unitValue.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`.trim();
+    return new Style({
+      stroke: new Stroke({ color: '#374151', width: 0.5 }),
+      fill: new Fill({ color: `${color}b3` }),
+      // Below the parcel number the parcels layer draws at the centre.
+      text: label ? new Text({
+        text: label, font: '600 11px system-ui, sans-serif', offsetY: 22, fill: new Fill({ color: '#111827' }), stroke: new Stroke({ color: '#ffffff', width: 3 }),
+      }) : undefined,
+    });
+  });
 
   return {
     parcels: createExtentLoadedLayer('parcels', fetchParcelsInExtent, onStatus),
+    values,
     zones: reference('zones'),
     barangays: reference('barangays'),
     roads: reference('roads'),
     sections: reference('sections'),
+    submarketareas: reference('submarketareas'),
   } satisfies Record<MapLayerName, VectorLayer>;
 }
 

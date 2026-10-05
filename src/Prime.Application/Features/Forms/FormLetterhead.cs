@@ -95,6 +95,10 @@ public static class FormLetterhead
             await db.GeneralRevisionScopes.Where(x => x.GeneralRevisionProgrammeId == id).CountAsync(ct) == 1
                 ? await db.GeneralRevisionScopes.Where(x => x.GeneralRevisionProgrammeId == id).Select(x => (Guid?)x.MunicipalityId).FirstAsync(ct)
                 : null,
+        FormSubjectType.ValuationTest =>
+            await db.ValuationTestScopes.Where(x => x.ValuationTestRunId == id).CountAsync(ct) == 1
+                ? await db.ValuationTestScopes.Where(x => x.ValuationTestRunId == id).Select(x => (Guid?)x.MunicipalityId).FirstAsync(ct)
+                : null,
         _ => null,
     };
 }

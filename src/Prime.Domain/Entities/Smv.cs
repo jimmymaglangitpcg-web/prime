@@ -53,6 +53,17 @@ public sealed class Smv : AuditableEntity
     /// </summary>
     public List<SmvCoverage> Coverage { get; set; } = [];
 
+    /// <summary>
+    /// An <see cref="SmvBasis.Amendment"/>: the SMV it amends, an approved SMV that is not itself an amendment, so every
+    /// amendment hangs off one SMV (docs/analysis/smv-preparation-general-revision.md §4.7).
+    /// </summary>
+    public Guid? AmendsSmvId { get; set; }
+    public Smv? AmendsSmv { get; set; }
+    public SmvAmendmentGround? AmendmentGround { get; set; }
+
+    /// <summary>The SMV whose rows this one's rows belong with: the amended SMV for an amendment, else itself.</summary>
+    public Guid FamilyId => AmendsSmvId ?? Id;
+
     /// <summary>How the SMV is cited: its ordinance number, else its certification reference.</summary>
     public string Reference => OrdinanceNumber ?? CertificationReference ?? string.Empty;
 }

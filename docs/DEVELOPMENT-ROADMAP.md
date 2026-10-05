@@ -939,7 +939,7 @@ L2   Identification & numbering (LAM deltas)      done (L2-1 to L2-3)
 L3   Assessment, listing, exemptions             done (L3-1a to L3-4)
 L4   Condominium                                      deferred
 L5   Records & forms                              done (L5-1 to L5-6; LAM forms await the province's review)
-L6   SMV preparation & general revision         in progress (L6-1, L6-6 done)
+L6   SMV preparation & general revision         done (L6-1 to L6-7)
 L7   Assessment appeals
 L8   Treasury interface
 ```
@@ -1225,8 +1225,27 @@ single-record actions, so the chain and maker-checker hold per item; per-item ru
 served in bulk; the roll gate per city/municipality with a recorded override; the revision's rolls, TMCRs and Ownership Record
 Forms; units taken out with a reason; the GRI checklist as content with gates PRIME checks; completion; completion and status
 reports; the old start endpoint retired; migrations `GeneralRevisionRecords`, `GeneralRevisionCompletion`, local database only).
-Next per the L6 order: L6-3 (engine rate source and compute-only mode, simulation runs, valuation testing). The paragraphs below are the earlier
-history.
+**L6-3 done** (2026-10-05: the valuation engine values under a proposed SMV, compute-only, never stored; one shared
+assessment calculation; unit simulation API; simulation runs as background jobs with current and simulated values per unit;
+valuation testing of accepted land sales with median ratio and coefficient of dispersion, benchmarks as empty settings, and a
+provisional testing report; screen `/smv-testing`; migrations `SmvSimulations`, `ValuationTests`, local database only).
+**L6-2a done** (preparation work file creating the proposed SMV without a certification reference; consultations;
+review steps from publication for comment to publication of the certified SMV, written as the SMV's stage dates; due-date
+reminders from settings; approval only after publication; provincial office prepares, municipal offices read; screens
+`/smv-preparation`; migration `SmvPreparations`, local database only). **L6-2b done** (time-adjustment factors; sales analyses per class and crop with
+Tables 1–3, the assessor's sub-classes and adoption as draft rows of the proposed SMV; content-pack lookups fixed for SMVs
+without a reference; migration `SalesAnalyses`, local database only). **L6-2c done** (sub-class criteria; location and crop descriptions on SMV rows,
+also as content-pack columns; SMV Forms 1–12 as provisional layouts, preview-only while the SMV is prepared and issued as
+submitted; migration `SmvFormsAndCriteria`, local database only). **L6-2d done, so L6-2 is complete** (the LAM layouts of SMV Forms
+1–12 in the untracked `lgu-content/`, imported and approved in the dev database; the providers shape the matrices they need;
+no migration). **L6-4 done** (land value map: each land parcel's unit value under the SMV in force or a chosen SMV, by the
+engine's own rate selection, coloured by sub-class or value band, with legend and print; sub-market areas as a reference layer;
+migration `SubMarketAreas`, local database only). **L6-5 done** (revenue compliance by the tax gap and the tax impact of the new values
+and up to three options, on a simulation run, with the Treasurer's figures entered on the study; provisional RTIR; migration
+`RevenueImpactStudies`, local database only). **L6-7 done, so L6 is complete** (SMV amendments: basis Amendment with the
+amended SMV and the ground; an amendment's rows and factors replace the amended SMV's for the same key from its
+effectivity; migration `SmvAmendments`, local database only). Next: L7 (assessment appeals), which starts with its
+design document (CLAUDE.md §108). The paragraphs below are the earlier history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so
 PRIME is the assessor's office system following the MRPAAO (CLAUDE.md §0).

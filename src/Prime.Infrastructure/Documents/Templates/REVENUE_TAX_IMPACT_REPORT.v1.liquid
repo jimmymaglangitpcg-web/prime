@@ -1,0 +1,69 @@
+{% comment %}
+  PRIME provisional layout (docs/analysis/smv-preparation-general-revision.md §4.5, L6-5): the Revenue and Tax Impact Report of an
+  SMV (RA 12001 §17; LAM 2025 Book IV pp.116–118 describe the study; no form is given). The rates and collections are the
+  Treasurer's figures as entered on the study. DOMAIN VERIFICATION REQUIRED: its contents.
+{% endcomment %}
+{% assign s = study %}
+<style>
+  h1 { font-size: 12.5pt; text-align: center; margin: 4px 0 2px; }
+  h2 { font-size: 10pt; margin: 10px 0 3px; }
+  .lgu { text-align: center; font-weight: bold; }
+  .sub { text-align: center; font-size: 9pt; margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 6px; }
+  td, th { border: 1px solid #000; padding: 2px 4px; font-size: 7.5pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: left; }
+  .num { text-align: right; white-space: nowrap; }
+  .muted { color: #555; font-size: 7.5pt; }
+  .sig { margin-top: 26px; width: 240px; border-top: 1px solid #000; text-align: center; font-size: 8.5pt; padding-top: 2px; display: inline-block; margin-right: 50px; }
+  .foot { font-size: 7.5pt; margin-top: 6px; }
+</style>
+{% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% endif %}{% if lgu.office %}<div class="sub">{{ lgu.office }}</div>{% endif %}
+<h1>REVENUE AND TAX IMPACT REPORT</h1>
+<div class="sub">{{ s.title }} · {{ s.municipalities | join: ", " }} · SMV {{ s.smvReference }} ({{ s.smvRevisionYear }}), values as of {{ s.simulationAsOf | date_ph }}</div>
+{% for w in s.warnings %}<div class="muted">{{ w }}</div>{% endfor %}
+
+<h2>A. Existing tax rates (the Treasurer's figures)</h2>
+<table><tr><th>Rate</th><th class="num">Percent</th><th>Source</th></tr>
+  {% for r in s.rates %}<tr><td>{{ r.label }}</td><td class="num">{{ r.ratePercent }}%</td><td>{{ r.source }}</td></tr>{% endfor %}
+  <tr><th>Total</th><th class="num">{{ s.existingRatePercent }}%</th><th></th></tr>
+</table>
+
+<h2>B. Revenue compliance, {{ s.year }} (tax gap approach)</h2>
+{% if s.compliance %}{% assign c = s.compliance %}
+<table>
+  <tr><th>Taxable assessed value as of {{ s.referenceDate | date_ph }}</th><td class="num">{{ c.taxableAssessedValue | money }}</td></tr>
+  <tr><th>Tax potential (× {{ c.ratePercent }}%)</th><td class="num">{{ c.taxPotential | money }}</td></tr>
+  <tr><th>Actual collection of the year's tax</th><td class="num">{{ c.actualCollection | money }}</td></tr>
+  <tr><th>Discounts given</th><td class="num">{{ c.discounts | money }}</td></tr>
+  <tr><th>Total collection</th><td class="num">{{ c.totalCollection | money }}</td></tr>
+  <tr><th>Tax gap</th><td class="num">{{ c.taxGap | money }}</td></tr>
+  <tr><th>Revenue compliance rate</th><td class="num">{{ c.complianceRatePercent }}%</td></tr>
+  <tr><th>Collection efficiency</th><td class="num">{{ c.collectionEfficiencyPercent }}%</td></tr>
+</table>
+<div class="muted">Collection source: {{ s.collectionSource }}</div>
+{% else %}<div class="muted">The year's collection was not entered.</div>{% endif %}
+
+<h2>C. Tax impact ({% if s.includeAllTaxableUnits %}every taxable unit{% else %}taxable land parcels{% endif %})</h2>
+<table>
+  <tr><th>Scenario</th><th class="num">Rate</th><th class="num">Units</th><th class="num">Current tax</th><th class="num">Tax under the scenario</th>
+      <th class="num">Lower</th><th class="num">Higher</th><th class="num">Unchanged</th><th class="num">Increases (smallest – median – largest)</th>
+      <th class="num">Largest increase %</th><th class="num">Reclassified (tax change)</th></tr>
+  {% for x in s.scenarios %}{% assign m = x.summary %}<tr><td>{{ x.name }}{% if x.rowsAtExistingLevel > 0 %} *{% endif %}</td><td class="num">{{ x.ratePercent }}%</td>
+    <td class="num">{{ m.units }}</td><td class="num">{{ m.currentTax | money }}</td><td class="num">{{ m.scenarioTax | money }}</td>
+    <td class="num">{{ m.lower }}</td><td class="num">{{ m.higher }}</td><td class="num">{{ m.unchanged }}</td>
+    <td class="num">{% if m.smallestIncrease %}{{ m.smallestIncrease | money }} – {{ m.medianIncrease | money }} – {{ m.largestIncrease | money }}{% endif %}</td>
+    <td class="num">{{ m.largestIncreasePercent }}</td><td class="num">{{ m.reclassified }} ({{ m.reclassifiedTaxChange | money }})</td></tr>{% endfor %}
+</table>
+{% assign starred = false %}{% for x in s.scenarios %}{% if x.rowsAtExistingLevel > 0 %}{% assign starred = true %}{% endif %}{% endfor %}
+{% if starred %}<div class="muted">* Some rows had no level in the option and keep their level under the new values.</div>{% endif %}
+{% for o in s.options %}<div class="muted"><b>{{ o.name }}</b> — {{ o.ratePercent }}%{% if o.description %}: {{ o.description }}{% endif %}.
+  Levels: {% for l in o.levels %}{{ l.classificationName }}{% if l.actualUseName %} / {{ l.actualUseName }}{% endif %} {% if l.upperValue %}{{ l.lowerValue | money }}–{{ l.upperValue | money }}{% elsif l.lowerValue > 0 %}over {{ l.lowerValue | money }}{% endif %} {{ l.percent }}%{% unless forloop.last %}; {% endunless %}{% endfor %}</div>{% endfor %}
+
+<h2>D. Reclassified units ({{ reclassifiedCount }})</h2>
+<table><tr><th>PIN</th><th>Unit</th><th>Classification</th><th class="num">Current tax</th><th class="num">Tax at new values</th></tr>
+  {% for u in reclassified %}<tr><td>{{ u.pin }}</td><td>{{ u.rpuNumber }}</td><td>{{ u.currentClassification }} → {{ u.newClassification }}</td>
+    <td class="num">{{ u.currentTax | money }}</td><td class="num">{{ u.newTax | money }}</td></tr>{% endfor %}
+</table>
+{% if s.notes %}<div class="muted">{{ s.notes }}</div>{% endif %}
+<div class="sig">Assessor</div><div class="sig">Treasurer</div>
+<div class="foot">{{ form.title }} — form {{ form.code }} v{{ form.version }}. {{ form.legalBasis }}. Printed {{ issue.issuedAt | datetime_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}.</div>

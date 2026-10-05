@@ -19,6 +19,12 @@ import { ExemptionClaimsPage } from './pages/exemptions/ExemptionClaimsPage';
 import { MarketDataPage } from './pages/marketData/MarketDataPage';
 import { GeneralRevisionsPage } from './pages/generalRevision/GeneralRevisionsPage';
 import { GeneralRevisionPage } from './pages/generalRevision/GeneralRevisionPage';
+import { SmvTestingPage } from './pages/smvTesting/SmvTestingPage';
+import { ImpactStudiesPage } from './pages/smvTesting/ImpactStudiesPage';
+import { ImpactStudyPage } from './pages/smvTesting/ImpactStudyPage';
+import { SmvPreparationsPage } from './pages/smvPreparation/SmvPreparationsPage';
+import { SmvPreparationPage } from './pages/smvPreparation/SmvPreparationPage';
+import { SalesAnalysisPage } from './pages/smvPreparation/SalesAnalysisPage';
 import { ValuationRulesPage } from './pages/admin/ValuationRulesPage';
 import { FormsAdminPage } from './pages/admin/FormsAdminPage';
 import { CollectionSetupPage } from './pages/admin/CollectionSetupPage';
@@ -66,6 +72,12 @@ export default function App() {
         <Route path="/market-data" element={<MarketDataPage />} />
         <Route path="/general-revision" element={<GeneralRevisionsPage />} />
         <Route path="/general-revision/:id" element={<GeneralRevisionPage />} />
+        <Route path="/smv-testing" element={<SmvTestingPage />} />
+        <Route path="/smv-impact" element={<ImpactStudiesPage />} />
+        <Route path="/smv-impact/:id" element={<ImpactStudyPage />} />
+        <Route path="/smv-preparation" element={<SmvPreparationsPage />} />
+        <Route path="/smv-preparation/:id" element={<SmvPreparationPage />} />
+        <Route path="/smv-preparation/analyses/:id" element={<SalesAnalysisPage />} />
         <Route path="/sworn-statements" element={<SwornStatementsPage />} />
         <Route path="/sworn-statements/:id" element={<SwornStatementPage />} />
         <Route path="/admin/forms" element={<FormsAdminPage />} />

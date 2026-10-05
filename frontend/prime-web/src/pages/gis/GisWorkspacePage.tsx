@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Checkbox, DatePicker, Descriptions, Empty, Input, Spin, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Checkbox, DatePicker, Descriptions, Empty, Input, Radio, Select, Spin, Tag, Typography } from 'antd';
 import { EnvironmentOutlined, PrinterOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import 'ol/ol.css';
@@ -25,15 +25,22 @@ import {
   createDataLayers,
   highlightStyle,
   todayIso,
+  valueBands,
+  valueLegend,
   type LayerStatus,
   type MapLayerName,
+  type ValueLegendEntry,
+  type ValueMapOptions,
 } from '../../lib/mapLayers';
+import { useSmvs } from '../../api/valuation';
 import { fetchParcelsAtPoint, fetchPropertyParcels, fetchPropertyProfile } from '../../api/gis';
 import type { PagedResult, ParcelFeatureProperties, PropertyDto } from '../../lib/types';
 import { LegendSwatch } from './LegendSwatch';
 
-const ALL_VISIBLE: Record<MapLayerName, boolean> = { parcels: true, zones: true, barangays: true, sections: true, roads: true };
-const REFERENCE_LAYERS = ['zones', 'barangays', 'sections', 'roads'] as const;
+const ALL_VISIBLE: Record<MapLayerName, boolean> = {
+  parcels: true, zones: true, barangays: true, sections: true, roads: true, values: false, submarketareas: false,
+};
+const REFERENCE_LAYERS = ['zones', 'barangays', 'sections', 'roads', 'submarketareas'] as const;
 
 type Selection =
   | { origin: 'click'; parcels: ParcelFeatureProperties[] }
@@ -63,6 +70,10 @@ export function GisWorkspacePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  // The land value map (docs/analysis/smv-preparation-general-revision.md §4.4): read by the layer when it loads and draws.
+  const [valueOptions, setValueOptions] = useState<ValueMapOptions>({ smvId: null, colorBy: 'subClass', bands: [] });
+  const valueOptionsRef = useRef(valueOptions);
+  const [legend, setLegend] = useState<ValueLegendEntry[]>([]);
 
   useEffect(() => {
     if (!mapElement.current) {
@@ -73,8 +84,18 @@ export function GisWorkspacePage() {
     const dataLayers = createDataLayers(
       () => asOfRef.current,
       (name, status) => setLayerStatus((previous) => ({ ...previous, [name]: status })),
+      () => valueOptionsRef.current,
     );
     layersRef.current = dataLayers;
+    // Value bands follow the values loaded; the legend lists what is on the map.
+    const valuesSource = dataLayers.values.getSource()!;
+    valuesSource.on('featuresloadend', () => {
+      const features = valuesSource.getFeatures();
+      const bands = valueBands(features.map((f) => f.get('unitValue') as number | null).filter((v): v is number => v != null));
+      valueOptionsRef.current = { ...valueOptionsRef.current, bands };
+      dataLayers.values.changed();
+      setLegend(valueLegend(features, valueOptionsRef.current));
+    });
 
     const map = new OlMap({
       target: mapElement.current,
@@ -135,10 +156,24 @@ export function GisWorkspacePage() {
       return;
     }
     asOfRef.current = asOf;
-    for (const name of REFERENCE_LAYERS) {
+    for (const name of [...REFERENCE_LAYERS, 'values'] as const) {
       layersRef.current?.[name].getSource()?.refresh();
     }
   }, [asOf]);
+
+  // Another SMV reloads the values; another colouring only redraws them.
+  const changeValueOptions = (next: Partial<ValueMapOptions>) => {
+    const reload = next.smvId !== undefined && next.smvId !== valueOptionsRef.current.smvId;
+    valueOptionsRef.current = { ...valueOptionsRef.current, ...next };
+    setValueOptions(valueOptionsRef.current);
+    const layer = layersRef.current?.values;
+    if (reload) {
+      layer?.getSource()?.refresh();
+    } else if (layer) {
+      layer.changed();
+      setLegend(valueLegend(layer.getSource()?.getFeatures() ?? [], valueOptionsRef.current));
+    }
+  };
 
   const zoomToProperty = useCallback(
     async (propertyId: string, pin: string) => {
@@ -210,7 +245,8 @@ export function GisWorkspacePage() {
     const view = map.getView();
     const [lon, lat] = toLonLat(view.getCenter()!);
     const layers = LAYER_ORDER.filter((name) => visible[name]).join(',');
-    navigate(`/gis/print?center=${lon.toFixed(6)},${lat.toFixed(6)}&zoom=${(view.getZoom() ?? 0).toFixed(2)}&layers=${layers}&asOf=${asOf}`);
+    const value = visible.values ? `&colorBy=${valueOptions.colorBy}${valueOptions.smvId ? `&valueSmv=${valueOptions.smvId}` : ''}` : '';
+    navigate(`/gis/print?center=${lon.toFixed(6)},${lat.toFixed(6)}&zoom=${(view.getZoom() ?? 0).toFixed(2)}&layers=${layers}&asOf=${asOf}${value}`);
   };
 
   const zoomedOut = zoom < mapConfig.parcelMinZoom;
@@ -255,7 +291,7 @@ export function GisWorkspacePage() {
           ))}
           <div style={{ marginTop: 8 }}>
             <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
-              Boundaries as of
+              Boundaries and values as of
             </Typography.Text>
             <DatePicker
               size="small"
@@ -266,6 +302,10 @@ export function GisWorkspacePage() {
             />
           </div>
         </Card>
+
+        {visible.values && (
+          <ValueMapCard options={valueOptions} legend={legend} onChange={changeValueOptions} />
+        )}
 
         <Input.Search
           placeholder="PIN, lot, title or survey no."
@@ -396,5 +436,41 @@ function SelectionPanel({ selection, onOpenProfile }: { selection: Selection | n
         </Card>
       ))}
     </div>
+  );
+}
+
+/**
+ * The land value map's settings and legend (docs/analysis/smv-preparation-general-revision.md §4.4): the SMV the values come from — the
+ * approved one in force on the date, or a chosen SMV such as a proposed one — and whether parcels are coloured by sub-class or by value band.
+ */
+function ValueMapCard({ options, legend, onChange }: {
+  options: ValueMapOptions; legend: ValueLegendEntry[]; onChange: (next: Partial<ValueMapOptions>) => void;
+}) {
+  const { data: smvs } = useSmvs();
+  const choices = (smvs?.items ?? []).filter((s) => !['Rejected', 'Cancelled', 'Voided'].includes(s.status))
+    .sort((a, b) => b.effectivityDate.localeCompare(a.effectivityDate))
+    .map((s) => ({ value: s.id, label: `${s.reference || `Proposed ${s.revisionYear}`} — ${s.effectivityDate} (${s.status})` }));
+  return (
+    <Card size="small" title="Land value map" style={{ marginBottom: 12 }}>
+      <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Values from</Typography.Text>
+      <Select size="small" style={{ width: '100%' }} aria-label="SMV the values come from" value={options.smvId ?? ''} showSearch optionFilterProp="label"
+        onChange={(v) => onChange({ smvId: v || null })}
+        options={[{ value: '', label: 'The approved SMV in force' }, ...choices]} />
+      <Radio.Group size="small" style={{ marginTop: 8 }} value={options.colorBy} onChange={(e) => onChange({ colorBy: e.target.value })}
+        options={[{ value: 'subClass', label: 'By sub-class' }, { value: 'value', label: 'By value band' }]} optionType="button" />
+      <div style={{ marginTop: 8 }}>
+        {legend.length === 0 && <Typography.Text type="secondary" style={{ fontSize: 12 }}>Zoom in to street level to load the values.</Typography.Text>}
+        {legend.map((e) => (
+          <div key={`${e.color}-${e.label}`} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12 }}>
+            <span aria-hidden style={{ width: 14, height: 10, background: e.color, border: '1px solid #374151', flex: 'none' }} />
+            <span style={{ flex: 1 }}>{e.label}</span>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>{e.parcels}</Typography.Text>
+          </div>
+        ))}
+      </div>
+      <Typography.Paragraph type="secondary" style={{ fontSize: 11, margin: '8px 0 0' }}>
+        The unit value each parcel's land takes (its largest strip), as a valuation would select it; no lot adjustments or independent appraisals.
+      </Typography.Paragraph>
+    </Card>
   );
 }

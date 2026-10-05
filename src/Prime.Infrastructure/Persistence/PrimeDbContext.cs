@@ -93,6 +93,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
     public DbSet<TerritorialChangeItem> TerritorialChangeItems => Set<TerritorialChangeItem>();
     public DbSet<PropertyBarangayPart> PropertyBarangayParts => Set<PropertyBarangayPart>();
     public DbSet<Prime.Domain.Entities.Gis.DisputedArea> DisputedAreas => Set<Prime.Domain.Entities.Gis.DisputedArea>();
+    public DbSet<Prime.Domain.Entities.Gis.SubMarketArea> SubMarketAreas => Set<Prime.Domain.Entities.Gis.SubMarketArea>();
     public DbSet<TaxRate> TaxRates => Set<TaxRate>();
     public DbSet<PaymentSchedule> PaymentSchedules => Set<PaymentSchedule>();
     public DbSet<DiscountRule> DiscountRules => Set<DiscountRule>();
@@ -167,6 +168,26 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
     public DbSet<GeneralRevisionRunIssue> GeneralRevisionRunIssues => Set<GeneralRevisionRunIssue>();
     public DbSet<GeneralRevisionChecklistStepDefinition> GeneralRevisionChecklistStepDefinitions => Set<GeneralRevisionChecklistStepDefinition>();
     public DbSet<GeneralRevisionChecklistStep> GeneralRevisionChecklistSteps => Set<GeneralRevisionChecklistStep>();
+    public DbSet<SmvSimulationRun> SmvSimulationRuns => Set<SmvSimulationRun>();
+    public DbSet<SmvSimulationScope> SmvSimulationScopes => Set<SmvSimulationScope>();
+    public DbSet<SmvSimulationResult> SmvSimulationResults => Set<SmvSimulationResult>();
+    public DbSet<ValuationTestRun> ValuationTestRuns => Set<ValuationTestRun>();
+    public DbSet<ValuationTestScope> ValuationTestScopes => Set<ValuationTestScope>();
+    public DbSet<ValuationTestSale> ValuationTestSales => Set<ValuationTestSale>();
+    public DbSet<SmvPreparation> SmvPreparations => Set<SmvPreparation>();
+    public DbSet<SmvConsultation> SmvConsultations => Set<SmvConsultation>();
+    public DbSet<SmvPreparationEvent> SmvPreparationEvents => Set<SmvPreparationEvent>();
+    public DbSet<SmvTimeAdjustmentFactor> SmvTimeAdjustmentFactors => Set<SmvTimeAdjustmentFactor>();
+    public DbSet<SalesAnalysis> SalesAnalyses => Set<SalesAnalysis>();
+    public DbSet<SalesAnalysisScope> SalesAnalysisScopes => Set<SalesAnalysisScope>();
+    public DbSet<SalesAnalysisSale> SalesAnalysisSales => Set<SalesAnalysisSale>();
+    public DbSet<SalesAnalysisGroup> SalesAnalysisGroups => Set<SalesAnalysisGroup>();
+    public DbSet<SmvSubClassCriterion> SmvSubClassCriteria => Set<SmvSubClassCriterion>();
+    public DbSet<SmvSimulationResultLine> SmvSimulationResultLines => Set<SmvSimulationResultLine>();
+    public DbSet<RevenueImpactStudy> RevenueImpactStudies => Set<RevenueImpactStudy>();
+    public DbSet<RevenueImpactRate> RevenueImpactRates => Set<RevenueImpactRate>();
+    public DbSet<RevenueImpactOption> RevenueImpactOptions => Set<RevenueImpactOption>();
+    public DbSet<RevenueImpactOptionLevel> RevenueImpactOptionLevels => Set<RevenueImpactOptionLevel>();
 
     // Identity / authorization (CLAUDE.md §47; Supabase Auth owns credentials)
     public DbSet<AppUser> AppUsers => Set<AppUser>();
@@ -225,6 +246,8 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
         modelBuilder.Entity<NoticeOfCancellation>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.Property!.MunicipalityId));
         // General revision items follow their unit's city/municipality (smv-preparation-general-revision.md §4.6).
         modelBuilder.Entity<GeneralRevisionItem>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
+        modelBuilder.Entity<SmvSimulationResult>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
+        modelBuilder.Entity<ValuationTestSale>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
         // Market data (smv-preparation-general-revision.md §4.1): prices and parties stay within the office's jurisdiction.
         modelBuilder.Entity<Prime.Domain.Entities.MarketData.MarketTransaction>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));
         modelBuilder.Entity<Prime.Domain.Entities.MarketData.BuildingPermitAbstract>().HasQueryFilter(x => !JurisdictionRestricted || JurisdictionMunicipalities.Contains(x.MunicipalityId));

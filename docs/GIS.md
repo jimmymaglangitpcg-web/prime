@@ -129,6 +129,10 @@ Coordinates are WGS84 lon/lat throughout.
 | `GET /api/gis/parcels?bbox=minLon,minLat,maxLon,maxLat[&limit=]` | **Active** parcels intersecting the extent, as a GeoJSON FeatureCollection. Default 2000 features, max 5000 (a rendering limit, not a business rule); `truncated: true` + `limit` (RFC 7946 §6.1 foreign members) tell the client to zoom in. |
 | `GET /api/gis/parcels/at?lon=&lat=` | Active parcels at a clicked point. Uses intersects, so a click on a shared edge returns both neighbours; more than one hit on an interior point means overlapping boundaries — a data-quality issue to surface, not hide. |
 | `PUT /api/parcels/{id}/geometry` | Set or replace a boundary. Body `{ geometryWkt, version, reason }`. |
+| `GET /api/gis/value-map?bbox=&smvId=&asOf=&limit=` | The **land value map** (L6-4; docs/analysis/smv-preparation-general-revision.md §4.4): land parcels in the extent with the principal class, sub-class and use of their land's largest strip and the unit value they take under the SMV — `smvId` a chosen (e.g. proposed) SMV, any status; none: the approved SMV in force on `asOf`. Rates come from the valuation engine's own selection (`IValuationService.LandRateAsync`), cached per key per request; no lot adjustments or independent appraisals. A parcel with no land or no rate carries the reason. Unit values only — no owner, no property market value. |
+
+The reference layer `submarketareas` (L6-4) holds sub-market area polygons for the land value map, keyed by their own code with a
+name, effective-dated and imported like `disputedareas`; it is shown, never used to value.
 
 **Feature properties are identifiers only** — parcel/property ids, PIN,
 lot/block/survey numbers, barangay. No owner names, TINs or values: the map

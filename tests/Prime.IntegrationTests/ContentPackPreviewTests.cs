@@ -67,6 +67,22 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
     private static IEnumerable<string> Codes(ContentPackPreviewDto p) => p.Issues.Concat(p.Files.SelectMany(f => f.Issues)).Select(i => i.Code);
 
     [Fact]
+    public async Task ProposedSmvsWithoutAReference_DoNotDisturbThePreview()
+    {
+        // L6-2a: an SMV being prepared has neither an ordinance number nor a certification reference yet; a pack cannot name it.
+        var (service, db, scope) = await BeginAsync(Path.Combine(RepoRoot(), "samples"));
+        await using var _ = scope;
+        await db.Provinces.Where(x => x.PinIndexNumber == "998").ExecuteUpdateAsync(s => s.SetProperty(x => x.PinIndexNumber, (string?)null));
+        db.Smvs.AddRange(
+            new Smv { Basis = SmvBasis.Certified, Status = WorkflowStatus.Draft, EffectivityDate = new DateOnly(2199, 1, 1), RevisionYear = 2199 },
+            new Smv { Basis = SmvBasis.Certified, Status = WorkflowStatus.Draft, EffectivityDate = new DateOnly(2199, 1, 1), RevisionYear = 2199 });
+        await db.SaveChangesAsync();
+
+        var preview = (await service.PreviewAsync("content-demo")).Value;
+        preview.Files.SelectMany(f => f.Issues).Where(i => i.Severity == ContentIssueSeverity.Error).ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task DemoPack_PreviewsClean_AndWritesNothing()
     {
         var (service, db, scope) = await BeginAsync(Path.Combine(RepoRoot(), "samples"));
@@ -262,4 +278,42 @@ public class ContentPackPreviewTests(WebApplicationFactory<Program> factory) : I
         preview.Files.Single(f => f.Kind == "smv-schedules").Issues.ShouldContain(i => i.Code == "SMV_UNKNOWN" && i.Line == 2);
         Directory.Delete(root, recursive: true);
     }
+
+    /// <summary>Step L6-7: an amendment in a pack names an approved SMV already in PRIME, its ground and its certification (DEMO content).</summary>
+    [Fact]
+    public async Task SmvFiles_CheckAmendments()
+    {
+        var tag = Guid.NewGuid().ToString("N")[..8];
+        var root = TempPack("smv-amend", new Dictionary<string, string>
+        {
+            ["manifest.json"] = """
+                { "schemaVersion": 1, "pack": "smv-amend", "version": "T1", "files": [ { "kind": "smv", "path": "smv.json", "source": "DEMO" } ] }
+                """,
+            ["smv.json"] = $$"""
+                [
+                  { "basis": "Amendment", "amends": "DEMO-NONE-{{tag}}", "amendmentGround": "Calamity", "certificationReference": "DEMO-A1-{{tag}}", "effectivityDate": "2026-07-01" },
+                  { "basis": "Amendment", "amends": "DEMO-DRAFT-{{tag}}", "amendmentGround": "Calamity", "certificationReference": "DEMO-A2-{{tag}}", "effectivityDate": "2026-07-01" },
+                  { "basis": "Amendment", "amends": "DEMO-ORD-{{tag}}", "amendmentGround": "Flood", "certificationReference": "DEMO-A3-{{tag}}", "effectivityDate": "2026-07-01" },
+                  { "basis": "Amendment", "amends": "DEMO-ORD-{{tag}}", "amendmentGround": "Calamity", "effectivityDate": "2026-07-01" },
+                  { "basis": "Amendment", "amends": "DEMO-ORD-{{tag}}", "amendmentGround": "Infrastructure", "certificationReference": "DEMO-A5-{{tag}}", "effectivityDate": "2026-07-01" }
+                ]
+                """,
+        });
+        var (service, db, scope) = await BeginAsync(root);
+        await using var _ = scope;
+        db.Smvs.AddRange(
+            new Smv { OrdinanceNumber = $"DEMO-ORD-{tag}", OrdinanceDate = new DateOnly(2025, 1, 1), EffectivityDate = new DateOnly(2026, 1, 1), RevisionYear = 2026,
+                Status = WorkflowStatus.Approved },
+            new Smv { OrdinanceNumber = $"DEMO-DRAFT-{tag}", OrdinanceDate = new DateOnly(2025, 1, 1), EffectivityDate = new DateOnly(2026, 1, 1), RevisionYear = 2026 });
+        await db.SaveChangesAsync();
+
+        var file = (await service.PreviewAsync("smv-amend")).Value.Files.Single();
+        file.Issues.Select(i => (i.Code, i.Field)).ShouldBe([
+            ("SMV_NOT_FOUND", "[1].amends"), ("SMV_NOT_APPROVED", "[2].amends"), ("VALUE_INVALID", "[3].amendmentGround"),
+            ("VALIDATION_FAILED", "[4].certificationReference"),
+        ]);
+        file.New.ShouldBe(1);
+        Directory.Delete(root, recursive: true);
+    }
 }
+

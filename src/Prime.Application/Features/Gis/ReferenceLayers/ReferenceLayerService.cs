@@ -132,6 +132,7 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
         ReferenceLayer.Zones => nameof(ZoneBoundary),
         ReferenceLayer.Sections => nameof(SectionBoundary),
         ReferenceLayer.DisputedAreas => nameof(DisputedArea),
+        ReferenceLayer.SubMarketAreas => nameof(SubMarketArea),
         _ => nameof(RoadSegment),
     };
 
@@ -303,6 +304,7 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
                 (id, geometry) => new ZoneBoundary { ZoneId = id, Geometry = geometry },
                 v => db.ZoneBoundaries.Add(v)),
             ReferenceLayer.DisputedAreas => await PlanDisputedAreasAsync(features, effectiveDate, options, errors, cancellationToken),
+            ReferenceLayer.SubMarketAreas => await PlanSubMarketAreasAsync(features, effectiveDate, options, errors, cancellationToken),
             _ => await PlanRoadsAsync(features, effectiveDate, options, errors, cancellationToken),
         };
     }
@@ -330,6 +332,33 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
         {
             PlanVersion(feature, versions[feature.Key].Cast<SpatialLayerFeature>().ToList(), effectiveDate, errors, plan,
                 options.SkipUnchanged ? v => ((DisputedArea)v).Geometry.EqualsExact(feature.Geometry) && ((DisputedArea)v).Name == feature.Name : null);
+        }
+        return plan;
+    }
+
+    /// <summary>Sub-market areas are keyed by their own code, as disputed areas are.</summary>
+    private async Task<ImportPlan> PlanSubMarketAreasAsync(
+        List<ParsedFeature> features, DateOnly effectiveDate, ReferenceLayerImportOptions options, List<ImportIssue> errors, CancellationToken cancellationToken)
+    {
+        var keys = features.Select(f => f.Key).ToList();
+        var versions = (await db.SubMarketAreas.Where(v => keys.Contains(v.Code)).ToListAsync(cancellationToken)).ToLookup(v => v.Code);
+        var plan = new ImportPlan
+        {
+            AddNewVersions = (p, batchId, date, source, sourceReference) =>
+            {
+                foreach (var (feature, supersedes) in p.Accepted)
+                {
+                    var area = new SubMarketArea { Code = feature.Key, Name = feature.Name, Geometry = (MultiPolygon)feature.Geometry };
+                    Stamp(area, batchId, date, source, sourceReference);
+                    db.SubMarketAreas.Add(area);
+                    p.Added.Add((feature, supersedes, area));
+                }
+            },
+        };
+        foreach (var feature in features)
+        {
+            PlanVersion(feature, versions[feature.Key].Cast<SpatialLayerFeature>().ToList(), effectiveDate, errors, plan,
+                options.SkipUnchanged ? v => ((SubMarketArea)v).Geometry.EqualsExact(feature.Geometry) && ((SubMarketArea)v).Name == feature.Name : null);
         }
         return plan;
     }
@@ -548,6 +577,11 @@ public sealed class ReferenceLayerService(IApplicationDbContext db, ICurrentUser
                 .Where(v => v.EffectiveDate <= date && (v.EndDate == null || v.EndDate > date) && v.Geometry.Intersects(extent))
                 .OrderBy(v => v.Id).Take(effectiveLimit + 1)
                 .Select(v => new LayerRow(v.Id, v.Zone!.Code, v.Zone.Name, v.EffectiveDate, v.EndDate, v.Source, v.SourceReference, v.Geometry))
+                .ToListAsync(cancellationToken),
+            ReferenceLayer.SubMarketAreas => await db.SubMarketAreas
+                .Where(v => v.EffectiveDate <= date && (v.EndDate == null || v.EndDate > date) && v.Geometry.Intersects(extent))
+                .OrderBy(v => v.Id).Take(effectiveLimit + 1)
+                .Select(v => new LayerRow(v.Id, v.Code, v.Name, v.EffectiveDate, v.EndDate, v.Source, v.SourceReference, v.Geometry))
                 .ToListAsync(cancellationToken),
             ReferenceLayer.DisputedAreas => await db.DisputedAreas
                 .Where(v => v.EffectiveDate <= date && (v.EndDate == null || v.EndDate > date) && v.Geometry.Intersects(extent))

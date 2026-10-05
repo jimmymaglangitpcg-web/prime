@@ -98,6 +98,10 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(Prime.Application.Features.Exemptions.ExemptionsOptions.SectionName))
             .Validate(o => o.ProofPeriodDays > 0, "Exemptions:ProofPeriodDays must be positive.")
             .ValidateOnStart();
+        services.AddOptions<Prime.Application.Features.Smv.SmvPreparationOptions>()
+            .Bind(configuration.GetSection(Prime.Application.Features.Smv.SmvPreparationOptions.SectionName));
+        services.AddOptions<Prime.Application.Features.SmvSimulations.ValuationTestingOptions>()
+            .Bind(configuration.GetSection(Prime.Application.Features.SmvSimulations.ValuationTestingOptions.SectionName));
         services.AddOptions<Prime.Application.Features.GeneralRevision.GeneralRevisionOptions>()
             .Bind(configuration.GetSection(Prime.Application.Features.GeneralRevision.GeneralRevisionOptions.SectionName))
             .Validate(o => o.CalamitySuspensionDays > 0, "GeneralRevision:CalamitySuspensionDays must be positive.")

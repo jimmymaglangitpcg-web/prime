@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
+using Prime.Domain.Common;
 using Prime.Domain.DomainServices;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
@@ -36,8 +37,14 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
     /// the factors in force under that SMV; each improvement at the rate for
     /// its kind. A land with no strips is valued from its own fields.
     /// </summary>
-    public async Task<Result<ValuationDto>> ComputeForLandAsync(Guid landId, CancellationToken cancellationToken = default, DateOnly? asOf = null)
+    public async Task<Result<ValuationDto>> ComputeForLandAsync(Guid landId, CancellationToken cancellationToken = default, DateOnly? asOf = null,
+        ValuationMode? mode = null)
     {
+        mode ??= ValuationMode.Stored;
+        if (await ModeProblemAsync(mode, cancellationToken) is { } modeProblem)
+        {
+            return Result.Failure<ValuationDto>(modeProblem.Code!, modeProblem.Message!);
+        }
         var land = await db.Lands.Include(x => x.Strips).Include(x => x.Improvements).ThenInclude(i => i.ImprovementKind)
             .Include(x => x.Adjustments).FirstOrDefaultAsync(x => x.Id == landId, cancellationToken);
         if (land is null)
@@ -86,25 +93,21 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         foreach (var row in rows.Where(_ => landAppraisal is null))
         {
             var schedule = await ResolveScheduleAsync(row.PricedClassificationId, propertyType.Id, null, location.MunicipalityId,
-                new SmvRateKey(row.PricedSubClassificationId, row.ZoneId, location.BarangayId, row.ActualUseId), date, cancellationToken);
+                new SmvRateKey(row.PricedSubClassificationId, row.ZoneId, location.BarangayId, row.ActualUseId), date, mode, cancellationToken);
             if (schedule is null)
             {
                 return Result.Failure<ValuationDto>("SMV_SCHEDULE_NOT_FOUND",
-                    $"No approved SMV schedule covering this municipality matches land strip {row.Sequence}'s classification/sub-class/zone as of {date:yyyy-MM-dd}.");
+                    $"No {RateSourceName(mode)} covering this municipality matches land strip {row.Sequence}'s classification/sub-class/zone as of {date:yyyy-MM-dd}.");
             }
             // Each named factor's percentage comes from its rule and the land's facts (valuation-foundation.md §4.4).
             var adjustments = new List<LandAdjustmentInput>();
             foreach (var adjustment in land.Adjustments.Where(a => a.LandStripId == null || a.LandStripId == row.StripId).OrderBy(a => a.FactorCode))
             {
-                var factor = await db.AdjustmentFactors.InForce(date).Include(f => f.Rows)
-                    .Where(f => f.SmvId == schedule.SmvId && f.Code == adjustment.FactorCode
-                        && (f.ClassificationId == null || f.ClassificationId == row.ClassificationId))
-                    .OrderByDescending(f => f.ClassificationId != null)
-                    .FirstOrDefaultAsync(cancellationToken);
+                var factor = await FactorAsync(schedule.SmvId, adjustment.FactorCode, row.ClassificationId, date, mode, cancellationToken);
                 if (factor is null)
                 {
                     return Result.Failure<ValuationDto>("ADJUSTMENT_FACTOR_NOT_FOUND",
-                        $"No approved adjustment factor '{adjustment.FactorCode}' for this classification is in force under the SMV that prices land strip {row.Sequence}.");
+                        $"No {(mode.ProposedSmvId is null ? "approved " : "")}adjustment factor '{adjustment.FactorCode}' for this classification is in force under the SMV that prices land strip {row.Sequence}.");
                 }
                 var outcome = AdjustmentRules.Evaluate(factor, facts, row.DepthBand);
                 if (outcome.Problem is { } problem)
@@ -127,18 +130,20 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         }
 
         // The land's own improvements; separately owned ones are valued under their own unit.
-        var improvements = await ImprovementLinesAsync(land, land.Improvements.Where(i => i.SeparateRpuId == null), propertyType.Id, location, date, cancellationToken);
+        var improvements = await ImprovementLinesAsync(land, land.Improvements.Where(i => i.SeparateRpuId == null), propertyType.Id, location, date, mode,
+            cancellationToken);
         if (improvements.IsFailure)
         {
             return Result.Failure<ValuationDto>(improvements.Code!, improvements.Message!);
         }
         lines.AddRange(improvements.Value);
 
-        var valuation = PersistRated(land.RpuId, land.PropertyId, land.Id, lines, date);
-        land.MarketValue = valuation.ComputedMarketValue;
-        await db.SaveChangesAsync(cancellationToken);
-
-        return Result.Success(await MapAsync(valuation.Id, cancellationToken));
+        var valuation = PersistRated(land.RpuId, land.PropertyId, land.Id, lines, date, mode);
+        if (!mode.ComputeOnly)
+        {
+            land.MarketValue = valuation.ComputedMarketValue;
+        }
+        return Result.Success(await FinishAsync(valuation, mode, cancellationToken));
     }
 
     /// <summary>
@@ -147,7 +152,8 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
     /// for their kinds (LAM Bk III p.72; docs/analysis/valuation-foundation.md §4.4). Assessed like
     /// land improvements, under their own classification and use or the land's principal strip's.
     /// </summary>
-    private async Task<Result<ValuationDto>> ComputeForSeparateImprovementsAsync(RealPropertyUnit rpu, CancellationToken cancellationToken, DateOnly? asOf)
+    private async Task<Result<ValuationDto>> ComputeForSeparateImprovementsAsync(RealPropertyUnit rpu, CancellationToken cancellationToken, DateOnly? asOf,
+        ValuationMode mode)
     {
         var owned = await db.LandImprovements.Include(i => i.ImprovementKind).Where(i => i.SeparateRpuId == rpu.Id).ToListAsync(cancellationToken);
         if (owned.Count == 0)
@@ -162,19 +168,19 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
             return Result.Failure<ValuationDto>("PROPERTY_TYPE_NOT_CONFIGURED", $"No PropertyType with code '{PropertyTypeCodes.Land}' is configured.");
         }
         var date = asOf ?? clock.Today;
-        var lines = await ImprovementLinesAsync(land, owned, propertyType.Id, await LocationAsync(land.PropertyId, cancellationToken), date, cancellationToken);
+        var lines = await ImprovementLinesAsync(land, owned, propertyType.Id, await LocationAsync(land.PropertyId, cancellationToken), date, mode, cancellationToken);
         if (lines.IsFailure)
         {
             return Result.Failure<ValuationDto>(lines.Code!, lines.Message!);
         }
-        var valuation = PersistRated(rpu.Id, rpu.PropertyId, land.Id, lines.Value, date);
-        await db.SaveChangesAsync(cancellationToken);
-        return Result.Success(await MapAsync(valuation.Id, cancellationToken));
+        var valuation = PersistRated(rpu.Id, rpu.PropertyId, land.Id, lines.Value, date, mode);
+        return Result.Success(await FinishAsync(valuation, mode, cancellationToken));
     }
 
     /// <summary>Improvement lines at the rate for their kind, assessed under their own classification and use, or the principal strip's.</summary>
     private async Task<Result<List<(ValuationLine Line, SmvSchedule? Schedule, ValuationCalculationResult Calc)>>> ImprovementLinesAsync(Land land,
-        IEnumerable<LandImprovement> improvements, Guid propertyTypeId, (Guid? MunicipalityId, Guid? BarangayId) location, DateOnly date, CancellationToken ct)
+        IEnumerable<LandImprovement> improvements, Guid propertyTypeId, (Guid? MunicipalityId, Guid? BarangayId) location, DateOnly date, ValuationMode mode,
+        CancellationToken ct)
     {
         var lines = new List<(ValuationLine Line, SmvSchedule? Schedule, ValuationCalculationResult Calc)>();
         var principal = land.Strips.OrderByDescending(x => x.Area).ThenBy(x => x.Sequence).FirstOrDefault();
@@ -183,11 +189,11 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
             var classificationId = improvement.ClassificationId ?? principal?.ClassificationId ?? land.ClassificationId;
             var actualUseId = improvement.ActualUseId ?? principal?.ActualUseId ?? land.ActualUseId;
             var schedule = await ResolveScheduleAsync(classificationId, propertyTypeId, improvement.ImprovementKindId, location.MunicipalityId,
-                new SmvRateKey(null, land.ZoneId, location.BarangayId, actualUseId), date, ct);
+                new SmvRateKey(null, land.ZoneId, location.BarangayId, actualUseId), date, mode, ct);
             if (schedule is null)
             {
                 return Result.Failure<List<(ValuationLine, SmvSchedule?, ValuationCalculationResult)>>("SMV_SCHEDULE_NOT_FOUND",
-                    $"No approved SMV schedule gives a rate for '{improvement.ImprovementKind!.Name}' under this classification/actual use as of {date:yyyy-MM-dd}.");
+                    $"No {RateSourceName(mode)} gives a rate for '{improvement.ImprovementKind!.Name}' under this classification/actual use as of {date:yyyy-MM-dd}.");
             }
             lines.Add((new ValuationLine
             {
@@ -204,7 +210,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
     /// names the SMV of the first rate-based line.
     /// </summary>
     private Prime.Domain.Entities.Valuation PersistRated(Guid rpuId, Guid propertyId, Guid landId,
-        List<(ValuationLine Line, SmvSchedule? Schedule, ValuationCalculationResult Calc)> lines, DateOnly date)
+        List<(ValuationLine Line, SmvSchedule? Schedule, ValuationCalculationResult Calc)> lines, DateOnly date, ValuationMode mode)
     {
         foreach (var (line, schedule, _) in lines)
         {
@@ -218,7 +224,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         }
         var first = lines.FirstOrDefault(x => x.Schedule is not null).Schedule;
         return PersistLines(rpuId, propertyId, ValuationSourceType.Land, landId, lines.Select(x => (x.Line, x.Calc)).ToList(),
-            first?.SmvId, lines.Count == 1 ? first?.Id : null, date);
+            first?.SmvId, lines.Count == 1 ? first?.Id : null, date, mode);
     }
 
     /// <summary>The current independent appraisals of a unit's subjects, by subject id (§4.7).</summary>
@@ -257,8 +263,13 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
     /// <param name="transactionTypeId">The transaction it is valued for: whether its type allows a new depreciation.</param>
     /// <param name="generalRevision">A general revision: a new depreciation (LAM Bk III p.73).</param>
     public async Task<Result<ValuationDto>> ComputeForBuildingAsync(Guid buildingId, CancellationToken cancellationToken = default, DateOnly? asOf = null,
-        Guid? transactionTypeId = null, bool generalRevision = false, DateOnly? rulesAsOf = null)
+        Guid? transactionTypeId = null, bool generalRevision = false, DateOnly? rulesAsOf = null, ValuationMode? mode = null)
     {
+        mode ??= ValuationMode.Stored;
+        if (await ModeProblemAsync(mode, cancellationToken) is { } modeProblem)
+        {
+            return Result.Failure<ValuationDto>(modeProblem.Code!, modeProblem.Message!);
+        }
         var building = await db.Buildings.Include(x => x.UsePortions).Include(x => x.Components).ThenInclude(c => c.ComponentType)
             .Include(x => x.StructuralType)
             .FirstOrDefaultAsync(x => x.Id == buildingId, cancellationToken);
@@ -313,22 +324,26 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 Source = p.Source, SourceId = p.SourceId, ClassificationId = p.ClassificationId, SubClassificationId = p.SubClassificationId,
                 ActualUseId = p.ActualUseId, Quantity = p.Area, Unit = "sqm",
             }), Rounded(AppraisedValue(buildingAppraisal, total == 0 ? 1m : p.Area / total, shares[i])))).ToList();
-            var appraisedValuation = PersistLines(building.RpuId, building.PropertyId, ValuationSourceType.Building, building.Id, appraisedLines, null, null, date);
+            var appraisedValuation = PersistLines(building.RpuId, building.PropertyId, ValuationSourceType.Building, building.Id, appraisedLines, null, null, date, mode);
             appraisedValuation.TransactionTypeId = transactionTypeId;
-            building.MarketValue = appraisedValuation.ComputedMarketValue;
-            await db.SaveChangesAsync(cancellationToken);
-            return Result.Success(await MapAsync(appraisedValuation.Id, cancellationToken));
+            if (!mode.ComputeOnly)
+            {
+                building.MarketValue = appraisedValuation.ComputedMarketValue;
+            }
+            return Result.Success(await FinishAsync(appraisedValuation, mode, cancellationToken));
         }
 
-        // The SMV's construction costs, if the SMV in force covering the property has any (§4.5).
-        var costs = await db.SmvBuildingCosts.InForce(rules).Include(x => x.Smv)
-            .Where(x => x.Smv!.Status == WorkflowStatus.Approved && x.Smv.EffectivityDate <= rules
-                && (!x.Smv.Coverage.Any() || x.Smv.Coverage.Any(c => c.MunicipalityId == location.MunicipalityId)))
+        // The SMV's construction costs, if the SMV in force covering the property — or the proposed SMV — has any (§4.5).
+        var costQuery = Rules(db.SmvBuildingCosts, rules, mode).Include(x => x.Smv)
+            .Where(x => !x.Smv!.Coverage.Any() || x.Smv.Coverage.Any(c => c.MunicipalityId == location.MunicipalityId));
+        var costs = await (mode.ProposedSmvId is { } proposedId
+                ? costQuery.Where(x => x.SmvId == proposedId)
+                : costQuery.Where(x => x.Smv!.Status == WorkflowStatus.Approved && x.Smv.EffectivityDate <= rules))
             .ToListAsync(cancellationToken);
         if (costs.Count > 0)
         {
             return await ValueBuildingByCostAsync(building, portions.Select(p => (p.Source, p.SourceId, p.PortionId, p.ClassificationId, p.SubClassificationId, p.ActualUseId, p.Area)).ToList(),
-                costs, appraisals, date, rules, transactionTypeId, generalRevision, cancellationToken);
+                costs, appraisals, date, rules, transactionTypeId, generalRevision, mode, cancellationToken);
         }
 
         // Additional items: those tied to a portion go to it; the rest are spread by floor area.
@@ -343,13 +358,13 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
             var p = portions[i];
             // Zone-based rates exist on Land only (§24): buildings resolve a zone-agnostic schedule.
             var schedule = await ResolveScheduleAsync(p.ClassificationId, propertyType.Id, null, location.MunicipalityId,
-                new SmvRateKey(null, null, null, p.ActualUseId), rules, cancellationToken);
+                new SmvRateKey(null, null, null, p.ActualUseId), rules, mode, cancellationToken);
             if (schedule is null)
             {
                 return Result.Failure<ValuationDto>("SMV_SCHEDULE_NOT_FOUND",
                     portions.Count == 1 && p.PortionId is null
-                        ? $"No approved SMV schedule matches this Building's Tax Declaration classification/actual use as of {rules:yyyy-MM-dd}."
-                        : $"No approved SMV schedule matches use portion {p.Sequence}'s classification/actual use as of {rules:yyyy-MM-dd}.");
+                        ? $"No {RateSourceName(mode)} matches this Building's Tax Declaration classification/actual use as of {rules:yyyy-MM-dd}."
+                        : $"No {RateSourceName(mode)} matches use portion {p.Sequence}'s classification/actual use as of {rules:yyyy-MM-dd}.");
             }
             var additional = spread[i] + items.Where(c => c.BuildingUsePortionId != null && c.BuildingUsePortionId == p.PortionId).Sum(ItemCost);
             lines.Add((new ValuationLine
@@ -360,13 +375,14 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         }
 
         var valuation = PersistLines(building.RpuId, building.PropertyId, ValuationSourceType.Building, building.Id,
-            lines.Select(x => (x.Line, x.Calc)).ToList(), lines[0].Schedule.SmvId, lines.Count == 1 ? lines[0].Schedule.Id : null, date);
+            lines.Select(x => (x.Line, x.Calc)).ToList(), lines[0].Schedule.SmvId, lines.Count == 1 ? lines[0].Schedule.Id : null, date, mode);
         valuation.TransactionTypeId = transactionTypeId;
         valuation.RulesAsOf = rules != date ? rules : null;
-        building.MarketValue = valuation.ComputedMarketValue;
-        await db.SaveChangesAsync(cancellationToken);
-
-        return Result.Success(await MapAsync(valuation.Id, cancellationToken));
+        if (!mode.ComputeOnly)
+        {
+            building.MarketValue = valuation.ComputedMarketValue;
+        }
+        return Result.Success(await FinishAsync(valuation, mode, cancellationToken));
     }
 
     /// <summary>
@@ -379,18 +395,20 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
     private async Task<Result<ValuationDto>> ValueBuildingByCostAsync(Building building,
         List<(ValuationLineSource Source, Guid SourceId, Guid? PortionId, Guid ClassificationId, Guid? SubClassificationId, Guid ActualUseId, decimal Area)> portions,
         List<SmvBuildingCost> costs, Dictionary<Guid, IndependentAppraisal> appraisals, DateOnly date, DateOnly rules, Guid? transactionTypeId, bool generalRevision,
-        CancellationToken ct)
+        ValuationMode mode, CancellationToken ct)
     {
         var smv = costs.Select(x => x.Smv!).OrderByDescending(x => x.EffectivityDate).First();
         var structure = building.StructuralType!.Name;
         var ofStructure = costs.Where(x => x.SmvId == smv.Id && x.StructuralTypeId == building.StructuralTypeId
             && (x.BuildingTypeId == null || x.BuildingTypeId == building.BuildingTypeId)).ToList();
-        // Each portion's BUCC: the most specific row for the building's kind and the portion's classification.
+        // Each portion's BUCC: the most specific row for the building's kind and the portion's classification
+        // (under a proposed SMV, of rows for the same key the newest).
         var buccs = new List<SmvBuildingCost>();
         for (var i = 0; i < portions.Count; i++)
         {
             var bucc = ofStructure.Where(x => x.ClassificationId == null || x.ClassificationId == portions[i].ClassificationId)
-                .OrderByDescending(x => x.BuildingTypeId != null).ThenByDescending(x => x.ClassificationId != null).FirstOrDefault();
+                .OrderByDescending(x => x.BuildingTypeId != null).ThenByDescending(x => x.ClassificationId != null)
+                .ThenByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt).FirstOrDefault();
             if (bucc is null)
             {
                 return Result.Failure<ValuationDto>("BUILDING_COST_NOT_FOUND",
@@ -409,7 +427,8 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
             // An item outside the SMV is valued by its independent appraisal (§4.7).
             var itemAppraisal = appraisals.GetValueOrDefault(item.Id);
             var price = itemAppraisal is not null ? null
-                : await db.SmvExtraItemCosts.InForce(rules).FirstOrDefaultAsync(x => x.SmvId == smv.Id && x.ComponentTypeId == item.ComponentTypeId, ct);
+                : await Newest(Rules(db.SmvExtraItemCosts, rules, mode).Where(x => x.SmvId == smv.Id && x.ComponentTypeId == item.ComponentTypeId))
+                    .FirstOrDefaultAsync(ct);
             if (itemAppraisal is null && price is null)
             {
                 return Result.Failure<ValuationDto>("EXTRA_ITEM_COST_NOT_FOUND",
@@ -447,12 +466,13 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         }
         else
         {
-            var table = await db.SmvDepreciationSchedules.InForce(rules).Include(x => x.Rows)
-                .FirstOrDefaultAsync(x => x.SmvId == smv.Id && x.StructuralTypeId == building.StructuralTypeId, ct);
+            var table = await Newest(Rules(db.SmvDepreciationSchedules, rules, mode).Include(x => x.Rows)
+                .Where(x => x.SmvId == smv.Id && x.StructuralTypeId == building.StructuralTypeId))
+                .FirstOrDefaultAsync(ct);
             if (table is null)
             {
                 return Result.Failure<ValuationDto>("DEPRECIATION_TABLE_NOT_FOUND",
-                    $"The SMV {smv.Reference} has no approved depreciation table for structural type {structure} in force on {rules:yyyy-MM-dd}.");
+                    $"The SMV {smv.Reference} has no {(mode.ProposedSmvId is null ? "approved " : "")}depreciation table for structural type {structure} in force on {rules:yyyy-MM-dd}.");
             }
             if (BuildingDepreciation.Age(building, date) is not { } age)
             {
@@ -478,14 +498,16 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
             }, Rounded(ValuationCalculator.CalculateBuildingByCost(p.Area, bucc.CostPerSquareMetre, shares[i], building.CompletionPercentage, depreciation))));
         }
 
-        var valuation = PersistLines(building.RpuId, building.PropertyId, ValuationSourceType.Building, building.Id, lines, smv.Id, null, date);
+        var valuation = PersistLines(building.RpuId, building.PropertyId, ValuationSourceType.Building, building.Id, lines, smv.Id, null, date, mode);
         valuation.TransactionTypeId = transactionTypeId;
         valuation.RulesAsOf = rules != date ? rules : null;
-        building.MarketValue = valuation.ComputedMarketValue;
-        building.Depreciation = depreciation.Percent;
-        building.DepreciatedValue = valuation.ComputedMarketValue;
-        await db.SaveChangesAsync(ct);
-        return Result.Success(await MapAsync(valuation.Id, ct));
+        if (!mode.ComputeOnly)
+        {
+            building.MarketValue = valuation.ComputedMarketValue;
+            building.Depreciation = depreciation.Percent;
+            building.DepreciatedValue = valuation.ComputedMarketValue;
+        }
+        return Result.Success(await FinishAsync(valuation, mode, ct));
     }
 
     /// <summary>The depreciation percent of the building unit's last posted valuation, if it recorded one.</summary>
@@ -514,8 +536,13 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
     /// classification or use is assessed under the unit's Tax Declaration's.
     /// </summary>
     public async Task<Result<ValuationDto>> ComputeForMachineryAsync(Guid machineryId, CancellationToken cancellationToken = default, DateOnly? asOf = null,
-        DateOnly? rulesAsOf = null)
+        DateOnly? rulesAsOf = null, ValuationMode? mode = null)
     {
+        mode ??= ValuationMode.Stored;
+        if (await ModeProblemAsync(mode, cancellationToken) is { } modeProblem)
+        {
+            return Result.Failure<ValuationDto>(modeProblem.Code!, modeProblem.Message!);
+        }
         var machinery = await db.MachineryUnits.FirstOrDefaultAsync(x => x.Id == machineryId, cancellationToken);
         if (machinery is null)
         {
@@ -563,6 +590,10 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 Description = string.Join(" ", new[] { machine.Brand, machine.Model, machine.Description }.Where(x => !string.IsNullOrWhiteSpace(x))) is { Length: > 0 } d ? d : null,
             };
             lines.Add((machineAppraisal is null ? line : Appraised(machineAppraisal, line), calc));
+            if (mode.ComputeOnly)
+            {
+                continue;
+            }
             machine.MarketValue = calc.MarketValue;
             if (calc.Breakdown.TryGetValue("DepreciationPercent", out var depreciationPercent))
             {
@@ -571,11 +602,9 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         }
 
         // Valuation.SourceId names the unit's first machine; the lines name each machine.
-        var valuation = PersistLines(machinery.RpuId, machinery.PropertyId, ValuationSourceType.Machinery, machines[0].Id, lines, null, null, date);
+        var valuation = PersistLines(machinery.RpuId, machinery.PropertyId, ValuationSourceType.Machinery, machines[0].Id, lines, null, null, date, mode);
         valuation.RulesAsOf = rulesAsOf is { } r && r != date ? r : null;
-        await db.SaveChangesAsync(cancellationToken);
-
-        return Result.Success(await MapAsync(valuation.Id, cancellationToken));
+        return Result.Success(await FinishAsync(valuation, mode, cancellationToken));
     }
 
     /// <summary>
@@ -638,8 +667,10 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
     /// (docs/analysis/mrpaao-forms-model.md §8.4). Used by general revision.
     /// </summary>
     public async Task<Result<ValuationDto>> ComputeForRpuAsync(Guid rpuId, CancellationToken cancellationToken = default, DateOnly? asOf = null,
-        Guid? transactionTypeId = null, bool generalRevision = false, DateOnly? buildingRulesAsOf = null, DateOnly? machineryRulesAsOf = null)
+        Guid? transactionTypeId = null, bool generalRevision = false, DateOnly? buildingRulesAsOf = null, DateOnly? machineryRulesAsOf = null,
+        ValuationMode? mode = null)
     {
+        mode ??= ValuationMode.Stored;
         var rpu = await db.RealPropertyUnits.FirstOrDefaultAsync(x => x.Id == rpuId, cancellationToken);
         if (rpu is null)
         {
@@ -651,22 +682,44 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                 var land = await db.Lands.Where(x => x.RpuId == rpuId).Select(x => (Guid?)x.Id).FirstOrDefaultAsync(cancellationToken);
                 return land is null
                     ? Result.Failure<ValuationDto>("LAND_NOT_FOUND", "No Land record exists for this RPU.")
-                    : await ComputeForLandAsync(land.Value, cancellationToken, asOf);
+                    : await ComputeForLandAsync(land.Value, cancellationToken, asOf, mode);
             case RpuType.Building:
                 var building = await db.Buildings.Where(x => x.RpuId == rpuId).Select(x => (Guid?)x.Id).FirstOrDefaultAsync(cancellationToken);
                 return building is null
                     ? Result.Failure<ValuationDto>("BUILDING_NOT_FOUND", "No Building record exists for this RPU.")
-                    : await ComputeForBuildingAsync(building.Value, cancellationToken, asOf, transactionTypeId, generalRevision, buildingRulesAsOf);
+                    : await ComputeForBuildingAsync(building.Value, cancellationToken, asOf, transactionTypeId, generalRevision, buildingRulesAsOf, mode);
             case RpuType.OtherImprovement:
-                return await ComputeForSeparateImprovementsAsync(rpu, cancellationToken, asOf);
+                if (await ModeProblemAsync(mode, cancellationToken) is { } modeProblem)
+                {
+                    return Result.Failure<ValuationDto>(modeProblem.Code!, modeProblem.Message!);
+                }
+                return await ComputeForSeparateImprovementsAsync(rpu, cancellationToken, asOf, mode);
             case RpuType.Machinery:
                 var machinery = await db.MachineryUnits.Where(x => x.RpuId == rpuId).Select(x => (Guid?)x.Id).FirstOrDefaultAsync(cancellationToken);
                 return machinery is null
                     ? Result.Failure<ValuationDto>("MACHINERY_NOT_FOUND", "No Machinery record exists for this RPU.")
-                    : await ComputeForMachineryAsync(machinery.Value, cancellationToken, asOf, machineryRulesAsOf);
+                    : await ComputeForMachineryAsync(machinery.Value, cancellationToken, asOf, machineryRulesAsOf, mode);
             default:
                 return Result.Failure<ValuationDto>("UNSUPPORTED_RPU_TYPE", $"RPU type '{rpu.RpuType}' is not yet valuable.");
         }
+    }
+
+    /// <summary>
+    /// The unit value land of a class, sub-class and use would take in a barangay of a municipality on <paramref name="asOf"/>,
+    /// by the same rate selection as a valuation, without lot adjustments (valuation testing; smv-preparation-general-revision.md
+    /// §4.3, Q9). Null when no row applies.
+    /// </summary>
+    public async Task<SmvRateDto?> LandRateAsync(Guid classificationId, Guid? subClassificationId, Guid? actualUseId, Guid municipalityId,
+        Guid? barangayId, DateOnly asOf, ValuationMode mode, CancellationToken cancellationToken = default, Guid? zoneId = null)
+    {
+        var propertyType = await db.PropertyTypes.AsNoTracking().FirstOrDefaultAsync(x => x.Code == PropertyTypeCodes.Land, cancellationToken);
+        if (propertyType is null)
+        {
+            return null;
+        }
+        var schedule = await ResolveScheduleAsync(classificationId, propertyType.Id, null, municipalityId,
+            new SmvRateKey(subClassificationId, zoneId, barangayId, actualUseId), asOf, mode, cancellationToken);
+        return schedule is null ? null : new SmvRateDto(schedule.Id, schedule.SmvId, schedule.Unit, schedule.MarketValue);
     }
 
     public async Task<Result<ValuationDto>> GetByIdAsync(Guid valuationId, CancellationToken cancellationToken = default)
@@ -694,7 +747,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
     /// several give the valuation a total-only breakdown.
     /// </summary>
     private Prime.Domain.Entities.Valuation PersistLines(Guid rpuId, Guid propertyId, ValuationSourceType sourceType, Guid sourceId,
-        IReadOnlyList<(ValuationLine Line, ValuationCalculationResult Calc)> lines, Guid? smvId, Guid? smvScheduleId, DateOnly effectiveDate)
+        IReadOnlyList<(ValuationLine Line, ValuationCalculationResult Calc)> lines, Guid? smvId, Guid? smvScheduleId, DateOnly effectiveDate, ValuationMode mode)
     {
         for (var i = 0; i < lines.Count; i++)
         {
@@ -720,9 +773,101 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
             ComputedAt = DateTimeOffset.UtcNow,
             Lines = lines.Select(x => x.Line).ToList(),
         };
-        db.Valuations.Add(valuation);
+        if (!mode.ComputeOnly)
+        {
+            db.Valuations.Add(valuation);
+        }
         return valuation;
     }
+
+    /// <summary>Stores the valuation and returns it as saved; compute-only, returns it unsaved, with an empty id.</summary>
+    private async Task<ValuationDto> FinishAsync(Prime.Domain.Entities.Valuation valuation, ValuationMode mode, CancellationToken ct)
+    {
+        if (!mode.ComputeOnly)
+        {
+            await db.SaveChangesAsync(ct);
+            return await MapAsync(valuation.Id, ct);
+        }
+        var lines = valuation.Lines;
+        var classificationIds = lines.SelectMany(l => new[] { l.ClassificationId, l.PricedClassificationId }).OfType<Guid>().Distinct().ToList();
+        var subClassIds = lines.SelectMany(l => new[] { l.SubClassificationId, l.PricedSubClassificationId }).OfType<Guid>().Distinct().ToList();
+        var actualUseIds = lines.Select(l => l.ActualUseId).OfType<Guid>().Distinct().ToList();
+        var classifications = await db.Classifications.AsNoTracking().Where(x => classificationIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
+        var subClasses = await db.SubClassifications.AsNoTracking().Where(x => subClassIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
+        var actualUses = await db.ActualUses.AsNoTracking().Where(x => actualUseIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
+        foreach (var line in lines)
+        {
+            line.Classification = line.ClassificationId is { } c ? classifications.GetValueOrDefault(c) : null;
+            line.PricedClassification = line.PricedClassificationId is { } pc ? classifications.GetValueOrDefault(pc) : null;
+            line.SubClassification = line.SubClassificationId is { } s ? subClasses.GetValueOrDefault(s) : null;
+            line.PricedSubClassification = line.PricedSubClassificationId is { } ps ? subClasses.GetValueOrDefault(ps) : null;
+            line.ActualUse = line.ActualUseId is { } u ? actualUses.GetValueOrDefault(u) : null;
+        }
+        valuation.Smv = valuation.SmvId is { } smvId ? await db.Smvs.AsNoTracking().FirstOrDefaultAsync(x => x.Id == smvId, ct) : null;
+        return ToDto(valuation) with { Id = Guid.Empty };
+    }
+
+    /// <summary>
+    /// The adjustment factor <paramref name="code"/> for a row priced under <paramref name="smvId"/>: the SMV's own, or an
+    /// amendment's, which takes precedence for the same code and classification (smv-preparation-general-revision.md §4.7,
+    /// Q17). A factor for the classification beats one for any classification.
+    /// </summary>
+    private async Task<AdjustmentFactor?> FactorAsync(Guid smvId, string code, Guid classificationId, DateOnly date, ValuationMode mode, CancellationToken ct)
+    {
+        var familyId = await db.Smvs.Where(x => x.Id == smvId).Select(x => x.AmendsSmvId ?? x.Id).FirstAsync(ct);
+        var members = (await db.Smvs.AsNoTracking()
+                .Where(x => (x.Id == familyId || x.AmendsSmvId == familyId)
+                    && (x.Id == mode.ProposedSmvId || (x.Status == WorkflowStatus.Approved && x.EffectivityDate <= date)))
+                .Select(x => new { x.Id, x.EffectivityDate, x.ApprovedAt }).ToListAsync(ct))
+            .OrderByDescending(x => x.Id == mode.ProposedSmvId).ThenByDescending(x => x.EffectivityDate).ThenByDescending(x => x.ApprovedAt)
+            .Select(x => x.Id).ToList();
+        var factors = await Rules(db.AdjustmentFactors, date, mode).Include(f => f.Rows)
+            .Where(f => members.Contains(f.SmvId) && f.Code == code && (f.ClassificationId == null || f.ClassificationId == classificationId)
+                // Under a proposed SMV only its own factors may be drafts.
+                && (f.SmvId == mode.ProposedSmvId || f.Status == WorkflowStatus.Approved))
+            .ToListAsync(ct);
+        return factors
+            .GroupBy(f => f.ClassificationId)
+            .Select(g => g.OrderBy(f => members.IndexOf(f.SmvId)).ThenByDescending(f => f.EffectiveDate).ThenByDescending(f => f.CreatedAt).First())
+            .OrderByDescending(f => f.ClassificationId != null)
+            .FirstOrDefault();
+    }
+
+    /// <summary>Why the mode cannot be used: a proposed SMV is compute-only, and must exist and not be rejected or cancelled.</summary>
+    private async Task<Result?> ModeProblemAsync(ValuationMode mode, CancellationToken ct)
+    {
+        if (mode.ProposedSmvId is not { } smvId)
+        {
+            return null;
+        }
+        if (!mode.ComputeOnly)
+        {
+            return Result.Failure("PROPOSED_SMV_COMPUTE_ONLY", "A valuation under a proposed SMV is computed only; it is never stored, assessed or posted.");
+        }
+        var usable = await db.Smvs.AnyAsync(x => x.Id == smvId
+            && x.Status != WorkflowStatus.Rejected && x.Status != WorkflowStatus.Cancelled && x.Status != WorkflowStatus.Voided, ct);
+        return usable ? null : Result.Failure("PROPOSED_SMV_NOT_FOUND", "The proposed SMV does not exist, or was rejected or cancelled.");
+    }
+
+    /// <summary>
+    /// The rule versions that apply on <paramref name="date"/>: the approved ones in force, or under a proposed
+    /// SMV every version not rejected or cancelled whose dates cover it (the proposed SMV's rows are drafts).
+    /// </summary>
+    private static IQueryable<T> Rules<T>(IQueryable<T> query, DateOnly date, ValuationMode mode) where T : EffectiveDatedConfiguration =>
+        mode.ProposedSmvId is null
+            ? query.InForce(date)
+            : query.Where(x => x.Status != WorkflowStatus.Rejected && x.Status != WorkflowStatus.Cancelled && x.Status != WorkflowStatus.Voided
+                && x.EffectiveDate <= date && (x.EndDate == null || x.EndDate >= date));
+
+    /// <summary>Of several versions for one key (a proposed SMV's draft beside its approved one), the newest first.</summary>
+    private static IOrderedQueryable<T> Newest<T>(IOrderedQueryable<T> query) where T : EffectiveDatedConfiguration =>
+        query.ThenByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt);
+
+    private static IOrderedQueryable<T> Newest<T>(IQueryable<T> query) where T : EffectiveDatedConfiguration =>
+        query.OrderByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt);
+
+    private static string RateSourceName(ValuationMode mode) =>
+        mode.ProposedSmvId is null ? "approved SMV schedule" : "schedule of the proposed SMV";
 
     private Prime.Domain.Entities.Valuation Persist(
         Guid rpuId,
@@ -769,25 +914,37 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
     /// The rate for a row: approved, in force on <paramref name="asOf"/>, under an approved SMV in
     /// force then that covers <paramref name="municipalityId"/>, chosen by <see cref="SmvRateSelector"/>
     /// (docs/analysis/valuation-foundation.md §4.3). <paramref name="improvementKindId"/> null selects
-    /// land and building rates only; set, the rate for that improvement kind.
+    /// land and building rates only; set, the rate for that improvement kind. Under a proposed SMV,
+    /// that SMV's rows whatever their status (smv-preparation-general-revision.md §4.3).
     /// </summary>
     private async Task<SmvSchedule?> ResolveScheduleAsync(Guid classificationId, Guid propertyTypeId, Guid? improvementKindId, Guid? municipalityId,
-        SmvRateKey key, DateOnly asOf, CancellationToken cancellationToken)
+        SmvRateKey key, DateOnly asOf, ValuationMode mode, CancellationToken cancellationToken)
     {
-        var candidates = await db.SmvSchedules.Include(x => x.Smv)
+        var query = db.SmvSchedules.Include(x => x.Smv).ThenInclude(x => x!.AmendsSmv)
             .Where(x => x.ImprovementKindId == improvementKindId
                 && x.ClassificationId == classificationId
                 && x.PropertyTypeId == propertyTypeId
-                && x.Status == WorkflowStatus.Approved
                 && x.EffectiveDate <= asOf
                 // EndDate is inclusive: superseding a schedule ends it the day before its successor (SmvService).
                 && (x.EndDate == null || x.EndDate >= asOf)
-                && x.Smv!.Status == WorkflowStatus.Approved
-                && x.Smv.EffectivityDate <= asOf
                 // No coverage rows: the SMV covers the whole province.
-                && (!x.Smv.Coverage.Any() || x.Smv.Coverage.Any(c => c.MunicipalityId == municipalityId)))
-            .ToListAsync(cancellationToken);
-        return SmvRateSelector.Select(candidates, key);
+                && (!x.Smv!.Coverage.Any() || x.Smv.Coverage.Any(c => c.MunicipalityId == municipalityId)));
+        if (mode.ProposedSmvId is { } proposedId)
+        {
+            // A proposed amendment is simulated with the approved rows of the SMV it amends and of its approved amendments (§4.7).
+            var amendedId = await db.Smvs.Where(x => x.Id == proposedId).Select(x => x.AmendsSmvId).FirstOrDefaultAsync(cancellationToken);
+            query = query.Where(x => x.SmvId == proposedId
+                ? x.Status != WorkflowStatus.Rejected && x.Status != WorkflowStatus.Cancelled && x.Status != WorkflowStatus.Voided
+                : amendedId != null && (x.SmvId == amendedId || x.Smv!.AmendsSmvId == amendedId)
+                    && x.Status == WorkflowStatus.Approved && x.Smv!.Status == WorkflowStatus.Approved && x.Smv.EffectivityDate <= asOf);
+        }
+        else
+        {
+            // An amendment's rows count while the SMV it amends is still approved (§4.7).
+            query = query.Where(x => x.Status == WorkflowStatus.Approved && x.Smv!.Status == WorkflowStatus.Approved && x.Smv.EffectivityDate <= asOf
+                && (x.Smv.AmendsSmvId == null || x.Smv.AmendsSmv!.Status == WorkflowStatus.Approved));
+        }
+        return SmvRateSelector.Select(await query.ToListAsync(cancellationToken), key, mode.ProposedSmvId);
     }
 
     private IQueryable<Prime.Domain.Entities.Valuation> WithDetails() => db.Valuations.AsNoTracking()
@@ -817,7 +974,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         v.Lines.OrderBy(l => l.Sequence).Select(l => new ValuationLineDto(
             l.Sequence, l.Source, l.SourceId, l.Description, l.Classification?.Name, l.SubClassification?.Name, l.ActualUse?.Name,
             l.Quantity, l.Unit, l.UnitValue, l.SmvScheduleId, l.MarketValue, ValuationBreakdown.Ordered(l.BreakdownJson),
-            l.PricedClassification?.Name, l.PricedSubClassification?.Name, l.IndependentAppraisalId)).ToList(),
+            l.PricedClassification?.Name, l.PricedSubClassification?.Name, l.IndependentAppraisalId, l.ClassificationId, l.ActualUseId)).ToList(),
         v.Smv?.Reference,
         v.Smv?.RevisionYear,
         v.RulesAsOf);

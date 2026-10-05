@@ -66,6 +66,7 @@ public interface IApplicationDbContext
     DbSet<TerritorialChangeItem> TerritorialChangeItems { get; }
     DbSet<PropertyBarangayPart> PropertyBarangayParts { get; }
     DbSet<Prime.Domain.Entities.Gis.DisputedArea> DisputedAreas { get; }
+    DbSet<Prime.Domain.Entities.Gis.SubMarketArea> SubMarketAreas { get; }
     DbSet<TaxRate> TaxRates { get; }
     DbSet<PaymentSchedule> PaymentSchedules { get; }
     DbSet<DiscountRule> DiscountRules { get; }
@@ -166,6 +167,26 @@ public interface IApplicationDbContext
     DbSet<GeneralRevisionRunIssue> GeneralRevisionRunIssues { get; }
     DbSet<GeneralRevisionChecklistStepDefinition> GeneralRevisionChecklistStepDefinitions { get; }
     DbSet<GeneralRevisionChecklistStep> GeneralRevisionChecklistSteps { get; }
+    DbSet<SmvSimulationRun> SmvSimulationRuns { get; }
+    DbSet<SmvSimulationScope> SmvSimulationScopes { get; }
+    DbSet<SmvSimulationResult> SmvSimulationResults { get; }
+    DbSet<ValuationTestRun> ValuationTestRuns { get; }
+    DbSet<ValuationTestScope> ValuationTestScopes { get; }
+    DbSet<ValuationTestSale> ValuationTestSales { get; }
+    DbSet<SmvPreparation> SmvPreparations { get; }
+    DbSet<SmvConsultation> SmvConsultations { get; }
+    DbSet<SmvPreparationEvent> SmvPreparationEvents { get; }
+    DbSet<SmvTimeAdjustmentFactor> SmvTimeAdjustmentFactors { get; }
+    DbSet<SalesAnalysis> SalesAnalyses { get; }
+    DbSet<SalesAnalysisScope> SalesAnalysisScopes { get; }
+    DbSet<SalesAnalysisSale> SalesAnalysisSales { get; }
+    DbSet<SalesAnalysisGroup> SalesAnalysisGroups { get; }
+    DbSet<SmvSubClassCriterion> SmvSubClassCriteria { get; }
+    DbSet<SmvSimulationResultLine> SmvSimulationResultLines { get; }
+    DbSet<RevenueImpactStudy> RevenueImpactStudies { get; }
+    DbSet<RevenueImpactRate> RevenueImpactRates { get; }
+    DbSet<RevenueImpactOption> RevenueImpactOptions { get; }
+    DbSet<RevenueImpactOptionLevel> RevenueImpactOptionLevels { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 

@@ -1,0 +1,38 @@
+{% comment %}
+  PRIME provisional layout (docs/analysis/smv-preparation-general-revision.md §4.2, L6-2c): tabulation of the unit sales values of agricultural land, adjusted and rounded.
+  LAM 2025 Book IV pp.114–115 lists the form; its layout (Annex IV-G) is loaded as content and is not reproduced here.
+  DOMAIN VERIFICATION REQUIRED: its columns.
+{% endcomment %}
+<style>
+  h1 { font-size: 12pt; text-align: center; margin: 4px 0 2px; }
+  h2 { font-size: 9.5pt; margin: 8px 0 3px; }
+  .lgu { text-align: center; font-weight: bold; }
+  .sub { text-align: center; font-size: 9pt; margin-bottom: 4px; }
+  .flag { text-align: center; font-weight: bold; letter-spacing: 1px; border: 1px solid #000; padding: 2px; margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 6px; }
+  td, th { border: 1px solid #000; padding: 2px 4px; font-size: 7.5pt; vertical-align: top; }
+  th { background: #eee; font-weight: bold; text-align: left; }
+  .num { text-align: right; white-space: nowrap; }
+  .pre { white-space: pre-wrap; }
+  .muted { color: #555; font-size: 7.5pt; }
+  .sig { margin-top: 26px; width: 240px; border-top: 1px solid #000; text-align: center; font-size: 8.5pt; padding-top: 2px; display: inline-block; margin-right: 50px; }
+  .foot { font-size: 7.5pt; margin-top: 6px; }
+</style>
+{% assign a = analysis %}
+{% if lgu.name %}<div class="lgu">{{ lgu.name }}</div>{% endif %}{% if lgu.office %}<div class="sub">{{ lgu.office }}</div>{% endif %}
+<h1>SMV FORM NO. 7 — TABULATION OF SALES VALUES OF AGRICULTURAL LANDS</h1>
+<div class="sub">Classification: {{ a.classification }}{% if a.use %} — {{ a.use }}{% endif %} · {{ a.marketAreas | join: ", " }} · Revision {{ a.revisionYear }}
+ · base valuation date {% if a.baseValuationDate %}{{ a.baseValuationDate | date_ph }}{% else %}not set{% endif %}</div>
+{% for w in a.warnings %}<div class="muted">{{ w }}</div>{% endfor %}
+
+<table>
+  <tr><th>Date</th><th>TD No.</th><th>PIN</th><th class="num">Unit sales value</th><th class="num">Time factor</th><th class="num">Other adj. %</th><th class="num">Adjusted</th><th class="num">Rounded (nearest {{ a.rounding }})</th></tr>
+  {% for s in sales %}{% if s.rounded %}<tr><td>{{ s.date | date_ph }}</td><td>{{ s.td }}</td><td>{{ s.pin }}</td><td class="num">{{ s.unitPrice | money }}</td>
+    <td class="num">{{ s.factor }}</td><td class="num">{{ s.other }}</td><td class="num">{{ s.adjusted | money }}</td><td class="num">{{ s.rounded | money }}</td></tr>{% endif %}{% endfor %}
+</table>
+<h2>Sales not tabulated</h2>
+<table><tr><th>Date</th><th>Location</th><th>Reason</th></tr>
+  {% for s in sales %}{% unless s.rounded %}<tr><td>{{ s.date | date_ph }}</td><td>{{ s.location }}</td><td>{% if s.leftOut %}Left out: {% endif %}{{ s.excluded }}</td></tr>{% endunless %}{% endfor %}
+</table>
+<div class="sig">Prepared by</div><div class="sig">Noted by: Assessor</div>
+<div class="foot">{{ form.title }} — form {{ form.code }} v{{ form.version }}. {{ form.legalBasis }}. Printed {{ issue.issuedAt | datetime_ph }}{% if issue.issuedBy %} by {{ issue.issuedBy }}{% endif %}.</div>

@@ -5,6 +5,7 @@ import type {
   PropertyProfileDto,
   ReferenceLayerFeatureCollection,
   ReferenceLayerName,
+  LandValueFeatureCollection,
   TaxMapSheetDto,
   TaxMapSheetRoute,
 } from '../lib/types';
@@ -42,5 +43,12 @@ export function fetchReferenceLayer(
 ): Promise<ReferenceLayerFeatureCollection> {
   return apiFetch<ReferenceLayerFeatureCollection>(
     `/api/gis/layers/${layer}?bbox=${bbox.map(coord).join(',')}&asOf=${encodeURIComponent(asOf)}`,
+  );
+}
+
+/** The land value map in a WGS84 bbox: each land parcel's unit value under the SMV (none: the approved SMV in force on `asOf`). */
+export function fetchValueMap(bbox: [number, number, number, number], smvId: string | null, asOf: string): Promise<LandValueFeatureCollection> {
+  return apiFetch<LandValueFeatureCollection>(
+    `/api/gis/value-map?bbox=${bbox.map(coord).join(',')}&asOf=${encodeURIComponent(asOf)}${smvId ? `&smvId=${smvId}` : ''}`,
   );
 }
