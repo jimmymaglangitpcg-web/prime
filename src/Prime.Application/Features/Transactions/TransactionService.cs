@@ -408,9 +408,10 @@ public sealed class TransactionService(
         {
             return Fail(step.Code!, step.Message!);
         }
-        if (!step.Value.ChainInForce && currentUser.AppUserId is not null && tx.CreatedBy == currentUser.AppUserId)
+        if (!step.Value.ChainInForce && MakerChecker.Refusal(currentUser, tx.CreatedBy, "CANNOT_APPROVE_OWN_PROPERTY_TRANSACTION",
+                "The transaction's creator cannot also approve it (CLAUDE.md §46).") is { } refusal)
         {
-            return Fail("CANNOT_APPROVE_OWN_PROPERTY_TRANSACTION", "The transaction's creator cannot also approve it (CLAUDE.md §46).");
+            return Fail(refusal.Code, refusal.Message);
         }
         if (step.Value.ChainInForce && !step.Value.Completed)
         {

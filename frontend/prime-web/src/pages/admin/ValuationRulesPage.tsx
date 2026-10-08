@@ -15,6 +15,7 @@ import {
   type AssessmentLevelDto, type SmvBasis, type SmvDto, type SmvScheduleDto,
 } from '../../lib/types';
 import { day, errorText, lookup, pct, period, statusTag, useToast } from './ruleHelpers';
+import { AuditHistoryCard } from '../../components/AuditTable';
 import { ApproveButton } from './ApproveButton';
 import { BuildingCostsTab } from './BuildingCostsTab';
 import { MachineryIndicesTab } from './MachineryIndicesTab';
@@ -76,7 +77,7 @@ function SmvTab() {
         of the amended SMV&apos;s values for the same key from its effectivity; elsewhere the amended SMV still applies.
       </Typography.Paragraph>
       <Table<SmvDto> rowKey="id" size="small" loading={isLoading} dataSource={data?.items ?? []} pagination={false} scroll={{ x: true }}
-        expandable={{ expandedRowRender: (s) => <SmvStages smv={s} /> }}
+        expandable={{ expandedRowRender: (s) => <><SmvStages smv={s} /><AuditHistoryCard recordId={s.id} /></> }}
         columns={[
           { title: 'Reference', render: (_, s) => s.reference || <Typography.Text type="secondary">not yet certified</Typography.Text> },
           {

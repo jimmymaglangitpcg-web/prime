@@ -11,7 +11,7 @@ using Prime.Domain.Enums;
 namespace Prime.Application.Features.Properties;
 
 public sealed class PropertyService(IApplicationDbContext db, IValidator<CreatePropertyRequest> validator, INumberingService numbering, IClock clock,
-    IJurisdiction jurisdiction) : IPropertyService
+    IJurisdiction jurisdiction, Features.Security.IPermissionService permissions) : IPropertyService
 {
     public async Task<Result<PropertyDto>> CreateAsync(CreatePropertyRequest request, CancellationToken cancellationToken = default)
     {
@@ -122,7 +122,8 @@ public sealed class PropertyService(IApplicationDbContext db, IValidator<CreateP
             return Result.Failure<PropertyProfileDto>("PROPERTY_NOT_FOUND", "No property was found with the given id.");
         }
 
-        var owners = await PropertyParties.ProjectAsync(db.PropertyTaxpayers.Where(pt => pt.PropertyId == propertyId), cancellationToken);
+        var owners = await PropertyParties.ProjectAsync(db.PropertyTaxpayers.Where(pt => pt.PropertyId == propertyId), cancellationToken,
+            maskPersonal: !await permissions.HasAsync(Common.Security.Permissions.TaxpayerViewPersonal, cancellationToken));
 
         var parcels = await db.Parcels
             .Where(p => p.PropertyId == propertyId)

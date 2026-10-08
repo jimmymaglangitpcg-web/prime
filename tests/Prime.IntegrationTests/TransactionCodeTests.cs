@@ -73,7 +73,7 @@ public class TransactionCodeTests(WebApplicationFactory<Program> factory) : ICla
     {
         var created = (await c.Tx.CreateTypeAsync(new CreateTransactionTypeRequest(
             "DEMO — not LAM", new DateOnly(2020, 1, 1), null, code, $"DEMO {code}", kind, rank, null, []))).Value;
-        (await c.Tx.ApproveTypeAsync(created.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Tx.ApproveTypeAsync(created.Id))).IsSuccess.ShouldBeTrue();
         return created;
     }
 
@@ -112,7 +112,7 @@ public class TransactionCodeTests(WebApplicationFactory<Program> factory) : ICla
         var scheme = (await numbering.CreateAsync(new CreateNumberingSchemeRequest(
             "DEMO — not an LGU format", new DateOnly(2020, 1, 1), null, NumberedDocumentKind.TaxDeclaration, "DEMO TD", "DEMO-TD-{YEAR}-{SEQ:4}", null, true))).Value;
         c.User.AppUserId = c.B.Id;
-        (await numbering.ApproveAsync(scheme.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => numbering.ApproveAsync(scheme.Id))).IsSuccess.ShouldBeTrue();
         var job = new GeneralRevisionJob { RevisionYear = 2026, Status = JobExecutionStatus.Completed };
         c.Db.Add(job);
         var assessment = await c.Db.Assessments.SingleAsync(x => x.Id == c.Seed.AssessmentId);

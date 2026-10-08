@@ -176,9 +176,10 @@ public sealed class ApprovalDelegationService(
         {
             return Result.Failure<ApprovalDelegationDto>("DELEGATION_NOT_DRAFT", "Only a draft delegation can be approved.");
         }
-        if (currentUser.AppUserId is not null && delegation.CreatedBy == currentUser.AppUserId)
+        if (MakerChecker.Refusal(currentUser, delegation.CreatedBy, "CANNOT_APPROVE_OWN_DELEGATION",
+                "The user who entered the delegation cannot also approve it (CLAUDE.md §46).") is { } refusal)
         {
-            return Result.Failure<ApprovalDelegationDto>("CANNOT_APPROVE_OWN_DELEGATION", "The user who entered the delegation cannot also approve it (CLAUDE.md §46).");
+            return Result.Failure<ApprovalDelegationDto>(refusal.Code, refusal.Message);
         }
         if (await OverlapAsync(delegation, cancellationToken) is { } overlap)
         {

@@ -940,7 +940,7 @@ L3   Assessment, listing, exemptions             done (L3-1a to L3-4)
 L4   Condominium                                      deferred
 L5   Records & forms                              done (L5-1 to L5-6; LAM forms await the province's review)
 L6   SMV preparation & general revision         done (L6-1 to L6-7)
-L7   Assessment appeals
+L7   Assessment appeals                               deferred (design kept: docs/analysis/assessment-appeals.md)
 L8   Treasury interface
 ```
 
@@ -955,7 +955,7 @@ functions. Order from here:
 
 ```text
 Phase 10  LAM alignment (L5, L3, L6, L7; L8 when needed)
-Phase 12  Workflow & security
+Phase 12  Workflow & security          done 2026-10-08 (docs/SECURITY.md)
 Phase 13  Import / migration      before go-live (see the early step below)
 Phase 11  Reporting               when an export or required report is needed, or after go-live
 Phase 14  Production hardening
@@ -1244,8 +1244,20 @@ migration `SubMarketAreas`, local database only). **L6-5 done** (revenue complia
 and up to three options, on a simulation run, with the Treasurer's figures entered on the study; provisional RTIR; migration
 `RevenueImpactStudies`, local database only). **L6-7 done, so L6 is complete** (SMV amendments: basis Amendment with the
 amended SMV and the ground; an amendment's rows and factors replace the amended SMV's for the same key from its
-effectivity; migration `SmvAmendments`, local database only). Next: L7 (assessment appeals), which starts with its
-design document (CLAUDE.md §108). The paragraphs below are the earlier history.
+effectivity; migration `SmvAmendments`, local database only). **L7 deferred** (2026-10-06, user decision; design kept in `docs/analysis/assessment-appeals.md`
+with Q1–Q17 undecided). Phase 10 is complete apart from the deferred L4 and L7 and L8, which waits for a consumer.
+Next per the phase order: Phase 12 (workflow and security). **Phase 12 design written**
+(`docs/analysis/workflow-security.md`); decisions recorded 2026-10-06 (Q5 changed: self sign-up
+with SYSTEM_ADMIN approval; the rest as recommended). **P12-1 done** (40 permissions; every API action declares one and
+undeclared actions are refused; role–permission matrix as maker-checked configuration with a provisional default;
+menu by permission; migration `RolePermissionChanges`, local database only). **P12-2 done** (2026-10-07: self sign-up
+with SYSTEM_ADMIN approval giving office and roles; disable/enable under maker-checker, disabled users refused; MFA
+required for SYSTEM_ADMIN and ASSESSOR; sign-in, reset, MFA and idle sign-out screens; LOGIN/LOGOUT audited; bootstrap
+command; migration `SignUpAndUserStatus`, local database only). **P12-3 done** (2026-10-08: approvals, rejections,
+postings, voids and cancellations audited as their action; every table audited, child rows with their parent; reasons
+required and recorded on every reject/cancel path; EXPORT rows for issued forms, register runs and prints; Audit Trail
+viewer and record histories for `audit.view`; append-only trigger on `AuditLogs`; migration `AuditCompleteness`, local
+database only). **P12-4 done** (2026-10-08: rate limits with 429, security headers and HSTS outside Development, trusted-proxy setting, upload size and type checks, raw SQL and template escaping reviewed, dependency and history secret scans clean, Supabase RLS and anon-key checks plus a `row-level-security` health check and a start-up check of the Supabase Auth settings; every §46 approval refuses an unknown acting user; status names checked against §45; no migration). **P12-5 done** (2026-10-08: outright TD cancellation is a request decided by a second user (Q19); an individual's TIN, contact, e-mail and address masked without `taxpayer.view-personal`; logs reviewed; `docs/SECURITY.md`; migration `TaxDeclarationCancellationRequests`). **Phase 12 complete.** Next per the phase order: Phase 13 (import and migration, before go-live), then 11, 14 and 15. The paragraphs below are the earlier history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so
 PRIME is the assessor's office system following the MRPAAO (CLAUDE.md §0).

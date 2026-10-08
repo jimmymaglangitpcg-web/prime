@@ -115,6 +115,15 @@ public interface IApplicationDbContext
     /// <summary>Read by forms and approvals for signatory names.</summary>
     DbSet<AppUser> AppUsers { get; }
     DbSet<Role> Roles { get; }
+    // Permissions (docs/analysis/workflow-security.md §4.1)
+    DbSet<Permission> Permissions { get; }
+    DbSet<RolePermission> RolePermissions { get; }
+    DbSet<RolePermissionChange> RolePermissionChanges { get; }
+    // Users and sign-in (docs/analysis/workflow-security.md §4.2)
+    DbSet<SignUpRequest> SignUpRequests { get; }
+    DbSet<UserStatusChange> UserStatusChanges { get; }
+    /// <summary>Read-only and untracked: audit rows are written only by the save interceptor and SecurityEventLog (§48).</summary>
+    IQueryable<Prime.Domain.Entities.Audit.AuditLog> AuditLogs { get; }
     // Offices and jurisdiction (docs/analysis/province-wide-operation.md)
     DbSet<Prime.Domain.Entities.Offices.Office> Offices { get; }
     DbSet<Prime.Domain.Entities.Offices.OfficeJurisdiction> OfficeJurisdictions { get; }
@@ -128,6 +137,7 @@ public interface IApplicationDbContext
     DbSet<RealPropertyUnit> RealPropertyUnits { get; }
     DbSet<TaxDeclaration> TaxDeclarations { get; }
     DbSet<TaxDeclarationAnnotation> TaxDeclarationAnnotations { get; }
+    DbSet<TaxDeclarationCancellationRequest> TaxDeclarationCancellationRequests { get; }
     DbSet<AnnotationType> AnnotationTypes { get; }
     DbSet<Land> Lands { get; }
     DbSet<Building> Buildings { get; }

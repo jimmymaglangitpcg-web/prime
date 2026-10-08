@@ -706,16 +706,17 @@ public class CollectionFlowTests(WebApplicationFactory<Program> factory) : IClas
     // --- HTTP surface ---
 
     [Fact]
-    public async Task Api_RefusesAnEmptySelection_AndListsPaymentModes()
+    public async Task Api_IsGatedByTheFrozenTreasuryPermission()
     {
+        // The frozen collection code (CLAUDE.md §0) answers only users granted treasury.legacy, which no role holds by
+        // default (docs/analysis/workflow-security.md Q18); its logic is covered through the services above.
         var client = factory.CreateClient();
 
         var quote = await client.PostAsJsonAsync("/api/payments/quote", new QuotePaymentRequest([]));
-        quote.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        (await quote.Content.ReadAsStringAsync()).ShouldContain("VALIDATION_FAILED");
-
-        (await client.GetAsync("/api/collection/payment-modes")).StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await client.GetAsync("/api/collection/account-mappings")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        quote.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await quote.Content.ReadAsStringAsync()).ShouldContain("treasury.legacy");
+        (await client.GetAsync("/api/collection/payment-modes")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await client.GetAsync("/api/collection/account-mappings")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
     // --- Concurrency (committed data: two connections must see each other's writes) ---

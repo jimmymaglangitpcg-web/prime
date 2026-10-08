@@ -107,9 +107,10 @@ public sealed class SmvService(
             return Result.Failure<SmvDto>("SMV_ALREADY_APPROVED", "This SMV has already been approved.");
         }
         // Maker-checker (CLAUDE.md §46): the creator may not approve their own SMV.
-        if (currentUser.AppUserId is not null && smv.CreatedBy == currentUser.AppUserId)
+        if (MakerChecker.Refusal(currentUser, smv.CreatedBy, "CANNOT_APPROVE_OWN_SMV",
+                "The SMV's creator cannot also approve it.") is { } refusal)
         {
-            return Result.Failure<SmvDto>("CANNOT_APPROVE_OWN_SMV", "The SMV's creator cannot also approve it.");
+            return Result.Failure<SmvDto>(refusal.Code, refusal.Message);
         }
         // A certified SMV is entered with its certification; one prepared in PRIME once it is published, so its effectivity is
         // known (docs/analysis/smv-preparation-general-revision.md §4.2).
@@ -270,9 +271,10 @@ public sealed class SmvService(
             return Result.Failure<SmvScheduleDto>("SMV_SCHEDULE_ALREADY_APPROVED", "This SMV schedule has already been approved.");
         }
         // Maker-checker (CLAUDE.md §46): the creator may not approve their own schedule.
-        if (currentUser.AppUserId is not null && schedule.CreatedBy == currentUser.AppUserId)
+        if (MakerChecker.Refusal(currentUser, schedule.CreatedBy, "CANNOT_APPROVE_OWN_SCHEDULE",
+                "The schedule's creator cannot also approve it.") is { } refusal)
         {
-            return Result.Failure<SmvScheduleDto>("CANNOT_APPROVE_OWN_SCHEDULE", "The schedule's creator cannot also approve it.");
+            return Result.Failure<SmvScheduleDto>(refusal.Code, refusal.Message);
         }
 
         schedule.Status = WorkflowStatus.Approved;

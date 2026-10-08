@@ -3,29 +3,36 @@ using Microsoft.AspNetCore.Mvc;
 using Prime.Application.Common;
 using Prime.Application.Features.Properties;
 using Prime.Application.Features.Taxpayers;
+using Prime.Application.Common.Security;
+using Prime.WebApi.Authorization;
 
 namespace Prime.WebApi.Controllers;
 
 public class TaxpayersController(ITaxpayerService taxpayerService) : ApiControllerBase
 {
+    [RequirePermission(Permissions.TaxpayerEdit)]
     [HttpPost]
     public async Task<ActionResult<TaxpayerDto>> Create(CreateTaxpayerRequest request, CancellationToken cancellationToken) =>
         HandleCreated(await taxpayerService.CreateAsync(request, cancellationToken), nameof(GetById), dto => new { id = dto.Id });
 
+    [RequirePermission(Permissions.TaxpayerView)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<TaxpayerDto>> GetById(Guid id, CancellationToken cancellationToken) =>
         HandleResult(await taxpayerService.GetByIdAsync(id, cancellationToken));
 
     /// <summary>Corrects contact and personal details with a reason (docs/analysis/records-and-forms.md §4.1).</summary>
+    [RequirePermission(Permissions.TaxpayerEdit)]
     [HttpPut("{id:guid}/details")]
     public async Task<ActionResult<TaxpayerDto>> UpdateDetails(Guid id, UpdateTaxpayerDetailsRequest request, CancellationToken cancellationToken) =>
         HandleResult(await taxpayerService.UpdateDetailsAsync(id, request, cancellationToken));
 
+    [RequirePermission(Permissions.TaxpayerView)]
     [HttpGet]
     public async Task<ActionResult<PagedResult<TaxpayerDto>>> Search([FromQuery] TaxpayerSearchRequest request, CancellationToken cancellationToken) =>
         HandleResult(await taxpayerService.SearchAsync(request, cancellationToken));
 
     /// <summary>Adds a party (owner, administrator, …, or unknown owner) — see ITaxpayerService.AddOwnerAsync.</summary>
+    [RequirePermission(Permissions.TaxpayerEdit)]
     [HttpPost("~/api/properties/{propertyId:guid}/owners")]
     public async Task<ActionResult<PropertyOwnerDto>> AddOwner(Guid propertyId, [FromBody] AddOwnerBody body, CancellationToken cancellationToken)
     {
@@ -34,11 +41,13 @@ public class TaxpayersController(ITaxpayerService taxpayerService) : ApiControll
         return HandleResult(await taxpayerService.AddOwnerAsync(request, cancellationToken));
     }
 
+    [RequirePermission(Permissions.PropertyView)]
     [HttpGet("~/api/properties/{propertyId:guid}/owners")]
     public async Task<ActionResult<IReadOnlyList<PropertyOwnerDto>>> GetOwnershipHistory(Guid propertyId, CancellationToken cancellationToken) =>
         HandleResult(await taxpayerService.GetOwnershipHistoryAsync(propertyId, cancellationToken));
 
     /// <summary>Ends a party's current link to the property; history is kept.</summary>
+    [RequirePermission(Permissions.TaxpayerEdit)]
     [HttpPost("~/api/property-owners/{propertyTaxpayerId:guid}/end")]
     public async Task<ActionResult<PropertyOwnerDto>> EndParty(Guid propertyTaxpayerId, [FromBody] EndPropertyPartyRequest request, CancellationToken cancellationToken) =>
         HandleResult(await taxpayerService.EndPartyAsync(propertyTaxpayerId, request, cancellationToken));

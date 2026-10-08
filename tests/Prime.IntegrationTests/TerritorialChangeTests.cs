@@ -125,7 +125,7 @@ public class TerritorialChangeTests(WebApplicationFactory<Program> factory) : IC
             "DEMO RA 0000 transferring the barangay — not a real law", new DateOnly(2026, 6, 1), TerritorialChangePinMode.KeepParcelNumbers,
             [new(c.Source.Id, c.Target.Id)]));
         draft.IsSuccess.ShouldBeTrue(draft.IsSuccess ? null : draft.Message);
-        var approved = await c.Changes.ApproveAsync(draft.Value.Id);
+        var approved = await TestSeed.AsCheckerAsync(c.Services, () => c.Changes.ApproveAsync(draft.Value.Id));
         approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
         approved.Value.TotalCount.ShouldBe(3);
         ((RecordingScheduler)c.Services.GetRequiredService<IBackgroundJobScheduler>()).Enqueued.ShouldBe(1);
@@ -164,7 +164,7 @@ public class TerritorialChangeTests(WebApplicationFactory<Program> factory) : IC
 
         var job = (await c.Changes.CreateAsync(new CreateTerritorialChangeRequest(TerritorialChangeKind.CreatedLgu, "DEMO RA 0001 creating a town — not a real law",
             new DateOnly(2026, 6, 1), TerritorialChangePinMode.TemporaryPins, [new(c.Source.Id, c.Target.Id)]))).Value;
-        (await c.Changes.ApproveAsync(job.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Changes.ApproveAsync(job.Id))).IsSuccess.ShouldBeTrue();
         await c.Services.GetRequiredService<TerritorialChangeJobRunner>().RunAsync(job.Id, CancellationToken.None);
 
         (await c.Db.Properties.SingleAsync(x => x.Id == first)).PropertyIdentificationNumber.ShouldBe("T-16-0001-0001"); // until re-tax-mapping

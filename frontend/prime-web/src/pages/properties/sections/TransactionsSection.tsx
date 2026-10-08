@@ -20,6 +20,7 @@ import {
 } from '../../../lib/types';
 import { AddTaxDeclarationModal } from '../modals/AddTaxDeclarationModal';
 import { DiscoveryPanel } from './DiscoveryPanel';
+import { AuditHistoryCard } from '../../../components/AuditTable';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
 const statusColor: Partial<Record<WorkflowStatus, string>> = { Draft: 'default', PendingReview: 'gold', Approved: 'green', Rejected: 'red', Cancelled: 'red' };
@@ -404,6 +405,7 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
         <Typography.Paragraph>The transaction stays on record; its TDs, which never took effect, are rejected with it.</Typography.Paragraph>
         <Input.TextArea aria-label="Reason" placeholder="Reason (required)" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
       </Modal>
+      <div style={{ marginTop: 16 }}><AuditHistoryCard recordId={tx.id} /></div>
     </Drawer>
   );
 }

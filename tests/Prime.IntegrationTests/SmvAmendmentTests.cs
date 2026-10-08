@@ -54,7 +54,7 @@ public class SmvAmendmentTests(WebApplicationFactory<Program> factory) : IClassF
         // An amendment is approved with its certification's reference.
         var uncertified = await smv.CreateSmvAsync(Amendment(seed.SmvId, new DateOnly(2026, 9, 1)));
         uncertified.IsSuccess.ShouldBeTrue(uncertified.Message);
-        (await smv.ApproveSmvAsync(uncertified.Value.Id)).Code.ShouldBe("SMV_CERTIFICATION_REQUIRED");
+        (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveSmvAsync(uncertified.Value.Id))).Code.ShouldBe("SMV_CERTIFICATION_REQUIRED");
 
         var created = await smv.CreateSmvAsync(Amendment(seed.SmvId, Amended, reference: Reference()));
         created.IsSuccess.ShouldBeTrue(created.Message);
@@ -74,7 +74,7 @@ public class SmvAmendmentTests(WebApplicationFactory<Program> factory) : IClassF
             added.IsSuccess.ShouldBeTrue(added.Message);
             if (approve)
             {
-                (await smv.ApproveScheduleAsync(added.Value.Id)).IsSuccess.ShouldBeTrue();
+                (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveScheduleAsync(added.Value.Id))).IsSuccess.ShouldBeTrue();
             }
             return added.Value;
         }
@@ -93,7 +93,7 @@ public class SmvAmendmentTests(WebApplicationFactory<Program> factory) : IClassF
         (await Value(new DateOnly(2026, 8, 1))).ShouldBe(500_000m);
 
         // Approved: from its effectivity its row prices the land; before it, the amended SMV's row.
-        (await smv.ApproveSmvAsync(amendment.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveSmvAsync(amendment.Id))).IsSuccess.ShouldBeTrue();
         (await Value(new DateOnly(2026, 6, 30))).ShouldBe(500_000m);
         (await Value(new DateOnly(2026, 8, 1))).ShouldBe(600_000m);
 
@@ -104,7 +104,7 @@ public class SmvAmendmentTests(WebApplicationFactory<Program> factory) : IClassF
             var added = await factors.CreateAsync(new CreateAdjustmentFactorRequest(smvId, "L67-DEMO", "DEMO factor", percent, null, null,
                 "DEMO — not an SMV provision", effective, null));
             added.IsSuccess.ShouldBeTrue(added.Message);
-            (await factors.ApproveAsync(added.Value.Id)).IsSuccess.ShouldBeTrue();
+            (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => factors.ApproveAsync(added.Value.Id))).IsSuccess.ShouldBeTrue();
         }
         await Factor(seed.SmvId, 10m, new DateOnly(2026, 1, 1));
         (await services.GetRequiredService<ILandService>().AddAdjustmentAsync(land.Id, new AddLandAdjustmentRequest("L67-DEMO", null, null)))
@@ -148,7 +148,7 @@ public class SmvAmendmentTests(WebApplicationFactory<Program> factory) : IClassF
             CertificationReference: Reference(), MunicipalityIds: towns, AmendsSmvId: draft.Value.Id, AmendmentGround: SmvAmendmentGround.CorrectionOfErrors);
 
         (await smv.CreateSmvAsync(Amendment([town.Id]))).Code.ShouldBe("SMV_NOT_APPROVED");
-        (await smv.ApproveSmvAsync(draft.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveSmvAsync(draft.Value.Id))).IsSuccess.ShouldBeTrue();
         // The amended SMV covers one town: the amendment names it, and no other.
         (await smv.CreateSmvAsync(Amendment(null))).Code.ShouldBe("SMV_AMENDMENT_COVERAGE");
         (await smv.CreateSmvAsync(Amendment([Guid.NewGuid()]))).Code.ShouldBe("MUNICIPALITY_NOT_FOUND");

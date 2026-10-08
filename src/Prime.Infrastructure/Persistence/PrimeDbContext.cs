@@ -146,6 +146,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
     public DbSet<RealPropertyUnit> RealPropertyUnits => Set<RealPropertyUnit>();
     public DbSet<TaxDeclaration> TaxDeclarations => Set<TaxDeclaration>();
     public DbSet<TaxDeclarationAnnotation> TaxDeclarationAnnotations => Set<TaxDeclarationAnnotation>();
+    public DbSet<TaxDeclarationCancellationRequest> TaxDeclarationCancellationRequests => Set<TaxDeclarationCancellationRequest>();
     public DbSet<AnnotationType> AnnotationTypes => Set<AnnotationType>();
     public DbSet<Land> Lands => Set<Land>();
     public DbSet<Building> Buildings => Set<Building>();
@@ -195,6 +196,9 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<RolePermissionChange> RolePermissionChanges => Set<RolePermissionChange>();
+    public DbSet<SignUpRequest> SignUpRequests => Set<SignUpRequest>();
+    public DbSet<UserStatusChange> UserStatusChanges => Set<UserStatusChange>();
 
     // Offices and jurisdiction (CLAUDE.md §117; docs/analysis/province-wide-operation.md)
     public DbSet<Prime.Domain.Entities.Offices.Office> Offices => Set<Prime.Domain.Entities.Offices.Office>();
@@ -208,6 +212,7 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
 
     // Audit trail (CLAUDE.md §48) — written only by AuditSaveChangesInterceptor.
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    IQueryable<AuditLog> IApplicationDbContext.AuditLogs => Set<AuditLog>().AsNoTracking();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

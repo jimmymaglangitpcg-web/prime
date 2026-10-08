@@ -133,6 +133,10 @@ public class EndToEndFlowTests(WebApplicationFactory<Program> factory) : IClassF
             $"E2E-ORD-{tag}", new DateOnly(2025, 12, 1), classification.Id, actualUse.Id, propertyType.Id, 0m, 10_000_000m, 20m,
             new DateOnly(2026, 1, 1))), "create assessment level");
         (await smvService.ApproveSmvAsync(smv.Id)).Code.ShouldBe("CANNOT_APPROVE_OWN_SMV");
+        // An approval with no acting user is refused, never taken for someone else's (workflow-security.md G7).
+        user.AppUserId = null;
+        (await smvService.ApproveSmvAsync(smv.Id)).Code.ShouldBe("APPROVING_USER_UNKNOWN");
+        (await levels.ApproveAsync(level.Id)).Code.ShouldBe("APPROVING_USER_UNKNOWN");
         As(checker);
         Ok(await smvService.ApproveSmvAsync(smv.Id), "approve SMV");
         Ok(await smvService.ApproveScheduleAsync(schedule.Id), "approve SMV schedule");
@@ -149,6 +153,8 @@ public class EndToEndFlowTests(WebApplicationFactory<Program> factory) : IClassF
         assessment.AssessedValue.ShouldBe(100_000m);
         Ok(await assessments.SubmitForReviewAsync(assessment.Id), "submit assessment");
         (await assessments.ApproveAsync(assessment.Id)).Code.ShouldBe("CANNOT_APPROVE_OWN_ASSESSMENT");
+        user.AppUserId = null;
+        (await assessments.ApproveAsync(assessment.Id)).Code.ShouldBe("APPROVING_USER_UNKNOWN");
         As(checker);
         Ok(await assessments.ApproveAsync(assessment.Id), "approve assessment");
         Ok(await assessments.PostAsync(assessment.Id), "post assessment");
@@ -160,6 +166,8 @@ public class EndToEndFlowTests(WebApplicationFactory<Program> factory) : IClassF
             rpu.Id, $"E2E-TD-{tag}", new DateOnly(2026, 1, 1), Taxability.Taxable, classification.Id, actualUse.Id, null, 2026, null, "DEMO E2E",
             AssessmentId: assessment.Id)), "create TD");
         Ok(await tds.SubmitForReviewAsync(td.Id), "submit TD");
+        user.AppUserId = null;
+        (await tds.ApproveAsync(td.Id)).Code.ShouldBe("APPROVING_USER_UNKNOWN");
         As(checker);
         Ok(await tds.ApproveAsync(td.Id), "approve TD");
         As(maker);

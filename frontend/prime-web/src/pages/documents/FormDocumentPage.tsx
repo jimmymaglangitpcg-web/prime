@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Alert, Button, Skeleton, Space, Tag, Tooltip, Typography } from 'antd';
 import { ArrowLeftOutlined, PrinterOutlined } from '@ant-design/icons';
 import { useFormPreview, useIssuedForm } from '../../api/forms';
+import { recordExport, usePrintAudit } from '../../api/audit';
 import { ApiRequestError } from '../../lib/apiClient';
 import type { FormAuthority } from '../../lib/types';
 
@@ -32,6 +33,15 @@ export function FormDocumentPage() {
   const navigate = useNavigate();
   const frame = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(1100);
+  // Every print is an EXPORT row (docs/analysis/workflow-security.md §4.3). The form prints from its frame, which the
+  // page's beforeprint does not see, so the button reports it; the browser's own print command reports through the page.
+  const loaded = isPreview ? preview.data : issued.data;
+  const printSubject = loaded
+    ? isPreview
+      ? { tableName: 'FormPreview', recordId: params.get('subject'), what: `Form preview ${preview.data!.title} v${preview.data!.formVersion}` }
+      : { tableName: 'IssuedForms', recordId: id, what: `${issued.data!.title}${issued.data!.documentNumber ? ` No. ${issued.data!.documentNumber}` : ''}` }
+    : null;
+  usePrintAudit(printSubject);
 
   const query = isPreview ? preview : issued;
   if (query.isLoading) {
@@ -51,7 +61,12 @@ export function FormDocumentPage() {
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
           Back
         </Button>
-        <Button type="primary" icon={<PrinterOutlined />} onClick={() => frame.current?.contentWindow?.print()}>
+        <Button type="primary" icon={<PrinterOutlined />} onClick={() => {
+          if (printSubject) {
+            recordExport(printSubject.tableName, printSubject.recordId, printSubject.what, 'Print');
+          }
+          frame.current?.contentWindow?.print();
+        }}>
           Print
         </Button>
         <Typography.Text strong>

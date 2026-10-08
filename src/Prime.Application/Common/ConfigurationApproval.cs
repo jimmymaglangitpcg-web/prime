@@ -23,9 +23,10 @@ internal static class ConfigurationApproval
         {
             return Result.Failure($"{codePrefix}_NOT_DRAFT", "Only a Draft version can be approved.");
         }
-        if (currentUser.AppUserId is not null && item.CreatedBy == currentUser.AppUserId)
+        if (MakerChecker.Refusal(currentUser, item.CreatedBy, $"CANNOT_APPROVE_OWN_{codePrefix}",
+                "The creator cannot also approve it (maker-checker, CLAUDE.md §46).") is { } refusal)
         {
-            return Result.Failure($"CANNOT_APPROVE_OWN_{codePrefix}", "The creator cannot also approve it (maker-checker, CLAUDE.md §46).");
+            return Result.Failure(refusal.Code, refusal.Message);
         }
 
         var approved = await sameScope.Where(x => x.Id != item.Id && x.Status == WorkflowStatus.Approved).ToListAsync(ct);

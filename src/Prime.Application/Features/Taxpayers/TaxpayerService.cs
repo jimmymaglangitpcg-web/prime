@@ -2,6 +2,8 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
+using Prime.Application.Common.Security;
+using Prime.Application.Features.Security;
 using Prime.Application.Features.Properties;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
@@ -13,8 +15,26 @@ public sealed class TaxpayerService(
     IValidator<CreateTaxpayerRequest> createValidator,
     IValidator<AddPropertyOwnerRequest> addOwnerValidator,
     ICurrentUserService currentUser,
-    IJurisdiction jurisdiction) : ITaxpayerService
+    IJurisdiction jurisdiction,
+    IPermissionService permissions) : ITaxpayerService
 {
+    /// <summary>
+    /// An individual's TIN, contact, e-mail and address, masked for a user without taxpayer.view-personal
+    /// (CLAUDE.md §68; workflow-security.md Q16). Applied to every taxpayer the API returns.
+    /// </summary>
+    private async Task<Func<TaxpayerDto, TaxpayerDto>> PersonalDataViewAsync(CancellationToken ct)
+    {
+        if (await permissions.HasAsync(Permissions.TaxpayerViewPersonal, ct))
+        {
+            return dto => dto;
+        }
+        return dto => dto.TaxpayerType != TaxpayerType.Individual ? dto : dto with
+        {
+            Tin = PersonalData.MaskTin(dto.Tin), ContactNumber = PersonalData.MaskContact(dto.ContactNumber),
+            Email = PersonalData.MaskEmail(dto.Email), Address = PersonalData.MaskAddress(dto.Address), PersonalDataMasked = true,
+        };
+    }
+
     /// <summary>
     /// Taxpayers are one provincial registry (docs/analysis/province-wide-operation.md Q5). A restricted
     /// user sees a taxpayer in full only when they are a party to a property in the user's jurisdiction
@@ -62,7 +82,7 @@ public sealed class TaxpayerService(
         db.Taxpayers.Add(taxpayer);
         await db.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(ProjectToDto(taxpayer));
+        return Result.Success((await PersonalDataViewAsync(cancellationToken))(ProjectToDto(taxpayer)));
     }
 
     public async Task<Result<TaxpayerDto>> UpdateDetailsAsync(Guid taxpayerId, UpdateTaxpayerDetailsRequest request, CancellationToken cancellationToken = default)
@@ -86,6 +106,11 @@ public sealed class TaxpayerService(
         {
             return Result.Failure<TaxpayerDto>("TAXPAYER_NOT_FOUND", "No taxpayer was found with the given id.");
         }
+        // Whoever cannot see the details cannot correct them: a masked value would be saved back (Q16).
+        if (taxpayer.TaxpayerType == TaxpayerType.Individual && !await permissions.HasAsync(Permissions.TaxpayerViewPersonal, cancellationToken))
+        {
+            return Result.Failure<TaxpayerDto>("PERSONAL_DATA_FORBIDDEN", "Correcting an individual's details needs permission to see them (taxpayer.view-personal).");
+        }
         if (request.Sex is not null && taxpayer.TaxpayerType != TaxpayerType.Individual)
         {
             return Result.Failure<TaxpayerDto>("VALIDATION_FAILED", "Only an individual has a sex.");
@@ -97,7 +122,7 @@ public sealed class TaxpayerService(
         taxpayer.Sex = request.Sex;
         currentUser.Reason = request.Reason.Trim();
         await db.SaveChangesAsync(cancellationToken);
-        return Result.Success(ProjectToDto(taxpayer));
+        return Result.Success((await PersonalDataViewAsync(cancellationToken))(ProjectToDto(taxpayer)));
     }
 
     public async Task<Result<TaxpayerDto>> GetByIdAsync(Guid taxpayerId, CancellationToken cancellationToken = default)
@@ -107,7 +132,7 @@ public sealed class TaxpayerService(
         {
             return Result.Failure<TaxpayerDto>("TAXPAYER_NOT_FOUND", "No taxpayer was found with the given id.");
         }
-        var dto = ProjectToDto(taxpayer);
+        var dto = (await PersonalDataViewAsync(cancellationToken))(ProjectToDto(taxpayer));
         return Result.Success(await IsFullyVisibleAsync(taxpayerId, cancellationToken) ? dto : Limited(dto));
     }
 
@@ -148,9 +173,10 @@ public sealed class TaxpayerService(
             ? (await FullyVisible(db.Taxpayers).Where(t => ids.Contains(t.Id)).Select(t => t.Id).ToListAsync(cancellationToken)).ToHashSet()
             : ids.ToHashSet();
 
+        var view = await PersonalDataViewAsync(cancellationToken);
         return Result.Success(new PagedResult<TaxpayerDto>
         {
-            Items = items.Select(t => full.Contains(t.Id) ? ProjectToDto(t) : Limited(ProjectToDto(t))).ToList(),
+            Items = items.Select(t => full.Contains(t.Id) ? view(ProjectToDto(t)) : Limited(view(ProjectToDto(t)))).ToList(),
             TotalCount = totalCount,
             Page = request.Page,
             PageSize = request.PageSize,
@@ -287,7 +313,8 @@ public sealed class TaxpayerService(
             return Result.Failure<IReadOnlyList<PropertyOwnerDto>>("PROPERTY_NOT_FOUND", "No property was found with the given id.");
         }
         return Result.Success<IReadOnlyList<PropertyOwnerDto>>(
-            await PropertyParties.ProjectAsync(db.PropertyTaxpayers.Where(pt => pt.PropertyId == propertyId), cancellationToken));
+            await PropertyParties.ProjectAsync(db.PropertyTaxpayers.Where(pt => pt.PropertyId == propertyId), cancellationToken,
+                maskPersonal: !await permissions.HasAsync(Permissions.TaxpayerViewPersonal, cancellationToken)));
     }
 
     private static TaxpayerDto ProjectToDto(Taxpayer t) => new(

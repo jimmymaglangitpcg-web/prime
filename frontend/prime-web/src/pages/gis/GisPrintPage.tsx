@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { usePrintAudit } from '../../api/audit';
 import { Alert, Button, Space, Tag, Typography } from 'antd';
 import { ArrowLeftOutlined, PrinterOutlined } from '@ant-design/icons';
 import 'ol/ol.css';
@@ -68,6 +69,7 @@ export function GisPrintPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const params = useMemo(() => parseParams(searchParams), [searchParams]);
+  usePrintAudit({ tableName: 'Parcels', what: `Tax map print (${params?.layers.join(', ') ?? ''})` });
   const mapElement = useRef<HTMLDivElement>(null);
 
   const [ready, setReady] = useState(false);

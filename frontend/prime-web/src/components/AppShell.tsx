@@ -1,36 +1,41 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Alert, Layout, Menu, Select, Tag, Tooltip, Typography } from 'antd';
-import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined, NumberOutlined, CloudUploadOutlined, ApartmentOutlined, CheckSquareOutlined, SendOutlined, SafetyCertificateOutlined, LineChartOutlined, SyncOutlined, ExperimentOutlined, ScheduleOutlined, FundOutlined } from '@ant-design/icons';
+import { Alert, Badge, Button, Layout, Menu, Select, Tag, Tooltip, Typography } from 'antd';
+import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined, NumberOutlined, CloudUploadOutlined, ApartmentOutlined, CheckSquareOutlined, SendOutlined, SafetyCertificateOutlined, LineChartOutlined, SyncOutlined, ExperimentOutlined, ScheduleOutlined, FundOutlined, LockOutlined, UserAddOutlined, LogoutOutlined, HistoryOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { devActAsAvailable, getDevActAs, setDevActAs, subscribeDevActAs } from '../lib/devActAs';
-import { useCurrentUser, useDevUsers } from '../api/offices';
+import { useCan, useCurrentUser, useDevUsers } from '../api/offices';
+import { useSignUpRequests } from '../api/accounts';
+import { signOut, useSupabaseSession } from '../lib/auth';
 
 const { Header, Sider, Content } = Layout;
 
 const navItems = [
-  { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
-  { key: '/approvals', icon: <CheckSquareOutlined />, label: 'Awaiting my approval' },
-  { key: '/submissions', icon: <SendOutlined />, label: 'Submissions' },
-  { key: '/properties', icon: <HomeOutlined />, label: 'Properties' },
-  { key: '/taxpayers', icon: <TeamOutlined />, label: 'Taxpayers' },
-  { key: '/gis', icon: <GlobalOutlined />, label: 'Tax Map' },
-  { key: '/sworn-statements', icon: <AuditOutlined />, label: 'Sworn Statements' },
-  { key: '/exemptions', icon: <SafetyCertificateOutlined />, label: 'Exemptions' },
-  { key: '/market-data', icon: <LineChartOutlined />, label: 'Market Data' },
-  { key: '/smv-preparation', icon: <ScheduleOutlined />, label: 'SMV Preparation' },
-  { key: '/smv-testing', icon: <ExperimentOutlined />, label: 'SMV Testing' },
-  { key: '/smv-impact', icon: <FundOutlined />, label: 'Tax Impact Study' },
-  { key: '/general-revision', icon: <SyncOutlined />, label: 'General Revision' },
-  { key: '/registers', icon: <BookOutlined />, label: 'Registers' },
-  { key: '/collection', icon: <DollarOutlined />, label: 'Collection' },
-  { key: '/admin/offices', icon: <ApartmentOutlined />, label: 'Offices' },
-  { key: '/admin/property-identification', icon: <NumberOutlined />, label: 'Property Identification' },
-  { key: '/admin/valuation', icon: <CalculatorOutlined />, label: 'Valuation Rules' },
-  { key: '/admin/forms', icon: <FileTextOutlined />, label: 'Forms & Numbering' },
-  { key: '/admin/collection', icon: <BankOutlined />, label: 'Collection Setup' },
-  { key: '/admin/content-packs', icon: <CloudUploadOutlined />, label: 'Content Packs' },
-  { key: '/health', icon: <HeartOutlined />, label: 'System Health' },
+  { needs: 'prime.use', key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
+  { needs: 'prime.use', key: '/approvals', icon: <CheckSquareOutlined />, label: 'Awaiting my approval' },
+  { needs: 'records.view', key: '/submissions', icon: <SendOutlined />, label: 'Submissions' },
+  { needs: 'property.view', key: '/properties', icon: <HomeOutlined />, label: 'Properties' },
+  { needs: 'taxpayer.view', key: '/taxpayers', icon: <TeamOutlined />, label: 'Taxpayers' },
+  { needs: 'gis.view', key: '/gis', icon: <GlobalOutlined />, label: 'Tax Map' },
+  { needs: 'property.view', key: '/sworn-statements', icon: <AuditOutlined />, label: 'Sworn Statements' },
+  { needs: 'property.view', key: '/exemptions', icon: <SafetyCertificateOutlined />, label: 'Exemptions' },
+  { needs: 'market.view', key: '/market-data', icon: <LineChartOutlined />, label: 'Market Data' },
+  { needs: 'smv.view', key: '/smv-preparation', icon: <ScheduleOutlined />, label: 'SMV Preparation' },
+  { needs: 'smv.view', key: '/smv-testing', icon: <ExperimentOutlined />, label: 'SMV Testing' },
+  { needs: 'smv.view', key: '/smv-impact', icon: <FundOutlined />, label: 'Tax Impact Study' },
+  { needs: 'gr.view', key: '/general-revision', icon: <SyncOutlined />, label: 'General Revision' },
+  { needs: 'records.view', key: '/registers', icon: <BookOutlined />, label: 'Registers' },
+  { needs: 'treasury.legacy', key: '/collection', icon: <DollarOutlined />, label: 'Collection' },
+  { needs: 'office.view', key: '/admin/offices', icon: <ApartmentOutlined />, label: 'Offices' },
+  { needs: 'prime.use', key: '/admin/property-identification', icon: <NumberOutlined />, label: 'Property Identification' },
+  { needs: 'prime.use', key: '/admin/valuation', icon: <CalculatorOutlined />, label: 'Valuation Rules' },
+  { needs: 'prime.use', key: '/admin/forms', icon: <FileTextOutlined />, label: 'Forms & Numbering' },
+  { needs: 'treasury.legacy', key: '/admin/collection', icon: <BankOutlined />, label: 'Collection Setup' },
+  { needs: 'office.view', key: '/admin/role-permissions', icon: <LockOutlined />, label: 'Role Permissions' },
+  { needs: 'users.signup', key: '/admin/sign-up-requests', icon: <UserAddOutlined />, label: <SignUpRequestsLabel /> },
+  { needs: 'audit.view', key: '/admin/audit', icon: <HistoryOutlined />, label: 'Audit Trail' },
+  { needs: 'config.edit', key: '/admin/content-packs', icon: <CloudUploadOutlined />, label: 'Content Packs' },
+  { needs: 'prime.use', key: '/health', icon: <HeartOutlined />, label: 'System Health' },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -40,6 +45,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [narrow, setNarrow] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  // Each entry shows only when the user's roles allow its permission (docs/analysis/workflow-security.md §4.1).
+  const can = useCan();
+  const menuItems = navItems.filter((item) => can(item.needs)).map(({ needs: _needs, ...item }) => item);
 
   // Highlight the nav item whose path is the longest prefix match of the
   // current location (so /properties/123 still highlights "Properties").
@@ -73,7 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           theme="dark"
           mode="inline"
           selectedKeys={[selectedKey]}
-          items={navItems}
+          items={menuItems}
           onClick={({ key }) => navigate(key)}
         />
       </Sider>
@@ -84,6 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Typography.Title>
           {!narrow && <CurrentOffice />}
           {devActAsAvailable && <DevUserPicker />}
+          <SignOutButton narrow={narrow} />
         </Header>
         <Content style={{ margin: narrow ? 16 : 24, minWidth: 0 }}>
           {devActAsAvailable && <DevActAsBanner />}
@@ -112,7 +121,7 @@ function CurrentOffice() {
 const useDevActAs = () => useSyncExternalStore(subscribeDevActAs, getDevActAs);
 
 /** Development only: act as one of the API's DEMO users, e.g. a municipal appraiser or the approving checker (Q13). */
-function DevUserPicker() {
+export function DevUserPicker() {
   const actingAs = useDevActAs();
   const users = useDevUsers(true);
   const queryClient = useQueryClient();
@@ -135,4 +144,23 @@ function DevActAsBanner() {
   return actingAs
     ? <Alert type="warning" showIcon banner style={{ marginBottom: 16 }} title={`Acting as ${name} — development only; requests are made as that DEMO user.`} />
     : null;
+}
+
+/** Sign-up requests awaiting a decision, counted in the menu for those who decide them (workflow-security.md §4.2). */
+function SignUpRequestsLabel() {
+  const can = useCan();
+  const waiting = useSignUpRequests('PendingReview', can('users.signup'));
+  const count = waiting.data?.length ?? 0;
+  return <span>Sign-up Requests {count > 0 && <Badge count={count} size="small" style={{ marginInlineStart: 4 }} />}</span>;
+}
+
+/** Shown only for a real Supabase session; the Development bypass has nothing to sign out. */
+function SignOutButton({ narrow }: { narrow: boolean }) {
+  const session = useSupabaseSession();
+  if (!session) return null;
+  return (
+    <Tooltip title={session.user.email}>
+      <Button size="small" icon={<LogoutOutlined />} onClick={() => void signOut()}>{narrow ? null : 'Sign out'}</Button>
+    </Tooltip>
+  );
 }

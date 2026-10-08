@@ -14,6 +14,7 @@ public class CurrentUserService : ICurrentUserService
 {
     public Guid? AppUserId { get; set; }
     public string? IpAddress { get; set; }
+    public string? AssuranceLevel { get; set; }
     public string? Reason { get; set; }
 
     public void ActAsForBackgroundJob(Guid? userId) => AppUserId = userId;

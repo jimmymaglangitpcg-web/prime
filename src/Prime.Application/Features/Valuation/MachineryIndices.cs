@@ -124,8 +124,9 @@ public sealed class MachineryIndexService(IApplicationDbContext db, ICurrentUser
 
     private Result? Problem(WorkflowStatus status, Guid? createdBy, string prefix) =>
         status != WorkflowStatus.Draft ? Result.Failure($"{prefix}_NOT_DRAFT", "Only a Draft can be approved.")
-        : currentUser.AppUserId is not null && createdBy == currentUser.AppUserId
-            ? Result.Failure($"CANNOT_APPROVE_OWN_{prefix}", "The creator cannot also approve it (maker-checker, CLAUDE.md §46).")
+        : MakerChecker.Refusal(currentUser, createdBy, $"CANNOT_APPROVE_OWN_{prefix}",
+            "The creator cannot also approve it (maker-checker, CLAUDE.md §46).") is { } refusal
+            ? Result.Failure(refusal.Code, refusal.Message)
             : null;
 
     private void Approve(ExchangeRate x) => (x.Status, x.ApprovedBy, x.ApprovedAt) = (WorkflowStatus.Approved, currentUser.AppUserId, DateTimeOffset.UtcNow);

@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Common;
+using Prime.Application.Common.Security;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
 
@@ -35,7 +36,9 @@ public static class PropertyParties
         return rows.Where(x => x.RpuId == null);
     }
 
-    public static async Task<List<PropertyOwnerDto>> ProjectAsync(IQueryable<PropertyTaxpayer> query, CancellationToken ct)
+    /// <param name="maskPersonal">For API responses to a user without taxpayer.view-personal: an individual's address is
+    /// hidden (workflow-security.md Q16). Forms and notices never mask: they are official records.</param>
+    public static async Task<List<PropertyOwnerDto>> ProjectAsync(IQueryable<PropertyTaxpayer> query, CancellationToken ct, bool maskPersonal = false)
     {
         var rows = await query
             .OrderByDescending(pt => pt.IsCurrent).ThenBy(pt => pt.Role).ThenByDescending(pt => pt.StartDate)
@@ -73,9 +76,12 @@ public static class PropertyParties
             r.IsCurrent,
             r.Role,
             r.EndReason,
-            r.Taxpayer?.Address,
+            Masked(r.Taxpayer?.TaxpayerType) ? PersonalData.MaskAddress(r.Taxpayer?.Address) : r.Taxpayer?.Address,
             r.RpuId,
-            r.RpuNumber)).ToList();
+            r.RpuNumber,
+            Masked(r.Taxpayer?.TaxpayerType) && r.Taxpayer?.Address is not null)).ToList();
+
+        bool Masked(TaxpayerType? type) => maskPersonal && type == TaxpayerType.Individual;
     }
 
     /// <summary>Printed label of a role — English defaults until the LAM's wording is configured.</summary>

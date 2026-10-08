@@ -51,7 +51,14 @@ public sealed record TaxDeclarationDto(
     int? TransactionRank = null,
     /// <summary>The assessment count the TD number was made from (identification-numbering.md §4.1).</summary>
     long? AssessmentCount = null,
-    Guid? RestoresTaxDeclarationId = null);
+    Guid? RestoresTaxDeclarationId = null,
+    /// <summary>The cancellation waiting for a second user's decision, if any (workflow-security.md Q19).</summary>
+    TaxDeclarationCancellationRequestDto? OpenCancellationRequest = null);
+
+/// <summary>A request to cancel an approved TD outright, decided by a second user (workflow-security.md Q19).</summary>
+public sealed record TaxDeclarationCancellationRequestDto(
+    Guid Id, Guid TaxDeclarationId, string Reason, WorkflowStatus Status, DateTimeOffset RequestedAt, Guid? RequestedBy,
+    DateTimeOffset? DecidedAt, Guid? DecidedBy, string? DecisionReason);
 
 public sealed record TaxDeclarationReasonRequest(string Reason);
 

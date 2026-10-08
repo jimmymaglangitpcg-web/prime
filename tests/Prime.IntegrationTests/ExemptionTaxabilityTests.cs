@@ -65,7 +65,7 @@ public class ExemptionTaxabilityTests(WebApplicationFactory<Program> factory) : 
         var scheme = await numbering.CreateAsync(new CreateNumberingSchemeRequest("DEMO — not an LGU format", DateOnly.FromDateTime(DateTime.Today), null,
             NumberedDocumentKind.TaxDeclaration, "DEMO TD", "DEMO-EX-{YEAR}-{SEQ:6}", null, false));
         scheme.IsSuccess.ShouldBeTrue(scheme.IsSuccess ? null : scheme.Message);
-        (await numbering.ApproveAsync(scheme.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => numbering.ApproveAsync(scheme.Value.Id))).IsSuccess.ShouldBeTrue();
         var barangayId = await db.Properties.Where(p => p.Id == seed.PropertyId).Select(p => p.BarangayId).SingleAsync();
         var today = scope.ServiceProvider.GetRequiredService<IClock>().Today;
         return (new Ctx(db, scope.ServiceProvider, user, users[0], users[1], seed, barangayId, today), new Scoped(transaction, scope));
@@ -86,7 +86,7 @@ public class ExemptionTaxabilityTests(WebApplicationFactory<Program> factory) : 
         var created = await c.Exemptions.CreateTypeAsync(new CreateExemptionTypeRequest($"DEMO basis {Guid.NewGuid():N}"[..20], new DateOnly(2020, 1, 1), null,
             $"DEMO-EX-{Guid.NewGuid():N}"[..16], "DEMO exemption", null, ExemptionAppliesTo.All, true, ceiling));
         c.User.AppUserId = c.Checker.Id;
-        var approved = await c.Exemptions.ApproveTypeAsync(created.Value.Id);
+        var approved = await TestSeed.AsCheckerAsync(c.Services, () => c.Exemptions.ApproveTypeAsync(created.Value.Id));
         approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
         c.User.AppUserId = null;
         return approved.Value;
@@ -100,7 +100,7 @@ public class ExemptionTaxabilityTests(WebApplicationFactory<Program> factory) : 
         claim.IsSuccess.ShouldBeTrue(claim.IsSuccess ? null : claim.Message);
         (await c.Exemptions.AddEvidenceAsync(claim.Value.Id, new AddExemptionEvidenceRequest("DEMO certificate", "DEMO-1", null, null))).IsSuccess.ShouldBeTrue();
         c.User.AppUserId = c.Checker.Id;
-        var approved = await c.Exemptions.ApproveAsync(claim.Value.Id, new ApproveExemptionRequest(effective, null, null));
+        var approved = await TestSeed.AsCheckerAsync(c.Services, () => c.Exemptions.ApproveAsync(claim.Value.Id, new ApproveExemptionRequest(effective, null, null)));
         approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
         c.User.AppUserId = null;
         return approved.Value;
@@ -110,13 +110,13 @@ public class ExemptionTaxabilityTests(WebApplicationFactory<Program> factory) : 
     private static async Task<TaxDeclarationDto> MakeAndDeclareAsync(Ctx c, Guid assessmentId)
     {
         (await c.Assessments.SubmitForReviewAsync(assessmentId)).IsSuccess.ShouldBeTrue();
-        var approved = await c.Assessments.ApproveAsync(assessmentId);
+        var approved = await TestSeed.AsCheckerAsync(c.Services, () => c.Assessments.ApproveAsync(assessmentId));
         approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
         var posted = await c.Assessments.PostAsync(assessmentId);
         posted.IsSuccess.ShouldBeTrue(posted.IsSuccess ? null : posted.Message);
         var td = await c.Db.TaxDeclarations.AsNoTracking().SingleAsync(x => x.AssessmentId == assessmentId && x.Status == WorkflowStatus.Draft);
         (await c.Tds.SubmitForReviewAsync(td.Id)).IsSuccess.ShouldBeTrue();
-        var declared = await c.Tds.ApproveAsync(td.Id);
+        var declared = await TestSeed.AsCheckerAsync(c.Services, () => c.Tds.ApproveAsync(td.Id));
         declared.IsSuccess.ShouldBeTrue(declared.IsSuccess ? null : declared.Message);
         return declared.Value;
     }
@@ -144,7 +144,7 @@ public class ExemptionTaxabilityTests(WebApplicationFactory<Program> factory) : 
         var levels = c.Services.GetRequiredService<IAssessmentLevelService>();
         var level = await levels.CreateAsync(new CreateAssessmentLevelRequest($"ORD-{Guid.NewGuid():N}", Jan1, c.Seed.ClassificationId, school.Id,
             (await TestSeed.LandPropertyTypeAsync(c.Db)).Id, 0m, 1_000_000m, 20m, Jan1));
-        (await levels.ApproveAsync(level.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => levels.ApproveAsync(level.Value.Id))).IsSuccess.ShouldBeTrue();
         var split = new Valuation
         {
             RpuId = valuation.RpuId, PropertyId = valuation.PropertyId, SourceType = valuation.SourceType, SourceId = valuation.SourceId,

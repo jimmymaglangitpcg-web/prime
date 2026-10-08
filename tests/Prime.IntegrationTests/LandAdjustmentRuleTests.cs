@@ -45,7 +45,7 @@ public class LandAdjustmentRuleTests(WebApplicationFactory<Program> factory) : I
             var created = await factors.CreateAsync(new CreateAdjustmentFactorRequest(seed.SmvId, code, $"DEMO {code}", percent, classificationId, null,
                 "DEMO — not an SMV provision", On, null, kind, reference, depth, rows));
             created.IsSuccess.ShouldBeTrue(created.Message);
-            (await factors.ApproveAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+            (await TestSeed.AsCheckerAsync(services, () => factors.ApproveAsync(created.Value.Id))).IsSuccess.ShouldBeTrue();
         }
         await Factor("L14-ROAD", AdjustmentRuleKind.ByRoadType, rows: [new(paved.Id, null, null, null, 0m), new(dirt.Id, null, null, null, -10m)]);
         await Factor("L14-KM", AdjustmentRuleKind.ByDistance, reference: DistanceReference.Poblacion,
@@ -172,7 +172,7 @@ public class LandAdjustmentRuleTests(WebApplicationFactory<Program> factory) : I
         var rate = await smv.CreateScheduleAsync(c.Seed.SmvId, new CreateSmvScheduleRequest(c.Seed.ClassificationId, null, landType.Id, null, "per tree", 2_000m,
             null, null, On, mango.Id));
         rate.IsSuccess.ShouldBeTrue(rate.Message);
-        (await smv.ApproveScheduleAsync(rate.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => smv.ApproveScheduleAsync(rate.Value.Id))).IsSuccess.ShouldBeTrue();
 
         var lands = c.Services.GetRequiredService<ILandService>();
         (await lands.AddImprovementAsync(c.Land.Id, new AddLandImprovementRequest(mango.Id, 10m, true, null, null, null, SeparateRpuId: c.Seed.RpuId)))

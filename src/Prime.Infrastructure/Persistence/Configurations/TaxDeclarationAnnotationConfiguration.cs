@@ -27,3 +27,19 @@ public sealed class TaxDeclarationAnnotationConfiguration : IEntityTypeConfigura
         builder.HasIndex(x => new { x.TaxDeclarationId, x.CarriedFromAnnotationId }).IsUnique().HasFilter("\"CarriedFromAnnotationId\" IS NOT NULL");
     }
 }
+
+public sealed class TaxDeclarationCancellationRequestConfiguration : IEntityTypeConfiguration<TaxDeclarationCancellationRequest>
+{
+    public void Configure(EntityTypeBuilder<TaxDeclarationCancellationRequest> builder)
+    {
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
+        builder.Property(x => x.DecisionReason).HasMaxLength(1000);
+        builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+        builder.HasOne(x => x.TaxDeclaration).WithMany(x => x.CancellationRequests).HasForeignKey(x => x.TaxDeclarationId)
+            .OnDelete(DeleteBehavior.Restrict);
+        // One open request per TD (workflow-security.md Q19).
+        builder.HasIndex(x => x.TaxDeclarationId).IsUnique().HasFilter("\"Status\" = 'PendingReview'")
+            .HasDatabaseName("UX_TaxDeclarationCancellationRequests_Open");
+    }
+}

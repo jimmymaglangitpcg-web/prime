@@ -104,7 +104,7 @@ public class ValuationFlowTests(WebApplicationFactory<Program> factory) : IClass
             EffectivityDate: new DateOnly(2026, 1, 1),
             RevisionYear: 2026,
             Description: "DEMO_SMV for ValuationFlowTests"))).Value;
-        await smvService.ApproveSmvAsync(smv.Id);
+        await TestSeed.AsCheckerAsync(services, () => smvService.ApproveSmvAsync(smv.Id));
 
         var schedule = (await smvService.CreateScheduleAsync(smv.Id, new CreateSmvScheduleRequest(
             ClassificationId: land.ClassificationId,
@@ -116,7 +116,7 @@ public class ValuationFlowTests(WebApplicationFactory<Program> factory) : IClass
             MinimumValue: null,
             MaximumValue: null,
             EffectiveDate: new DateOnly(2026, 1, 1)))).Value;
-        await smvService.ApproveScheduleAsync(schedule.Id);
+        await TestSeed.AsCheckerAsync(services, () => smvService.ApproveScheduleAsync(schedule.Id));
 
         var valuationService = services.GetRequiredService<IValuationService>();
         var result = await valuationService.ComputeForLandAsync(land.Id);

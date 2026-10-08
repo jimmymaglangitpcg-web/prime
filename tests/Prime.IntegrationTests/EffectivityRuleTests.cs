@@ -106,14 +106,14 @@ public class EffectivityRuleTests(WebApplicationFactory<Program> factory) : ICla
 
         // Approved on 2 January, it would take effect in 2028: stopped, nothing signed.
         c.Time.Now = Noon(new DateOnly(2027, 1, 2));
-        var late = await assessments.ApproveAsync(draft.Id);
+        var late = await TestSeed.AsCheckerAsync(c.Services, () => assessments.ApproveAsync(draft.Id));
         late.Code.ShouldBe("EFFECTIVITY_CHANGED");
         late.Message!.ShouldContain("2028-01-01");
         (await c.Db.Assessments.AsNoTracking().SingleAsync(x => x.Id == draft.Id)).Status.ShouldBe(WorkflowStatus.PendingReview);
 
         // Approved on 1 January, it is made that day and takes effect that day.
         c.Time.Now = Noon(new DateOnly(2027, 1, 1));
-        var approved = await assessments.ApproveAsync(draft.Id);
+        var approved = await TestSeed.AsCheckerAsync(c.Services, () => assessments.ApproveAsync(draft.Id));
         approved.IsSuccess.ShouldBeTrue(approved.Message);
         (approved.Value.Status, approved.Value.MadeOn).ShouldBe((WorkflowStatus.Approved, (DateOnly?)new DateOnly(2027, 1, 1)));
     }
@@ -140,7 +140,7 @@ public class EffectivityRuleTests(WebApplicationFactory<Program> factory) : ICla
         // An override is not re-derived at approval.
         (await assessments.SubmitForReviewAsync(overridden.Value.Id)).IsSuccess.ShouldBeTrue();
         c.Time.Now = Noon(new DateOnly(2026, 8, 1));
-        (await assessments.ApproveAsync(overridden.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => assessments.ApproveAsync(overridden.Value.Id))).IsSuccess.ShouldBeTrue();
 
         // Without a type and without a date there is nothing to go on.
         (await assessments.CreateAsync(new CreateAssessmentRequest(valuationId, null, null, null, null, "DEMO"))).Code.ShouldBe("EFFECTIVE_DATE_REQUIRED");

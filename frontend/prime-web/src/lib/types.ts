@@ -125,6 +125,8 @@ export interface PropertyOwnerDto {
   /** Set when the party holds one unit only (e.g. a building owned apart from the land). */
   rpuId: string | null;
   rpuNumber: string | null;
+  /** The address is hidden: an individual's, and you lack taxpayer.view-personal (workflow-security.md Q16). */
+  addressMasked?: boolean;
 }
 
 export interface ParcelSummaryDto {
@@ -214,6 +216,8 @@ export interface TaxpayerDto {
   limited?: boolean;
   /** Individuals only; printed only when Forms:PrintOwnerSex is on (records-and-forms.md Q3). */
   sex?: Sex | null;
+  /** An individual's TIN, contact, e-mail and address are masked: you lack taxpayer.view-personal (workflow-security.md Q16). */
+  personalDataMasked?: boolean;
 }
 
 export type Sex = 'Male' | 'Female';
@@ -460,6 +464,20 @@ export interface TaxDeclarationDto {
   /** FAAS transaction code (MRPAAO p.145) and its rank; the highest rank wins when several apply. */
   transactionCode: string | null;
   transactionRank: number | null;
+  /** An outright cancellation waiting for a second user's decision (workflow-security.md Q19). */
+  openCancellationRequest: TaxDeclarationCancellationRequestDto | null;
+}
+
+export interface TaxDeclarationCancellationRequestDto {
+  id: string;
+  taxDeclarationId: string;
+  reason: string;
+  status: WorkflowStatus;
+  requestedAt: string;
+  requestedBy: string | null;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  decisionReason: string | null;
 }
 
 export interface TaxDeclarationAnnotationDto {

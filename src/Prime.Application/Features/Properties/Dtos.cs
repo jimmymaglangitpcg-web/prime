@@ -72,7 +72,9 @@ public sealed record PropertyOwnerDto(
     string? EndReason,
     string? Address,
     Guid? RpuId = null,
-    string? RpuNumber = null);
+    string? RpuNumber = null,
+    /// <summary>The address is hidden: an individual's, for a user without taxpayer.view-personal (Q16).</summary>
+    bool AddressMasked = false);
 
 public sealed record ParcelSummaryDto(
     Guid Id,

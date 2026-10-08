@@ -14,7 +14,12 @@ public interface ITaxDeclarationService
     Task<Result<TaxDeclarationDto>> ApproveAsync(Guid id, CancellationToken cancellationToken = default);
     Task<Result<TaxDeclarationDto>> RejectAsync(Guid id, string reason, CancellationToken cancellationToken = default);
     /// <summary>Cancels an approved TD outright (no successor), e.g. a duplicate declaration.</summary>
-    Task<Result<TaxDeclarationDto>> CancelAsync(Guid id, string reason, CancellationToken cancellationToken = default);
+    /// <summary>Asks for an approved TD to be cancelled outright; it is cancelled when a second user approves (workflow-security.md Q19).</summary>
+    Task<Result<TaxDeclarationDto>> RequestCancellationAsync(Guid id, string reason, CancellationToken cancellationToken = default);
+    /// <summary>Cancels the TD of an open request, by a known user other than the requester (CLAUDE.md §46).</summary>
+    Task<Result<TaxDeclarationDto>> ApproveCancellationAsync(Guid requestId, CancellationToken cancellationToken = default);
+    Task<Result<TaxDeclarationDto>> RejectCancellationAsync(Guid requestId, string reason, CancellationToken cancellationToken = default);
+    Task<Result<IReadOnlyList<TaxDeclarationCancellationRequestDto>>> ListCancellationRequestsAsync(Guid id, CancellationToken cancellationToken = default);
 
     // Annotations
     Task<Result<IReadOnlyList<TaxDeclarationAnnotationDto>>> ListAnnotationsAsync(Guid id, CancellationToken cancellationToken = default);

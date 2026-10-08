@@ -94,6 +94,8 @@ public class ApprovalDelegationTests(WebApplicationFactory<Program> factory) : I
         (draft.Status, draft.State).ShouldBe((WorkflowStatus.Draft, DelegationState.Draft));
         (await c.Delegations.FindInForceAsync(c.Office.Id, ApprovalSubjectType.TaxDeclaration, null, c.Today)).ShouldBeNull();
         (await c.Delegations.ApproveAsync(draft.Id)).Code.ShouldBe("CANNOT_APPROVE_OWN_DELEGATION");
+        c.User.AppUserId = null;
+        (await c.Delegations.ApproveAsync(draft.Id)).Code.ShouldBe("APPROVING_USER_UNKNOWN");
         c.User.AppUserId = c.Municipal.Id;
         (await c.Delegations.ApproveAsync(draft.Id)).Code.ShouldBe("DELEGATION_FORBIDDEN");
         c.User.AppUserId = c.Checker.Id;

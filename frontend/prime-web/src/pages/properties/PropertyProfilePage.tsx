@@ -14,6 +14,8 @@ import { TransactionsSection } from './sections/TransactionsSection';
 import { SwornStatementsSection } from './sections/SwornStatementsSection';
 import { ExemptionsSection } from './sections/ExemptionsSection';
 import { NoticesSection } from './sections/NoticesSection';
+import { AuditTable } from '../../components/AuditTable';
+import { useCan } from '../../api/offices';
 
 /**
  * CLAUDE.md §50 Property Profile — "one of the most important screens in
@@ -28,6 +30,7 @@ export function PropertyProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: profile, isLoading, isError, error } = usePropertyProfile(id);
+  const can = useCan();
   const [editing, setEditing] = useState(false);
 
   if (isLoading) {
@@ -92,8 +95,13 @@ export function PropertyProfilePage() {
             { key: 'notices', label: 'Notices', children: <NoticesSection propertyId={property.id} rpus={profile.rpus} owners={profile.owners.filter((o) => o.isCurrent && o.role === 'Owner' && o.taxpayerId)} /> },
             { key: 'sworn', label: 'Sworn statements', children: <SwornStatementsSection propertyId={property.id} /> },
             { key: 'exemptions', label: 'Exemptions', children: <ExemptionsSection propertyId={property.id} rpus={profile.rpus} owners={profile.owners.filter((o) => o.isCurrent)} /> },
-            { key: 'billing', label: 'Billing', children: <BillingSection propertyId={property.id} rpus={profile.rpus} /> },
-            { key: 'payments', label: 'Payments', children: <PaymentsSection propertyId={property.id} /> },
+            // Frozen treasury screens (CLAUDE.md §0), gated like their API by treasury.legacy (granted to no role by default).
+            ...(can('treasury.legacy') ? [
+              { key: 'billing', label: 'Billing', children: <BillingSection propertyId={property.id} rpus={profile.rpus} /> },
+              { key: 'payments', label: 'Payments', children: <PaymentsSection propertyId={property.id} /> },
+            ] : []),
+            // CLAUDE.md §50 "Audit History": the property and its records, for audit.view (docs/analysis/workflow-security.md §4.3).
+            ...(can('audit.view') ? [{ key: 'audit', label: 'Audit history', children: <AuditTable filter={{ propertyId: property.id }} /> }] : []),
           ]}
         />
       </Card>

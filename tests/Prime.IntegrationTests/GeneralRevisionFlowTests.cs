@@ -88,16 +88,16 @@ public class GeneralRevisionFlowTests(WebApplicationFactory<Program> factory) : 
         var smvService = services.GetRequiredService<ISmvService>();
         var smv = (await smvService.CreateSmvAsync(new CreateSmvRequest(
             $"ORD-{Guid.NewGuid():N}", new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 15), new DateOnly(2026, 1, 1), 2026, "DEMO_SMV for GeneralRevisionFlowTests"))).Value;
-        await smvService.ApproveSmvAsync(smv.Id);
+        await TestSeed.AsCheckerAsync(services, () => smvService.ApproveSmvAsync(smv.Id));
         var schedule = (await smvService.CreateScheduleAsync(smv.Id, new CreateSmvScheduleRequest(
             classification.Id, actualUse.Id, propertyType.Id, null, "per sqm", 1000m, null, null, new DateOnly(2026, 1, 1)))).Value;
-        await smvService.ApproveScheduleAsync(schedule.Id);
+        await TestSeed.AsCheckerAsync(services, () => smvService.ApproveScheduleAsync(schedule.Id));
 
         var assessmentLevelService = services.GetRequiredService<Application.Features.AssessmentLevels.IAssessmentLevelService>();
         var assessmentLevel = (await assessmentLevelService.CreateAsync(new Application.Features.AssessmentLevels.CreateAssessmentLevelRequest(
             $"ORD-{Guid.NewGuid():N}", new DateOnly(2026, 1, 1), classification.Id, actualUse.Id, propertyType.Id,
             0m, null, 20m, new DateOnly(2026, 1, 1)))).Value;
-        await assessmentLevelService.ApproveAsync(assessmentLevel.Id);
+        await TestSeed.AsCheckerAsync(services, () => assessmentLevelService.ApproveAsync(assessmentLevel.Id));
 
         var rpuId1 = await SeedLandRpuAsync(services, db, classification.Id, actualUse.Id, area: 100m);
         var rpuId2 = await SeedLandRpuAsync(services, db, classification.Id, actualUse.Id, area: 200m);

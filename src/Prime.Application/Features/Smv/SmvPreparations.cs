@@ -79,7 +79,8 @@ public interface ISmvPreparationService
 /// writes while the SMV is not yet approved in PRIME; the SMV is approved (entered) only once the certified SMV is
 /// published (<see cref="SmvService"/>).
 /// </summary>
-public sealed class SmvPreparationService(IApplicationDbContext db, IClock clock, IJurisdiction jurisdiction, IOptions<SmvPreparationOptions> options)
+public sealed class SmvPreparationService(IApplicationDbContext db, IClock clock, IJurisdiction jurisdiction, IOptions<SmvPreparationOptions> options,
+    ICurrentUserService currentUser)
     : ISmvPreparationService
 {
     public const string ForbiddenCode = "SMV_PREPARATION_FORBIDDEN";
@@ -290,6 +291,7 @@ public sealed class SmvPreparationService(IApplicationDbContext db, IClock clock
         var p = opened.Value;
         (p.Status, p.CancelledAt, p.CancellationReason) = (SmvPreparationStatus.Cancelled, clock.UtcNow, reason);
         p.ProposedSmv!.Status = WorkflowStatus.Cancelled;
+        currentUser.Reason = reason;
         await db.SaveChangesAsync(cancellationToken);
         return await GetAsync(id, cancellationToken);
     }

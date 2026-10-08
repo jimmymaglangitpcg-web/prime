@@ -14,6 +14,12 @@ public interface ICurrentUserService
     string? IpAddress { get; }
 
     /// <summary>
+    /// The token's authenticator assurance level (Supabase's <c>aal</c> claim: aal1 password, aal2 with a second
+    /// factor); null without a token. Read by the MFA rule (docs/analysis/workflow-security.md §4.2, Q7).
+    /// </summary>
+    string? AssuranceLevel { get; }
+
+    /// <summary>
     /// Optional reason for the current mutation (maker-checker/workflow
     /// actions per CLAUDE.md §48). Feature handlers set this before calling
     /// SaveChanges when a reason is relevant; the audit interceptor reads

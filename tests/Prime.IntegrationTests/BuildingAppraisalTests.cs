@@ -63,7 +63,7 @@ public class BuildingAppraisalTests(WebApplicationFactory<Program> factory) : IC
             var schedule = await smv.CreateScheduleAsync(seed.SmvId,
                 new CreateSmvScheduleRequest(seed.ClassificationId, use.Id, buildingType.Id, null, "per sqm", rate, null, null, new DateOnly(2026, 1, 1)));
             schedule.IsSuccess.ShouldBeTrue(schedule.IsSuccess ? null : schedule.Message);
-            (await smv.ApproveScheduleAsync(schedule.Value.Id)).IsSuccess.ShouldBeTrue();
+            (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveScheduleAsync(schedule.Value.Id))).IsSuccess.ShouldBeTrue();
         }
         var building = await scope.ServiceProvider.GetRequiredService<IBuildingService>().CreateAsync(new CreateBuildingRequest(
             rpu.Id, kind.Id, structure.Id, firstUse.Id, 2, 50m, 100m, 2020, 2021, condition.Id, null));

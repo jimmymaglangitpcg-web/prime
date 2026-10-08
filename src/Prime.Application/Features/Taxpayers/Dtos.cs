@@ -40,7 +40,9 @@ public sealed record TaxpayerDto(
     RecordStatus Status,
     DateTimeOffset CreatedAt,
     bool Limited = false,
-    Sex? Sex = null);
+    Sex? Sex = null,
+    /// <summary>TIN, contact, e-mail and address are masked: an individual's, for a user without taxpayer.view-personal (Q16).</summary>
+    bool PersonalDataMasked = false);
 
 public sealed class TaxpayerSearchRequest : Common.PagedRequest
 {

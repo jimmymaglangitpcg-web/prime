@@ -55,7 +55,7 @@ public class LamNumberingTests(WebApplicationFactory<Program> factory) : IClassF
         var created = await smv.CreateSmvAsync(new CreateSmvRequest($"DEMO-L21-{Guid.NewGuid():N}"[..24], new DateOnly(2024, 9, 1), new DateOnly(2024, 10, 1),
             new DateOnly(2025, 1, 1), 2025, "DEMO SMV for LamNumberingTests", MunicipalityIds: [town.Id]));
         created.IsSuccess.ShouldBeTrue(created.IsSuccess ? null : created.Message);
-        (await smv.ApproveSmvAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveSmvAsync(created.Value.Id))).IsSuccess.ShouldBeTrue();
         var today = scope.ServiceProvider.GetRequiredService<IClock>().Today;
         return (new Ctx(db, scope.ServiceProvider, town.Id, [a.Id, b.Id], classification.Id, use.Id, propertyA.Id, propertyB.Id, today),
             new Scoped(transaction, scope));
@@ -74,7 +74,7 @@ public class LamNumberingTests(WebApplicationFactory<Program> factory) : IClassF
     {
         var scheme = await c.Numbering.CreateAsync(new CreateNumberingSchemeRequest("DEMO — not an LGU format", effective, null, kind, $"DEMO {kind}", pattern, null, false));
         scheme.IsSuccess.ShouldBeTrue(scheme.IsSuccess ? null : scheme.Message);
-        var approved = await c.Numbering.ApproveAsync(scheme.Value.Id);
+        var approved = await TestSeed.AsCheckerAsync(c.Services, () => c.Numbering.ApproveAsync(scheme.Value.Id));
         approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
     }
 

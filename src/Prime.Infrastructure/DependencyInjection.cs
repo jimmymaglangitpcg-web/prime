@@ -31,6 +31,7 @@ public static class DependencyInjection
         // and AppUserId differs per request/user.
         services.AddScoped<CurrentUserService>();
         services.AddScoped<ICurrentUserService>(sp => sp.GetRequiredService<CurrentUserService>());
+        services.AddScoped<ISecurityEventLog, SecurityEventLog>();
         services.AddScoped<AuditSaveChangesInterceptor>();
         // Jurisdiction of the request (docs/analysis/province-wide-operation.md §3.3); PrimeDbContext's query filters read it.
         services.AddScoped<JurisdictionState>();
@@ -127,6 +128,8 @@ public static class DependencyInjection
         services.AddScoped<ICollectionLock, CollectionLock>();
         services.AddSingleton<IFormRenderer, FluidFormRenderer>();
         services.AddHostedService<ProvisionalFormSeeder>();
+        // Permission catalogue and its provisional default grants (docs/analysis/workflow-security.md §4.1).
+        services.AddHostedService<Prime.Infrastructure.Identity.PermissionCatalogSeeder>();
 
         // LGU content packs (docs/analysis/lgu-content-pack.md): read from the configured, gitignored content root.
         services.AddOptions<Prime.Infrastructure.ContentPacks.ContentPackOptions>()
@@ -137,7 +140,8 @@ public static class DependencyInjection
 
         services.AddHealthChecks()
             .AddNpgSql(connectionString, name: "postgresql", tags: ["ready"])
-            .AddCheck<PostGisHealthCheck>("postgis", tags: ["ready"]);
+            .AddCheck<PostGisHealthCheck>("postgis", tags: ["ready"])
+            .AddCheck<RowLevelSecurityHealthCheck>("row-level-security", tags: ["ready"]);
 
         // Background jobs (CLAUDE.md §33/§72 General Revision; ARCHITECTURE.md
         // §3.8). Packages were referenced since Phase 2 and deliberately left

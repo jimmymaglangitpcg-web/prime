@@ -4,6 +4,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import type { RpuSummaryDto, TaxDeclarationDto } from '../../../lib/types';
 import { useTaxDeclarationsByRpu, useTdAction, type TdAction } from '../../../api/taxDeclarations';
 import { usePropertyRpus } from '../../../api/rpus';
+import { useCan } from '../../../api/offices';
 import { ApiRequestError } from '../../../lib/apiClient';
 import { TdAnnotationsModal } from '../modals/TdAnnotationsModal';
 import { AddRpuModal } from '../modals/AddRpuModal';
@@ -25,7 +26,25 @@ const workflowStatusColor: Record<string, string> = {
   Voided: 'red',
 };
 
-/** TDs of one RPU with their lifecycle (docs/FORMS-REVISION-PLAN.md A4): submit → approve/reject → cancel; annotations; print. */
+type ReasonAction = 'reject' | 'request-cancellation' | 'reject-cancellation';
+
+/** The dialogs that ask for a reason. */
+const reasonDialog: Record<ReasonAction, { title: string; ok: string; text: string }> = {
+  reject: { title: 'Reject TD', ok: 'Reject', text: 'The TD stays on record as rejected.' },
+  'request-cancellation': {
+    title: 'Request cancellation of TD',
+    ok: 'Request cancellation',
+    text: 'Asks for this declaration to be cancelled outright, with no successor (e.g. a duplicate). '
+      + 'Nothing changes until a second user approves the request; the TD then stays on record, marked cancelled.',
+  },
+  'reject-cancellation': {
+    title: 'Reject the cancellation of TD',
+    ok: 'Reject request',
+    text: 'The TD stays approved. The request is kept with your reason.',
+  },
+};
+
+/** TDs of one RPU with their lifecycle (docs/FORMS-REVISION-PLAN.md A4): submit → approve/reject → cancel (requested, then decided by a second user); annotations; print. */
 /** The MRPAAO FAAS form for a unit type (Att. 1–3; docs/analysis/mrpaao-forms-model.md §13). */
 const faasFormFor: Partial<Record<RpuSummaryDto['rpuType'], string>> = { Land: 'FAAS_LAND', Building: 'FAAS_BUILDING', Machinery: 'FAAS_MACHINERY' };
 
@@ -33,25 +52,33 @@ function TaxDeclarationsForRpu({ propertyId, rpuId, rpuType }: { propertyId: str
   const { data, isLoading } = useTaxDeclarationsByRpu(rpuId);
   const [addOpen, setAddOpen] = useState(false);
   const [annotating, setAnnotating] = useState<TaxDeclarationDto | null>(null);
-  const [asking, setAsking] = useState<{ td: TaxDeclarationDto; action: 'reject' | 'cancel' } | null>(null);
+  const [asking, setAsking] = useState<{ td: TaxDeclarationDto; action: ReasonAction } | null>(null);
   const [reason, setReason] = useState('');
   const action = useTdAction(propertyId, rpuId);
+  const can = useCan();
   const [modal, modalContext] = Modal.useModal();
   const numberOf = (id: string | null) => data?.find((td) => td.id === id)?.taxDeclarationNumber;
 
   function run(td: TaxDeclarationDto, kind: TdAction) {
-    if (kind === 'reject' || kind === 'cancel') {
+    if (kind === 'reject' || kind === 'request-cancellation' || kind === 'reject-cancellation') {
       setReason('');
       action.reset();
       setAsking({ td, action: kind });
       return;
     }
     const replaces = numberOf(td.previousTaxDeclarationId);
+    const title = kind === 'approve' ? `Approve TD ${td.taxDeclarationNumber}?`
+      : kind === 'approve-cancellation' ? `Cancel TD ${td.taxDeclarationNumber}?`
+      : `Submit TD ${td.taxDeclarationNumber} for review?`;
+    const content = kind === 'approve' && replaces ? `Approval cancels TD ${replaces}, which this declaration replaces.`
+      : kind === 'approve-cancellation' ? `Approving the request cancels this declaration outright. Reason given: ${td.openCancellationRequest?.reason}`
+      : undefined;
     modal.confirm({
-      title: kind === 'approve' ? `Approve TD ${td.taxDeclarationNumber}?` : `Submit TD ${td.taxDeclarationNumber} for review?`,
-      content: kind === 'approve' && replaces ? `Approval cancels TD ${replaces}, which this declaration replaces.` : undefined,
+      title,
+      content,
+      okButtonProps: kind === 'approve-cancellation' ? { danger: true } : undefined,
       // A failure shows in the alert above the table; let the dialog close rather than stay open over it.
-      onOk: () => action.mutateAsync({ id: td.id, action: kind }).catch(() => undefined),
+      onOk: () => action.mutateAsync({ id: td.id, action: kind, cancellationRequestId: td.openCancellationRequest?.id }).catch(() => undefined),
     });
   }
 
@@ -105,7 +132,22 @@ function TaxDeclarationsForRpu({ propertyId, rpuId, rpuType }: { propertyId: str
                 {!td.propertyTransactionId && td.status === 'Draft' && <Button size="small" onClick={() => run(td, 'submit-for-review')}>Submit</Button>}
                 {!td.propertyTransactionId && td.status === 'PendingReview' && <Button size="small" type="primary" onClick={() => run(td, 'approve')}>Approve</Button>}
                 {!td.propertyTransactionId && td.status === 'PendingReview' && <Button size="small" danger onClick={() => run(td, 'reject')}>Reject</Button>}
-                {td.status === 'Approved' && <Button size="small" danger onClick={() => run(td, 'cancel')}>Cancel TD</Button>}
+                {td.status === 'Approved' && !td.openCancellationRequest && can('td.prepare') && (
+                  <Button size="small" danger onClick={() => run(td, 'request-cancellation')}>Request cancellation</Button>
+                )}
+                {td.openCancellationRequest && (
+                  <>
+                    <Tooltip title={`Reason: ${td.openCancellationRequest.reason}. A second user approves or rejects it.`}>
+                      <Tag color="orange">Cancellation requested</Tag>
+                    </Tooltip>
+                    {can('td.approve') && (
+                      <>
+                        <Button size="small" danger onClick={() => run(td, 'approve-cancellation')}>Approve cancellation</Button>
+                        <Button size="small" onClick={() => run(td, 'reject-cancellation')}>Reject cancellation</Button>
+                      </>
+                    )}
+                  </>
+                )}
                 <Badge count={td.activeAnnotationCount} size="small">
                   <Button size="small" onClick={() => setAnnotating(td)}>Annotations</Button>
                 </Badge>
@@ -123,24 +165,21 @@ function TaxDeclarationsForRpu({ propertyId, rpuId, rpuType }: { propertyId: str
       <AddTaxDeclarationModal propertyId={propertyId} rpuId={rpuId} open={addOpen} onClose={() => setAddOpen(false)} />
       <TdAnnotationsModal td={annotating} propertyId={propertyId} onClose={() => setAnnotating(null)} />
       <Modal
-        title={asking ? `${asking.action === 'reject' ? 'Reject' : 'Cancel'} TD ${asking.td.taxDeclarationNumber}` : ''}
+        title={asking ? `${reasonDialog[asking.action].title} ${asking.td.taxDeclarationNumber}` : ''}
         open={asking !== null}
-        okText={asking?.action === 'reject' ? 'Reject' : 'Cancel TD'}
+        okText={asking ? reasonDialog[asking.action].ok : ''}
         cancelText="Back"
         okButtonProps={{ danger: true, disabled: reason.trim() === '', loading: action.isPending }}
         onCancel={() => setAsking(null)}
-        onOk={() => asking && action.mutate({ id: asking.td.id, action: asking.action, reason: reason.trim() }, { onSuccess: () => setAsking(null) })}
+        onOk={() => asking && action.mutate({ id: asking.td.id, action: asking.action, reason: reason.trim(),
+          cancellationRequestId: asking.td.openCancellationRequest?.id }, { onSuccess: () => setAsking(null) })}
         destroyOnHidden
       >
         {action.isError && (
           <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Action failed"
             description={action.error instanceof ApiRequestError ? action.error.apiError.message : (action.error as Error).message} />
         )}
-        <Typography.Paragraph>
-          {asking?.action === 'cancel'
-            ? 'Cancels this declaration outright, with no successor (e.g. a duplicate). It stays on record, marked cancelled.'
-            : 'The TD stays on record as rejected.'}
-        </Typography.Paragraph>
+        <Typography.Paragraph>{asking ? reasonDialog[asking.action].text : ''}</Typography.Paragraph>
         <Input.TextArea aria-label="Reason" placeholder="Reason (required)" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
       </Modal>
     </div>

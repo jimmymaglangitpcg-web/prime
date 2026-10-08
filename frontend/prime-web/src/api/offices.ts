@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { AppUserStatus } from './accounts';
 import { apiGet, apiPost, apiPut } from '../lib/apiClient';
 
 // Offices, jurisdictions and office assignments (docs/analysis/province-wide-operation.md §3.1–§3.2).
@@ -60,7 +61,7 @@ export interface OfficeAssignmentDto {
 }
 export interface RoleDto { code: string; name: string }
 export interface UserSummaryDto {
-  id: string; displayName: string; email: string; status: RecordStatus; officeCode: string | null; provinceWide: boolean; roles: string[];
+  id: string; displayName: string; email: string; status: AppUserStatus; officeCode: string | null; provinceWide: boolean; roles: string[];
   /** Real Estate Appraiser licence printed with the signature (LAM Bk I p.9; records-and-forms.md Q10). */
   reaLicenceNumber?: string | null; reaLicenceValidUntil?: string | null;
 }
@@ -68,6 +69,14 @@ export interface UserLicenceInput { reaLicenceNumber: string | null; reaLicenceV
 export interface CurrentUserDto {
   userId: string | null; displayName: string | null; officeId: string | null; officeCode: string | null; officeName: string | null;
   officeKind: OfficeKind | null; assigned: boolean; provinceWide: boolean; roles: string[]; municipalityIds: string[] | null;
+  /** What the user's roles allow (docs/analysis/workflow-security.md §4.1). */
+  permissions: string[] | null;
+  /** Pending until a system administrator approves the sign-up (§4.2). */
+  status: AppUserStatus | null;
+  /** The roles need a second factor (Q7), and whether this sign-in has one. */
+  mfaRequired: boolean; mfaSatisfied: boolean;
+  /** Minutes without activity before the browser signs out (Q9). */
+  idleMinutes: number;
 }
 export interface DevUser { key: string; displayName: string; office: string; roles: string[] }
 
@@ -86,6 +95,14 @@ export const useOfficeAssignments = () =>
 export const useRoles = () => useQuery({ queryKey: ['roles'], queryFn: () => apiGet<RoleDto[]>('/api/roles') });
 export const useUsers = () => useQuery({ queryKey: ['users'], queryFn: () => apiGet<UserSummaryDto[]>('/api/users') });
 export const useCurrentUser = () => useQuery({ queryKey: ['me'], queryFn: () => apiGet<CurrentUserDto>('/api/me'), retry: false });
+/**
+ * Whether the user's roles allow a permission. Only hides what cannot be used: the API refuses it anyway. Unknown while
+ * the user is loading, so nothing flickers away.
+ */
+export function useCan() {
+  const { data } = useCurrentUser();
+  return (permission: string) => !data?.permissions || data.permissions.includes(permission);
+}
 /** Development only: the DEMO users the header picker can act as. */
 export const useDevUsers = (enabled: boolean) =>
   useQuery({ queryKey: ['dev-users'], queryFn: () => apiGet<DevUser[]>('/api/dev/users'), enabled, retry: false, staleTime: Infinity });

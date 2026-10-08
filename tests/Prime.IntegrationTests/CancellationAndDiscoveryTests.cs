@@ -72,7 +72,7 @@ public class CancellationAndDiscoveryTests(WebApplicationFactory<Program> factor
             $"D{Guid.NewGuid():N}"[..8], $"DEMO {kind}", kind, null, null, [], CancelsMotuProprio: motuProprio));
         created.IsSuccess.ShouldBeTrue(created.IsSuccess ? null : created.Message);
         c.User.AppUserId = c.B.Id;
-        var approved = await c.Tx.ApproveTypeAsync(created.Value.Id);
+        var approved = await TestSeed.AsCheckerAsync(c.Services, () => c.Tx.ApproveTypeAsync(created.Value.Id));
         approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
         c.User.AppUserId = null;
         return approved.Value;
@@ -109,7 +109,7 @@ public class CancellationAndDiscoveryTests(WebApplicationFactory<Program> factor
         var annotation = await c.Tds.AddAnnotationAsync(td, new AddTaxDeclarationAnnotationRequest(claim.Id, "DEMO Civil Case 002", "CC-002", null, new DateOnly(2026, 1, 1)));
         annotation.IsSuccess.ShouldBeTrue(annotation.IsSuccess ? null : annotation.Message);
 
-        var direct = await c.Tds.CancelAsync(td, "DEMO");
+        var direct = await c.Tds.RequestCancellationAsync(td, "DEMO");
         direct.Code.ShouldBe(CancellationGuard.Code);
         direct.Message!.ShouldContain("DEMO Adverse claim pending in court");
         var type = await ApprovedTypeAsync(c, PropertyTransactionKind.Cancellation);
@@ -118,10 +118,10 @@ public class CancellationAndDiscoveryTests(WebApplicationFactory<Program> factor
         var replacing = await c.Tds.CreateAsync(new CreateTaxDeclarationRequest(c.Seed.RpuId, $"DEMO-TD-{Guid.NewGuid():N}"[..24], new DateOnly(2027, 1, 1),
             Taxability.Taxable, c.Seed.ClassificationId, c.Seed.TaxDeclaration.ActualUseId, null, 2027, td, "DEMO"));
         (await c.Tds.SubmitForReviewAsync(replacing.Value.Id)).IsSuccess.ShouldBeTrue();
-        (await c.Tds.ApproveAsync(replacing.Value.Id)).Code.ShouldBe(CancellationGuard.Code);
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Tds.ApproveAsync(replacing.Value.Id))).Code.ShouldBe(CancellationGuard.Code);
 
         (await c.Tds.LiftAnnotationAsync(annotation.Value.Id, new LiftTaxDeclarationAnnotationRequest("DEMO resolved by the court", "CC-002 decision"))).IsSuccess.ShouldBeTrue();
-        (await c.Tds.ApproveAsync(replacing.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Tds.ApproveAsync(replacing.Value.Id))).IsSuccess.ShouldBeTrue();
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class CancellationAndDiscoveryTests(WebApplicationFactory<Program> factor
             CancelTaxDeclarationIds: [c.Seed.TaxDeclaration.Id]));
         (await c.Tx.SubmitAsync(opened.Value.Id)).IsSuccess.ShouldBeTrue();
         c.User.AppUserId = c.B.Id;
-        (await c.Tx.ApproveAsync(opened.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Tx.ApproveAsync(opened.Value.Id))).IsSuccess.ShouldBeTrue();
         c.User.AppUserId = null;
 
         var notices = (await c.Notices.ListByPropertyAsync(c.Seed.PropertyId)).Value;
@@ -187,7 +187,7 @@ public class CancellationAndDiscoveryTests(WebApplicationFactory<Program> factor
             Taxability.Taxable, c.Seed.ClassificationId, c.Seed.TaxDeclaration.ActualUseId, null, 2027, old.Id, "DEMO", AssessmentId: reassessment.Id));
         td.IsSuccess.ShouldBeTrue(td.IsSuccess ? null : td.Message);
         (await c.Tds.SubmitForReviewAsync(td.Value.Id)).IsSuccess.ShouldBeTrue();
-        var approved = await c.Tds.ApproveAsync(td.Value.Id);
+        var approved = await TestSeed.AsCheckerAsync(c.Services, () => c.Tds.ApproveAsync(td.Value.Id));
         approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
 
         var notice = (await c.Notices.ListByPropertyAsync(c.Seed.PropertyId)).Value.ShouldHaveSingleItem();

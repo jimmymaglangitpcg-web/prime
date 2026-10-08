@@ -10,6 +10,7 @@ using Prime.Application;
 using Prime.Infrastructure;
 using Prime.WebApi.Authentication;
 using Prime.WebApi.Middleware;
+using Prime.WebApi.Security;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,7 +20,8 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Services(services)
     .Enrich.FromLogContext());
 
-builder.Services.AddControllers()
+// Every action declares its permission; one that does not is refused (docs/analysis/workflow-security.md §4.1).
+builder.Services.AddControllers(options => options.Conventions.Add(new Prime.WebApi.Authorization.PermissionDeclarationConvention()))
     .AddJsonOptions(options =>
     {
         // Enums serialize/deserialize as strings ("Active", "Individual",
@@ -81,6 +83,12 @@ else
     // asymmetric JWT Signing Keys, ES256, not the legacy shared secret).
     var supabaseUrl = builder.Configuration["Supabase:Url"];
 
+    // The Auth project settings PRIME relies on, checked at start-up and on /health (workflow-security.md §4.2 Q8).
+    builder.Services.AddHttpClient(Prime.Infrastructure.Identity.SupabaseAuthSettingsCheck.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(10));
+    builder.Services.AddSingleton<Prime.Infrastructure.Identity.SupabaseAuthSettingsCheck>();
+    builder.Services.AddHealthChecks().AddCheck<Prime.Infrastructure.Identity.SupabaseAuthSettingsCheck>("supabase-auth");
+    builder.Services.AddHostedService<Prime.Infrastructure.Identity.SupabaseAuthSettingsStartupCheck>();
+
     builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(options =>
         {
@@ -97,7 +105,36 @@ else
         });
 }
 
+// Sign-in settings: MFA-required roles and the browser's idle sign-out (docs/analysis/workflow-security.md §4.2).
+builder.Services.AddSingleton(builder.Configuration.GetSection("Security").Get<Prime.Application.Common.Security.SecuritySettings>()
+    ?? new Prime.Application.Common.Security.SecuritySettings());
+
 builder.Services.AddAuthorization();
+builder.Services.AddScoped<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, Prime.WebApi.Authorization.PermissionAuthorizationHandler>();
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler, Prime.WebApi.Authorization.PermissionResultHandler>();
+
+// Hardening (docs/analysis/workflow-security.md §4.4): request limits, and security headers outside Development.
+var rateLimits = builder.Configuration.GetSection("RateLimits").Get<RateLimitSettings>() ?? new RateLimitSettings();
+builder.Services.AddPrimeRateLimiting(rateLimits, rateLimits.Enabled ?? !builder.Environment.IsDevelopment());
+var sendSecurityHeaders = builder.Configuration.GetValue<bool?>("Security:Headers") ?? !builder.Environment.IsDevelopment();
+
+// Behind a reverse proxy, the client's address (for the audit log and the per-IP limit) and the HTTPS scheme come
+// from the proxy's forwarded headers, trusted only from the addresses listed here.
+var knownProxies = builder.Configuration.GetSection("Security:KnownProxies").Get<string[]>() ?? [];
+if (knownProxies.Length > 0)
+{
+    builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+            | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+        foreach (var proxy in knownProxies)
+        {
+            options.KnownProxies.Add(System.Net.IPAddress.Parse(proxy));
+        }
+    });
+}
 
 builder.Services.AddCors(options =>
 {
@@ -109,6 +146,22 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// One-off set-up of a new installation's first SYSTEM_ADMIN; never reachable through the API (workflow-security.md §4.2).
+if (args is [Prime.WebApi.Commands.BootstrapAdminCommand.Name, var bootstrapEmail, ..])
+{
+    Environment.ExitCode = await Prime.WebApi.Commands.BootstrapAdminCommand.RunAsync(app.Services, bootstrapEmail);
+    return;
+}
+
+if (knownProxies.Length > 0)
+{
+    app.UseForwardedHeaders();
+}
+if (sendSecurityHeaders)
+{
+    app.UseMiddleware<SecurityHeadersMiddleware>();
+}
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
@@ -132,9 +185,12 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseCors("Frontend");
 app.UseAuthentication();
-app.UseAuthorization();
+// After authentication, so a signed-in user is limited as themselves rather than by address.
+app.UseRateLimiter();
+// The user and their office are resolved before authorization, which reads their roles' permissions (workflow-security.md §4.1).
 app.UseMiddleware<AppUserProvisioningMiddleware>();
 app.UseMiddleware<JurisdictionMiddleware>();
+app.UseAuthorization();
 
 app.MapControllers();
 

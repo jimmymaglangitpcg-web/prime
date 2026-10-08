@@ -34,11 +34,11 @@ public class ValuationDateTests(WebApplicationFactory<Program> factory) : IClass
         var smv = scope.ServiceProvider.GetRequiredService<ISmvService>();
         var revision = (await smv.CreateSmvAsync(new CreateSmvRequest(
             $"DEMO-GR-{Guid.NewGuid():N}"[..20], new DateOnly(2026, 9, 1), null, Revision2027, 2027, "DEMO 2027 revision"))).Value;
-        (await smv.ApproveSmvAsync(revision.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveSmvAsync(revision.Id))).IsSuccess.ShouldBeTrue();
         var rate = await smv.CreateScheduleAsync(revision.Id, new CreateSmvScheduleRequest(
             schedule.ClassificationId, schedule.ActualUseId, schedule.PropertyTypeId, null, "per sqm", 1_500m, null, null, Revision2027));
         rate.IsSuccess.ShouldBeTrue(rate.IsSuccess ? null : rate.Message);
-        (await smv.ApproveScheduleAsync(rate.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveScheduleAsync(rate.Value.Id))).IsSuccess.ShouldBeTrue();
         return (scope.ServiceProvider, db, seed, new Disposer(transaction, scope));
     }
 

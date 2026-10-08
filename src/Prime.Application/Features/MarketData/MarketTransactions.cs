@@ -154,6 +154,7 @@ public sealed class MarketTransactionService(IApplicationDbContext db, IClock cl
             return Fail("MARKET_DATA_CANCELLED", "The record is already cancelled.");
         }
         (t.CancelledAt, t.CancelledBy, t.CancellationReason) = (clock.UtcNow, currentUser.AppUserId, r.Reason.Trim());
+        currentUser.Reason = t.CancellationReason;
         await db.SaveChangesAsync(cancellationToken);
         return await GetAsync(t.Id, cancellationToken);
     }

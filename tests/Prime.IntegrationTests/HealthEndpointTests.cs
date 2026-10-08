@@ -33,5 +33,7 @@ public class HealthEndpointTests(WebApplicationFactory<Program> factory) : IClas
         json.RootElement.TryGetProperty("checks", out var checks).ShouldBeTrue();
         checks.EnumerateArray().ShouldContain(check =>
             check.GetProperty("name").GetString() == "postgresql");
+        // Supabase API exposure (workflow-security.md §4.4): reported on every database, healthy where there is no such API.
+        checks.EnumerateArray().ShouldContain(check => check.GetProperty("name").GetString() == "row-level-security");
     }
 }

@@ -204,11 +204,45 @@ public class PartiesAndTdLifecycleTests(WebApplicationFactory<Program> factory) 
         rejected.CancellationReason.ShouldBe("DEMO: wrong classification");
         (await tds.GetByIdAsync(c.Seed.TaxDeclaration.Id)).Value.Status.ShouldBe(WorkflowStatus.Approved); // untouched
 
-        (await tds.CancelAsync(draft.Id, "x")).Code.ShouldBe("TAX_DECLARATION_NOT_APPROVED");
-        var cancelled = (await tds.CancelAsync(c.Seed.TaxDeclaration.Id, "DEMO: duplicate declaration")).Value;
+        // An outright cancellation is asked for by one user and decided by another (workflow-security.md Q19).
+        (await tds.RequestCancellationAsync(draft.Id, "x")).Code.ShouldBe("TAX_DECLARATION_NOT_APPROVED");
+        (await tds.RequestCancellationAsync(c.Seed.TaxDeclaration.Id, " ")).Code.ShouldBe("VALIDATION_FAILED");
+        var requested = (await tds.RequestCancellationAsync(c.Seed.TaxDeclaration.Id, "DEMO: duplicate declaration")).Value;
+        requested.Status.ShouldBe(WorkflowStatus.Approved); // nothing happens until it is decided
+        var open = requested.OpenCancellationRequest.ShouldNotBeNull();
+        (open.Reason, open.RequestedBy).ShouldBe(("DEMO: duplicate declaration", c.B.Id));
+        (await tds.RequestCancellationAsync(c.Seed.TaxDeclaration.Id, "again")).Code.ShouldBe("TAX_DECLARATION_CANCELLATION_PENDING");
+        (await tds.ApproveCancellationAsync(open.Id)).Code.ShouldBe("CANNOT_DECIDE_OWN_TAX_DECLARATION_CANCELLATION");
+        c.User.AppUserId = null;
+        (await tds.ApproveCancellationAsync(open.Id)).Code.ShouldBe("APPROVING_USER_UNKNOWN");
+
+        // Rejected with a reason: the TD stays approved, and the request is kept.
+        c.User.AppUserId = c.A.Id;
+        (await tds.RejectCancellationAsync(open.Id, " ")).Code.ShouldBe("VALIDATION_FAILED");
+        var kept = (await tds.RejectCancellationAsync(open.Id, "DEMO: not a duplicate")).Value;
+        (kept.Status, kept.OpenCancellationRequest).ShouldBe((WorkflowStatus.Approved, null));
+        (await tds.ApproveCancellationAsync(open.Id)).Code.ShouldBe("TAX_DECLARATION_CANCELLATION_DECIDED");
+
+        // Asked again, and approved by the other user: cancelled with the requester's reason.
+        c.User.AppUserId = c.B.Id;
+        var again = (await tds.RequestCancellationAsync(c.Seed.TaxDeclaration.Id, "DEMO: duplicate declaration")).Value.OpenCancellationRequest!;
+        c.User.AppUserId = c.A.Id;
+        var cancelled = (await tds.ApproveCancellationAsync(again.Id)).Value;
         cancelled.Status.ShouldBe(WorkflowStatus.Cancelled);
         cancelled.CancelledAt.ShouldNotBeNull();
+        cancelled.CancellationReason.ShouldBe("DEMO: duplicate declaration");
         cancelled.SupersededByTaxDeclarationId.ShouldBeNull();
+        cancelled.OpenCancellationRequest.ShouldBeNull();
+        var history = (await tds.ListCancellationRequestsAsync(c.Seed.TaxDeclaration.Id)).Value;
+        history.Select(r => (r.Status, r.DecidedBy)).ShouldBe([(WorkflowStatus.Approved, (Guid?)c.A.Id), (WorkflowStatus.Rejected, (Guid?)c.A.Id)]);
+        history[1].DecisionReason.ShouldBe("DEMO: not a duplicate");
+
+        // The decision is audited as APPROVE on the request and CANCEL on the TD, each with its reason.
+        var audit = await c.Db.AuditLogs.Where(a => a.RecordId == again.Id || a.RecordId == c.Seed.TaxDeclaration.Id)
+            .Where(a => a.Action == Prime.Domain.Enums.AuditAction.Approve || a.Action == Prime.Domain.Enums.AuditAction.Cancel).ToListAsync();
+        audit.Select(a => (a.TableName, a.Action)).OrderBy(x => x.TableName).ShouldBe([
+            ("TaxDeclarationCancellationRequests", Prime.Domain.Enums.AuditAction.Approve), ("TaxDeclarations", Prime.Domain.Enums.AuditAction.Cancel)]);
+        audit.ShouldAllBe(a => a.Reason == "DEMO: duplicate declaration");
     }
 
     [Fact]
@@ -263,7 +297,8 @@ public class PartiesAndTdLifecycleTests(WebApplicationFactory<Program> factory) 
         html.ShouldContain("DEMO warrant of levy");
         html.ShouldContain("lifted");
 
-        await tds.CancelAsync(tdId, "DEMO");
+        var request = (await tds.RequestCancellationAsync(tdId, "DEMO")).Value.OpenCancellationRequest!;
+        await TestSeed.AsCheckerAsync(c.Services, () => tds.ApproveCancellationAsync(request.Id));
         (await tds.AddAnnotationAsync(tdId, new AddTaxDeclarationAnnotationRequest(levy.Id, "late", null, null, new DateOnly(2026, 6, 1))))
             .Code.ShouldBe("TAX_DECLARATION_NOT_ANNOTATABLE");
     }

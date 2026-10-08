@@ -92,9 +92,10 @@ public sealed class AssessmentLevelService(
             return Result.Failure<AssessmentLevelDto>("ASSESSMENT_LEVEL_ALREADY_APPROVED", "This assessment level has already been approved.");
         }
         // Maker-checker (CLAUDE.md §46): the creator may not approve their own assessment level.
-        if (currentUser.AppUserId is not null && assessmentLevel.CreatedBy == currentUser.AppUserId)
+        if (MakerChecker.Refusal(currentUser, assessmentLevel.CreatedBy, "CANNOT_APPROVE_OWN_ASSESSMENT_LEVEL",
+                "The assessment level's creator cannot also approve it.") is { } refusal)
         {
-            return Result.Failure<AssessmentLevelDto>("CANNOT_APPROVE_OWN_ASSESSMENT_LEVEL", "The assessment level's creator cannot also approve it.");
+            return Result.Failure<AssessmentLevelDto>(refusal.Code, refusal.Message);
         }
 
         // A ceiling approved since the level was drafted counts too (Q6).

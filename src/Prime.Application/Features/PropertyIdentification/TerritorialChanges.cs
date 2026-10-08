@@ -94,9 +94,10 @@ public sealed class TerritorialChangeService(IApplicationDbContext db, ICurrentU
         {
             return Fail("TERRITORIAL_CHANGE_NOT_DRAFT", "Only a Draft territorial change can be approved.");
         }
-        if (currentUser.AppUserId is not null && job.CreatedBy == currentUser.AppUserId)
+        if (MakerChecker.Refusal(currentUser, job.CreatedBy, "CANNOT_APPROVE_OWN_TERRITORIAL_CHANGE",
+                "The creator cannot also approve it (maker-checker, CLAUDE.md §46).") is { } refusal)
         {
-            return Fail("CANNOT_APPROVE_OWN_TERRITORIAL_CHANGE", "The creator cannot also approve it (maker-checker, CLAUDE.md §46).");
+            return Fail(refusal.Code, refusal.Message);
         }
         var sources = job.Mappings.Select(m => m.SourceBarangayId).ToList();
         var properties = await db.Properties.Where(p => sources.Contains(p.BarangayId) && p.Status == RecordStatus.Active)

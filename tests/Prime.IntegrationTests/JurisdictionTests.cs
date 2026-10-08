@@ -192,6 +192,10 @@ public class JurisdictionTests(WebApplicationFactory<Program> factory) : IClassF
     {
         var (w, scope) = await BeginAsync();
         await using var _ = scope;
+        // A user who may see personal data, so only the jurisdiction limits what is shown (masking: PersonalDataTests).
+        var encoder = await TestSeed.UserWithRoleAsync(w.Db, RoleCodes.AssessmentEncoder);
+        await w.Db.SaveChangesAsync();
+        w.Services.GetRequiredService<Prime.Infrastructure.Identity.CurrentUserService>().AppUserId = encoder.Id;
         w.Jurisdiction.Restrict([w.A.Id]);
         var taxpayers = w.Services.GetRequiredService<ITaxpayerService>();
 

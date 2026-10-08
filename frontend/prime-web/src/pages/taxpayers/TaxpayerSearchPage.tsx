@@ -40,6 +40,7 @@ export function TaxpayerSearchPage() {
       <Table<TaxpayerDto>
         rowKey="id"
         loading={isLoading}
+        scroll={{ x: 'max-content' }}
         dataSource={data?.items ?? []}
         pagination={{
           current: page,
@@ -58,6 +59,11 @@ export function TaxpayerSearchPage() {
                     <Tag>other jurisdiction</Tag>
                   </Tooltip>
                 )}
+                {t.personalDataMasked && (
+                  <Tooltip title="Personal data (TIN, contact, e-mail, address) is masked: seeing it needs the taxpayer.view-personal permission.">
+                    <Tag>masked</Tag>
+                  </Tooltip>
+                )}
               </Space>
             ),
           },
@@ -67,7 +73,7 @@ export function TaxpayerSearchPage() {
           { title: 'Email', dataIndex: 'email' },
           {
             title: '', key: 'actions', width: 110,
-            render: (_: unknown, t) => !t.limited && <Button size="small" onClick={() => setEditing(t)}>Edit details</Button>,
+            render: (_: unknown, t) => !t.limited && !t.personalDataMasked && <Button size="small" onClick={() => setEditing(t)}>Edit details</Button>,
           },
         ]}
       />

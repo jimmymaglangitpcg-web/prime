@@ -68,19 +68,33 @@ public sealed class DevOfficeSeeder(IServiceScopeFactory scopes, IConfiguration 
             var roles = await db.Roles.ToDictionaryAsync(r => r.Code, cancellationToken);
             foreach (var user in users)
             {
-                if (!Guid.TryParse(user.UserId, out var supabaseId))
+                // "none": left to sign in as a new, pending applicant (workflow-security.md §4.2).
+                if (!Guid.TryParse(user.UserId, out var supabaseId) || user.Office.Equals("none", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
                 var appUser = await db.AppUsers.FirstOrDefaultAsync(u => u.SupabaseUserId == supabaseId, cancellationToken);
                 if (appUser is null)
                 {
-                    appUser = new AppUser { SupabaseUserId = supabaseId, DisplayName = user.DisplayName, Email = string.Empty, Status = RecordStatus.Active };
+                    appUser = new AppUser { SupabaseUserId = supabaseId, DisplayName = user.DisplayName, Email = string.Empty, Status = AppUserStatus.Active };
                     db.AppUsers.Add(appUser);
                     await db.SaveChangesAsync(cancellationToken);
                 }
                 var hasAssignment = await db.OfficeAssignments.AnyAsync(a => a.AppUserId == appUser.Id && (a.Status == WorkflowStatus.Draft
                     || (a.Status == WorkflowStatus.Approved && a.EffectiveDate <= today && (a.EndDate == null || a.EndDate >= today))), cancellationToken);
+                // Its own DEMO assignment in force gains roles added to the configuration since (dev users' permissions, Phase 12).
+                var demo = await db.OfficeAssignments.Include(a => a.Roles).FirstOrDefaultAsync(a => a.AppUserId == appUser.Id && a.LegalBasis == LegalBasis
+                    && a.Status == WorkflowStatus.Approved && a.EffectiveDate <= today && (a.EndDate == null || a.EndDate >= today), cancellationToken);
+                if (demo is not null)
+                {
+                    var missing = user.Roles.Where(roles.ContainsKey).Select(r => roles[r].Id).Where(id => demo.Roles.All(x => x.RoleId != id)).ToList();
+                    if (missing.Count > 0)
+                    {
+                        // Added through their own set: their keys are set on creation, so through the parent EF would update them.
+                        db.OfficeAssignmentRoles.AddRange(missing.Select(id => new OfficeAssignmentRole { OfficeAssignmentId = demo.Id, RoleId = id }));
+                        await db.SaveChangesAsync(cancellationToken);
+                    }
+                }
                 // A user with an ended assignment keeps history; only someone never assigned (or no longer) gets the DEMO one.
                 if (hasAssignment || await db.OfficeAssignments.AnyAsync(a => a.AppUserId == appUser.Id && a.Status == WorkflowStatus.Approved && a.EffectiveDate > today, cancellationToken))
                 {

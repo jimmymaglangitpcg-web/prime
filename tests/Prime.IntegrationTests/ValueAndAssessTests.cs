@@ -61,7 +61,7 @@ public class ValueAndAssessTests(WebApplicationFactory<Program> factory) : IClas
         var created = await c.Levels.CreateAsync(new CreateAssessmentLevelRequest(
             $"ORD-{Guid.NewGuid():N}", effective, c.Seed.ClassificationId, c.ActualUseId, c.PropertyTypeId, lower, upper, percentage, effective));
         created.IsSuccess.ShouldBeTrue(created.IsSuccess ? null : created.Message);
-        (await c.Levels.ApproveAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Levels.ApproveAsync(created.Value.Id))).IsSuccess.ShouldBeTrue();
         return created.Value.Id;
     }
 
@@ -125,7 +125,7 @@ public class ValueAndAssessTests(WebApplicationFactory<Program> factory) : IClas
         var valuation = (await c.Valuations.ComputeForRpuAsync(c.Seed.RpuId, asOf: new DateOnly(2027, 1, 1))).Value;
         var draft = (await c.Assessments.CreateAsync(Request(valuation.Id, c.Seed.AssessmentId))).Value;
         await c.Assessments.SubmitForReviewAsync(draft.Id);
-        (await c.Assessments.ApproveAsync(draft.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Assessments.ApproveAsync(draft.Id))).IsSuccess.ShouldBeTrue();
 
         var posted = await c.Assessments.PostAsync(draft.Id);
 
@@ -188,7 +188,7 @@ public class ValueAndAssessTests(WebApplicationFactory<Program> factory) : IClas
         c.Db.AssessmentLevels.Add(overlapping);
         await c.Db.SaveChangesAsync();
 
-        (await c.Levels.ApproveAsync(overlapping.Id)).Code.ShouldBe("ASSESSMENT_LEVEL_OVERLAP");
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Levels.ApproveAsync(overlapping.Id))).Code.ShouldBe("ASSESSMENT_LEVEL_OVERLAP");
     }
 
     [Theory]

@@ -72,7 +72,7 @@ public class SmvModelTests(WebApplicationFactory<Program> factory) : IClassFixtu
             var created = await smv.CreateSmvAsync(new CreateSmvRequest(null, null, null, Revision2027, 2027, "DEMO", Basis: SmvBasis.Certified,
                 CertificationReference: $"DEMO-CERT-{Guid.NewGuid():N}"[..30], MunicipalityIds: [municipalityId]));
             created.IsSuccess.ShouldBeTrue(created.Message);
-            (await smv.ApproveSmvAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+            (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveSmvAsync(created.Value.Id))).IsSuccess.ShouldBeTrue();
             return created.Value.Id;
         }
         async Task Rate(Guid smvId, Guid classificationId, decimal value, Guid? sub = null, Guid? barangay = null)
@@ -80,7 +80,7 @@ public class SmvModelTests(WebApplicationFactory<Program> factory) : IClassFixtu
             var created = await smv.CreateScheduleAsync(smvId, new CreateSmvScheduleRequest(classificationId, null, landType.Id, null, "per sqm", value,
                 null, null, Revision2027, SubClassificationId: sub, BarangayId: barangay));
             created.IsSuccess.ShouldBeTrue(created.Message);
-            (await smv.ApproveScheduleAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+            (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveScheduleAsync(created.Value.Id))).IsSuccess.ShouldBeTrue();
         }
 
         // An SMV for another town does not price this land, nor take a barangay outside it.
@@ -119,7 +119,7 @@ public class SmvModelTests(WebApplicationFactory<Program> factory) : IClassFixtu
         var bracket = await levels.CreateAsync(new CreateAssessmentLevelRequest("DEMO-ORD", new DateOnly(2026, 1, 1), seed.ClassificationId, land.ActualUseId,
             landType.Id, 1_000_000m, null, 20m, new DateOnly(2026, 1, 1)));
         bracket.IsSuccess.ShouldBeTrue(bracket.Message);
-        (await levels.ApproveAsync(bracket.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => levels.ApproveAsync(bracket.Value.Id))).IsSuccess.ShouldBeTrue();
         var preview = await services.GetRequiredService<IAssessmentService>().PreviewAsync(
             new CreateAssessmentRequest(valued.Value.Id, null, Revision2027, null, null, "DEMO"));
         preview.IsSuccess.ShouldBeTrue(preview.Message);

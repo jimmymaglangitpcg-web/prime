@@ -30,14 +30,23 @@ public class DevelopmentAuthOptions : AuthenticationSchemeOptions
 
     public static readonly IReadOnlyList<DevelopmentUser> DefaultUsers =
     [
-        new() { Key = "admin", UserId = "00000000-0000-0000-0000-000000000001", DisplayName = "Local Dev User", Office = "province-wide", Roles = ["SYSTEM_ADMIN"] },
+        // The usual dev user prepares everything; the checker (an assessor) approves (docs/analysis/workflow-security.md §4.1).
+        new() { Key = "admin", UserId = "00000000-0000-0000-0000-000000000001", DisplayName = "Local Dev User", Office = "province-wide",
+            Roles = ["SYSTEM_ADMIN", "APPRAISER", "ASSESSMENT_ENCODER", "GIS_OFFICER", "REPORTING_OFFICER"] },
         new() { Key = "checker", UserId = "00000000-0000-0000-0000-000000000002", DisplayName = "Local Dev Checker", Office = "provincial", Roles = ["ASSESSOR"] },
         new() { Key = "mun-appraiser", UserId = "00000000-0000-0000-0000-000000000003", DisplayName = "DEMO Municipal Appraiser", Office = "municipal", Roles = ["APPRAISER"] },
         new() { Key = "mun-assessor", UserId = "00000000-0000-0000-0000-000000000004", DisplayName = "DEMO Municipal Assessor", Office = "municipal", Roles = ["ASSESSOR"] },
+        // Signed up but not yet approved: tries the sign-up screens (docs/analysis/workflow-security.md §4.2).
+        new() { Key = "applicant", UserId = "00000000-0000-0000-0000-000000000005", DisplayName = "DEMO Applicant", Office = "none", Roles = [] },
+        // VIEW_ONLY: sees an individual taxpayer's personal data masked (workflow-security.md Q16).
+        new() { Key = "viewer", UserId = "00000000-0000-0000-0000-000000000006", DisplayName = "DEMO Viewer", Office = "provincial", Roles = ["VIEW_ONLY"] },
     ];
 }
 
-/// <param name="Office">"province-wide", "provincial" or "municipal" (the first DEMO municipal office).</param>
+/// <param name="Office">
+/// "province-wide", "provincial", "municipal" (the first DEMO municipal office), or "none": no office and no account
+/// set up, so the user signs in as a new, pending applicant.
+/// </param>
 public sealed class DevelopmentUser
 {
     public string Key { get; set; } = string.Empty;
@@ -68,6 +77,12 @@ public class DevelopmentAuthenticationHandler(
     /// <summary>Development only: the key of a configured DEMO user to act as (Q13); "checker" still selects the second user.</summary>
     public const string ActAsHeader = "X-Prime-Dev-Act-As";
 
+    /// <summary>
+    /// Development only: the token's assurance level to simulate ("aal1" = password only). Without it the DEMO user
+    /// counts as signed in with a second factor (aal2), so MFA-required roles work locally (workflow-security.md Q7).
+    /// </summary>
+    public const string AssuranceLevelHeader = "X-Prime-Dev-Aal";
+
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         // Reachable only where this whole bypass is (Development + DevAuth:Enabled; Program.cs).
@@ -80,6 +95,8 @@ public class DevelopmentAuthenticationHandler(
             new(ClaimTypes.Name, named?.DisplayName ?? (checker ? Options.CheckerDisplayName : Options.DisplayName)),
         };
         claims.AddRange(Options.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
+        var aal = Request.Headers[AssuranceLevelHeader].ToString();
+        claims.Add(new Claim("aal", aal is "aal1" or "aal2" ? aal : "aal2"));
 
         var identity = new ClaimsIdentity(claims, SchemeName);
         var principal = new ClaimsPrincipal(identity);

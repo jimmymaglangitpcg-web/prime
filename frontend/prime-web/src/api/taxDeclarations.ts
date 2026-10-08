@@ -34,14 +34,31 @@ function useInvalidateTds(propertyId: string, rpuId: string | undefined) {
   };
 }
 
-export type TdAction = 'submit-for-review' | 'approve' | 'reject' | 'cancel';
+/**
+ * Lifecycle actions (docs/FORMS-REVISION-PLAN.md A4). Reject and the cancellation actions need a reason, except
+ * approving a cancellation: an outright cancellation is asked for by one user and decided by another
+ * (workflow-security.md Q19).
+ */
+export type TdAction = 'submit-for-review' | 'approve' | 'reject' | 'request-cancellation' | 'approve-cancellation' | 'reject-cancellation';
 
-/** Lifecycle actions (docs/FORMS-REVISION-PLAN.md A4). Reject and cancel need a reason. */
+function tdActionPath(id: string, action: TdAction, cancellationRequestId?: string) {
+  switch (action) {
+    case 'request-cancellation':
+      return `/api/tax-declarations/${id}/cancellation-requests`;
+    case 'approve-cancellation':
+      return `/api/tax-declarations/cancellation-requests/${cancellationRequestId}/approve`;
+    case 'reject-cancellation':
+      return `/api/tax-declarations/cancellation-requests/${cancellationRequestId}/reject`;
+    default:
+      return `/api/tax-declarations/${id}/${action}`;
+  }
+}
+
 export function useTdAction(propertyId: string, rpuId: string) {
   const invalidate = useInvalidateTds(propertyId, rpuId);
   return useMutation({
-    mutationFn: ({ id, action, reason }: { id: string; action: TdAction; reason?: string }) =>
-      apiPost<TaxDeclarationDto>(`/api/tax-declarations/${id}/${action}`, reason === undefined ? {} : { reason }),
+    mutationFn: ({ id, action, reason, cancellationRequestId }: { id: string; action: TdAction; reason?: string; cancellationRequestId?: string }) =>
+      apiPost<TaxDeclarationDto>(tdActionPath(id, action, cancellationRequestId), reason === undefined ? {} : { reason }),
     onSuccess: invalidate,
   });
 }

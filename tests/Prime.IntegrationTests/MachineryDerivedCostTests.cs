@@ -50,12 +50,12 @@ public class MachineryDerivedCostTests(WebApplicationFactory<Program> factory) :
             foreach (var (date, rate) in new[] { (new DateOnly(2020, 1, 1), 50m), (Jan2026, 60m) })
             {
                 var created = await c.Indices.CreateExchangeRateAsync(new CreateExchangeRateRequest("XTS", date, rate, "DEMO — not a BSP rate", null));
-                (await c.Indices.ApproveExchangeRateAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+                (await TestSeed.AsCheckerAsync(c.Services, () => c.Indices.ApproveExchangeRateAsync(created.Value.Id))).IsSuccess.ShouldBeTrue();
             }
             foreach (var (year, value) in new[] { (2020, 100m), (2026, 110m) })
             {
                 var created = await c.Indices.CreatePriceIndexAsync(new CreatePriceIndexRequest(c.Series, year, value, "DEMO — not a published index", null));
-                (await c.Indices.ApprovePriceIndexAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+                (await TestSeed.AsCheckerAsync(c.Services, () => c.Indices.ApprovePriceIndexAsync(created.Value.Id))).IsSuccess.ShouldBeTrue();
             }
         }
         return (c, new Scoped(transaction, scope));
@@ -117,7 +117,7 @@ public class MachineryDerivedCostTests(WebApplicationFactory<Program> factory) :
         foreach (var year in new[] { 2008, 2026 })
         {
             var created = await c.Indices.CreatePriceIndexAsync(new CreatePriceIndexRequest($"{c.Series}L", year, 100m, "DEMO", null));
-            (await c.Indices.ApprovePriceIndexAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+            (await TestSeed.AsCheckerAsync(c.Services, () => c.Indices.ApprovePriceIndexAsync(created.Value.Id))).IsSuccess.ShouldBeTrue();
         }
         var request = Imported(c, life: 10, acquired: new DateOnly(2008, 1, 1)) with
         {
@@ -149,12 +149,12 @@ public class MachineryDerivedCostTests(WebApplicationFactory<Program> factory) :
         foreach (var year in new[] { 2020, 2026 })
         {
             var created = await c.Indices.CreatePriceIndexAsync(new CreatePriceIndexRequest(c.Series, year, 100m, "DEMO", null));
-            (await c.Indices.ApprovePriceIndexAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+            (await TestSeed.AsCheckerAsync(c.Services, () => c.Indices.ApprovePriceIndexAsync(created.Value.Id))).IsSuccess.ShouldBeTrue();
         }
         (await c.Valuation.ComputeForRpuAsync(c.RpuId, asOf: Jan2026)).Code.ShouldBe("EXCHANGE_RATE_NOT_FOUND");
         var draft = await c.Indices.CreateExchangeRateAsync(new CreateExchangeRateRequest("XTS", new DateOnly(2019, 1, 1), 40m, "DEMO", null));
         (await c.Valuation.ComputeForRpuAsync(c.RpuId, asOf: Jan2026)).Code.ShouldBe("EXCHANGE_RATE_NOT_FOUND"); // a draft is not read
-        (await c.Indices.ApproveExchangeRateAsync(draft.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Indices.ApproveExchangeRateAsync(draft.Value.Id))).IsSuccess.ShouldBeTrue();
         // The latest approved rate on or before each date: 2019's 40 serves both.
         Breakdown((await c.Valuation.ComputeForRpuAsync(c.RpuId, asOf: Jan2026)).Value)["ExchangeRateAtValuation"].ShouldBe(40m);
 
@@ -185,7 +185,7 @@ public class MachineryDerivedCostTests(WebApplicationFactory<Program> factory) :
         var second = (await c.Indices.CreatePriceIndexAsync(new CreatePriceIndexRequest(c.Series, 2026, 101m, "DEMO", null))).Value;
         (await c.Indices.ApprovePriceIndexAsync(first.Id)).Code.ShouldBe("CANNOT_APPROVE_OWN_PRICE_INDEX");
         user.AppUserId = users[1].Id;
-        (await c.Indices.ApprovePriceIndexAsync(first.Id)).IsSuccess.ShouldBeTrue();
-        (await c.Indices.ApprovePriceIndexAsync(second.Id)).Code.ShouldBe("PRICE_INDEX_EXISTS");
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Indices.ApprovePriceIndexAsync(first.Id))).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Indices.ApprovePriceIndexAsync(second.Id))).Code.ShouldBe("PRICE_INDEX_EXISTS");
     }
 }

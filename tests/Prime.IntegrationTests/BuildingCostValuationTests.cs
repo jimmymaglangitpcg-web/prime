@@ -69,22 +69,22 @@ public class BuildingCostValuationTests(WebApplicationFactory<Program> factory) 
         var c = new Ctx(db, scope.ServiceProvider, building.Id, rpu.Id, seed.SmvId, structure.Id, fence.Id, seed.ClassificationId, use.Id);
         if (withTables)
         {
-            await ApprovedAsync(c.Tables.CreateBuildingCostAsync(new CreateBuildingCostRequest(seed.SmvId, structure.Id, kind.Id, null, 10_000m, "DEMO", Jan2026, null)),
+            await ApprovedAsync(c, c.Tables.CreateBuildingCostAsync(new CreateBuildingCostRequest(seed.SmvId, structure.Id, kind.Id, null, 10_000m, "DEMO", Jan2026, null)),
                 x => c.Tables.ApproveBuildingCostAsync(x.Id));
-            await ApprovedAsync(c.Tables.CreateExtraItemCostAsync(new CreateExtraItemCostRequest(seed.SmvId, fence.Id, "linear m", 1_500m, "DEMO", Jan2026, null)),
+            await ApprovedAsync(c, c.Tables.CreateExtraItemCostAsync(new CreateExtraItemCostRequest(seed.SmvId, fence.Id, "linear m", 1_500m, "DEMO", Jan2026, null)),
                 x => c.Tables.ApproveExtraItemCostAsync(x.Id));
-            await ApprovedAsync(c.Tables.CreateDepreciationScheduleAsync(new CreateDepreciationScheduleRequest(seed.SmvId, structure.Id,
+            await ApprovedAsync(c, c.Tables.CreateDepreciationScheduleAsync(new CreateDepreciationScheduleRequest(seed.SmvId, structure.Id,
                 DepreciationReading.YearlyWithinBand, 20m, [new(1, 5, 2m), new(6, null, 3m)], "DEMO", Jan2026, null)),
                 x => c.Tables.ApproveDepreciationScheduleAsync(x.Id));
         }
         return (c, new Scoped(transaction, scope));
     }
 
-    private static async Task ApprovedAsync<T>(Task<Prime.Application.Common.Result<T>> created, Func<T, Task<Prime.Application.Common.Result<T>>> approve)
+    private static async Task ApprovedAsync<T>(Ctx c, Task<Prime.Application.Common.Result<T>> created, Func<T, Task<Prime.Application.Common.Result<T>>> approve)
     {
         var result = await created;
         result.IsSuccess.ShouldBeTrue(result.IsSuccess ? null : result.Message);
-        var approved = await approve(result.Value);
+        var approved = await TestSeed.AsCheckerAsync(c.Services, () => approve(result.Value));
         approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
     }
 
@@ -224,12 +224,12 @@ public class BuildingCostValuationTests(WebApplicationFactory<Program> factory) 
         noCost.Code.ShouldBe("BUILDING_COST_NOT_FOUND", noCost.IsSuccess ? $"{noCost.Value.Lines[0].Description} {noCost.Value.ComputedMarketValue}" : noCost.Message);
 
         // A cost but no depreciation table for it.
-        await ApprovedAsync(c.Tables.CreateBuildingCostAsync(new CreateBuildingCostRequest(c.SmvId, timber.Id, null, null, 6_000m, "DEMO", Jan2026, null)),
+        await ApprovedAsync(c, c.Tables.CreateBuildingCostAsync(new CreateBuildingCostRequest(c.SmvId, timber.Id, null, null, 6_000m, "DEMO", Jan2026, null)),
             x => c.Tables.ApproveBuildingCostAsync(x.Id));
         (await c.Valuation.ComputeForRpuAsync(c.RpuId, asOf: Jan2026)).Code.ShouldBe("DEPRECIATION_TABLE_NOT_FOUND");
 
         // A table that stops before the building's age.
-        await ApprovedAsync(c.Tables.CreateDepreciationScheduleAsync(new CreateDepreciationScheduleRequest(c.SmvId, timber.Id,
+        await ApprovedAsync(c, c.Tables.CreateDepreciationScheduleAsync(new CreateDepreciationScheduleRequest(c.SmvId, timber.Id,
             DepreciationReading.Cumulative, 20m, [new(0, 5, 10m)], "DEMO", Jan2026, null)), x => c.Tables.ApproveDepreciationScheduleAsync(x.Id));
         (await c.Valuation.ComputeForRpuAsync(c.RpuId, asOf: Jan2026)).Code.ShouldBe("DEPRECIATION_NOT_APPLICABLE");
     }
@@ -263,11 +263,11 @@ public class BuildingCostValuationTests(WebApplicationFactory<Program> factory) 
     {
         var (c, tx) = await BeginAsync(withTables: false);
         await using var _ = tx;
-        await ApprovedAsync(c.Tables.CreateBuildingCostAsync(new CreateBuildingCostRequest(c.SmvId, c.StructureId, null, c.ClassificationId, 8_000m, "DEMO", Jan2026, null)),
+        await ApprovedAsync(c, c.Tables.CreateBuildingCostAsync(new CreateBuildingCostRequest(c.SmvId, c.StructureId, null, c.ClassificationId, 8_000m, "DEMO", Jan2026, null)),
             x => c.Tables.ApproveBuildingCostAsync(x.Id));
-        await ApprovedAsync(c.Tables.CreateExtraItemCostAsync(new CreateExtraItemCostRequest(c.SmvId, c.FenceTypeId, "linear m", 1_000m, "DEMO", Jan2026, null)),
+        await ApprovedAsync(c, c.Tables.CreateExtraItemCostAsync(new CreateExtraItemCostRequest(c.SmvId, c.FenceTypeId, "linear m", 1_000m, "DEMO", Jan2026, null)),
             x => c.Tables.ApproveExtraItemCostAsync(x.Id));
-        await ApprovedAsync(c.Tables.CreateDepreciationScheduleAsync(new CreateDepreciationScheduleRequest(c.SmvId, c.StructureId,
+        await ApprovedAsync(c, c.Tables.CreateDepreciationScheduleAsync(new CreateDepreciationScheduleRequest(c.SmvId, c.StructureId,
             DepreciationReading.Cumulative, 30m, [new(0, 4, 0m), new(5, 9, 50m), new(10, null, 90m)], "DEMO", Jan2026, null)),
             x => c.Tables.ApproveDepreciationScheduleAsync(x.Id));
 
@@ -305,7 +305,7 @@ public class BuildingCostValuationTests(WebApplicationFactory<Program> factory) 
         var cost = (await c.Tables.CreateBuildingCostAsync(new CreateBuildingCostRequest(c.SmvId, c.StructureId, null, null, 5_000m, "DEMO", Jan2026, null))).Value;
         (await c.Tables.ApproveBuildingCostAsync(cost.Id)).Code.ShouldBe("CANNOT_APPROVE_OWN_BUILDING_COST");
         user.AppUserId = users[1].Id;
-        (await c.Tables.ApproveBuildingCostAsync(cost.Id)).Value.Status.ShouldBe(WorkflowStatus.Approved);
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Tables.ApproveBuildingCostAsync(cost.Id))).Value.Status.ShouldBe(WorkflowStatus.Approved);
     }
 }
 

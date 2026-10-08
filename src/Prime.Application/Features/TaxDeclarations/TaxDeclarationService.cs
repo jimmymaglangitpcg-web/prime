@@ -249,9 +249,10 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         {
             return Result.Failure<TaxDeclarationDto>(step.Code!, step.Message!);
         }
-        if (!step.Value.ChainInForce && currentUser.AppUserId is not null && td.CreatedBy == currentUser.AppUserId)
+        if (!step.Value.ChainInForce && MakerChecker.Refusal(currentUser, td.CreatedBy, "CANNOT_APPROVE_OWN_TAX_DECLARATION",
+                "The Tax Declaration's creator cannot also approve it (CLAUDE.md §46).") is { } refusal)
         {
-            return Result.Failure<TaxDeclarationDto>("CANNOT_APPROVE_OWN_TAX_DECLARATION", "The Tax Declaration's creator cannot also approve it (CLAUDE.md §46).");
+            return Result.Failure<TaxDeclarationDto>(refusal.Code, refusal.Message);
         }
         var completes = !step.Value.ChainInForce || step.Value.Completed;
 
@@ -329,34 +330,122 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         return Result.Success((await MapToDto(id, cancellationToken))!);
     }
 
-    public async Task<Result<TaxDeclarationDto>> CancelAsync(Guid id, string reason, CancellationToken cancellationToken = default)
+    public async Task<Result<TaxDeclarationDto>> RequestCancellationAsync(Guid id, string reason, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(reason) || reason.Length > 1000)
         {
             return Result.Failure<TaxDeclarationDto>("VALIDATION_FAILED", "A reason is required (max 1000).");
         }
-        var td = await db.TaxDeclarations.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var td = await db.TaxDeclarations.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (td is null)
         {
             return NotFound();
         }
+        if (await CancellationProblemAsync(td, cancellationToken) is { } problem)
+        {
+            return problem;
+        }
+        if (await db.TaxDeclarationCancellationRequests.AnyAsync(x => x.TaxDeclarationId == id && x.Status == WorkflowStatus.PendingReview, cancellationToken))
+        {
+            return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_CANCELLATION_PENDING", "A cancellation of this Tax Declaration is already waiting for a decision.");
+        }
+        db.TaxDeclarationCancellationRequests.Add(new TaxDeclarationCancellationRequest { TaxDeclarationId = id, Reason = reason.Trim() });
+        currentUser.Reason = reason.Trim();
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success((await MapToDto(id, cancellationToken))!);
+    }
+
+    public async Task<Result<TaxDeclarationDto>> ApproveCancellationAsync(Guid requestId, CancellationToken cancellationToken = default)
+    {
+        var (request, refusal) = await OpenCancellationAsync(requestId, cancellationToken);
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+        // Outside the user's jurisdiction the TD is filtered out: not found, as for any other record.
+        var td = await db.TaxDeclarations.FirstOrDefaultAsync(x => x.Id == request!.TaxDeclarationId, cancellationToken);
+        if (td is null)
+        {
+            return NotFound();
+        }
+        // The TD may have changed since the request (e.g. replaced by a transaction): checked again.
+        if (await CancellationProblemAsync(td, cancellationToken) is { } problem)
+        {
+            return problem;
+        }
+        var now = clock.UtcNow;
+        td.Status = WorkflowStatus.Cancelled;
+        td.CancelledAt = now;
+        td.CancelledBy = currentUser.AppUserId;
+        td.CancellationReason = request!.Reason;
+        request.Status = WorkflowStatus.Approved;
+        request.DecidedBy = currentUser.AppUserId;
+        request.DecidedAt = now;
+        currentUser.Reason = request.Reason;
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success((await MapToDto(td.Id, cancellationToken))!);
+    }
+
+    public async Task<Result<TaxDeclarationDto>> RejectCancellationAsync(Guid requestId, string reason, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(reason) || reason.Length > 1000)
+        {
+            return Result.Failure<TaxDeclarationDto>("VALIDATION_FAILED", "A reason is required (max 1000).");
+        }
+        var (request, refusal) = await OpenCancellationAsync(requestId, cancellationToken);
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+        request!.Status = WorkflowStatus.Rejected;
+        request.DecidedBy = currentUser.AppUserId;
+        request.DecidedAt = clock.UtcNow;
+        request.DecisionReason = reason.Trim();
+        currentUser.Reason = reason.Trim();
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success((await MapToDto(request.TaxDeclarationId, cancellationToken))!);
+    }
+
+    public async Task<Result<IReadOnlyList<TaxDeclarationCancellationRequestDto>>> ListCancellationRequestsAsync(Guid id, CancellationToken cancellationToken = default) =>
+        Result.Success<IReadOnlyList<TaxDeclarationCancellationRequestDto>>((await db.TaxDeclarationCancellationRequests.AsNoTracking()
+            .Where(x => x.TaxDeclarationId == id).OrderByDescending(x => x.CreatedAt).ToListAsync(cancellationToken)).Select(ToDto).ToList());
+
+    /// <summary>Why an outright cancellation cannot go ahead: only an approved TD, and not while a court claim blocks it.</summary>
+    private async Task<Result<TaxDeclarationDto>?> CancellationProblemAsync(TaxDeclaration td, CancellationToken ct)
+    {
         if (td.Status != WorkflowStatus.Approved)
         {
             return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_NOT_APPROVED",
                 "Only an approved Tax Declaration can be cancelled; a draft or pending one can be rejected instead.");
         }
-        if (await CancellationGuard.BlockerAsync(db, [td.Id], cancellationToken) is { } blocked)
-        {
-            return Result.Failure<TaxDeclarationDto>(CancellationGuard.Code, blocked);
-        }
-        td.Status = WorkflowStatus.Cancelled;
-        td.CancelledAt = clock.UtcNow;
-        td.CancelledBy = currentUser.AppUserId;
-        td.CancellationReason = reason;
-        currentUser.Reason = reason;
-        await db.SaveChangesAsync(cancellationToken);
-        return Result.Success((await MapToDto(id, cancellationToken))!);
+        return await CancellationGuard.BlockerAsync(db, [td.Id], ct) is { } blocked
+            ? Result.Failure<TaxDeclarationDto>(CancellationGuard.Code, blocked)
+            : null;
     }
+
+    /// <summary>An open request that a known user other than its requester may decide (CLAUDE.md §46).</summary>
+    private async Task<(TaxDeclarationCancellationRequest? Request, Result<TaxDeclarationDto>? Refusal)> OpenCancellationAsync(Guid requestId, CancellationToken ct)
+    {
+        var request = await db.TaxDeclarationCancellationRequests.FirstOrDefaultAsync(x => x.Id == requestId, ct);
+        // A request whose TD is outside the user's jurisdiction (filtered out) is not found either.
+        if (request is null || !await db.TaxDeclarations.AnyAsync(x => x.Id == request.TaxDeclarationId, ct))
+        {
+            return (null, Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_CANCELLATION_NOT_FOUND", "No cancellation request was found with the given id."));
+        }
+        if (request.Status != WorkflowStatus.PendingReview)
+        {
+            return (null, Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_CANCELLATION_DECIDED", "This cancellation request has already been decided."));
+        }
+        if (MakerChecker.Refusal(currentUser, request.CreatedBy, "CANNOT_DECIDE_OWN_TAX_DECLARATION_CANCELLATION",
+                "Whoever asked for the cancellation cannot also decide it (CLAUDE.md §46).") is { } refusal)
+        {
+            return (null, Result.Failure<TaxDeclarationDto>(refusal.Code, refusal.Message));
+        }
+        return (request, null);
+    }
+
+    private static TaxDeclarationCancellationRequestDto ToDto(TaxDeclarationCancellationRequest x) =>
+        new(x.Id, x.TaxDeclarationId, x.Reason, x.Status, x.CreatedAt, x.CreatedBy, x.DecidedAt, x.DecidedBy, x.DecisionReason);
 
     public async Task<Result<IReadOnlyList<TaxDeclarationAnnotationDto>>> ListAnnotationsAsync(Guid id, CancellationToken cancellationToken = default)
     {
@@ -454,7 +543,8 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         .Include(td => td.Classification)
         .Include(td => td.ActualUse)
         .Include(td => td.Annotations)
-        .Include(td => td.Assessment);
+        .Include(td => td.Assessment)
+        .Include(td => td.CancellationRequests.Where(r => r.Status == WorkflowStatus.PendingReview));
 
     private TaxDeclarationDto ProjectToDto(TaxDeclaration td) => new(
         td.Id,
@@ -487,7 +577,8 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         td.TransactionCode,
         td.TransactionRank,
         td.AssessmentCount,
-        td.RestoresTaxDeclarationId);
+        td.RestoresTaxDeclarationId,
+        td.CancellationRequests.Where(r => r.Status == WorkflowStatus.PendingReview).Select(ToDto).FirstOrDefault());
 
     /// <summary>A TD is a FAAS once it declares an assessment; its number follows <see cref="FaasOptions.NumberSource"/>.</summary>
     private string? FaasNumber(TaxDeclaration td) => td.AssessmentId is null

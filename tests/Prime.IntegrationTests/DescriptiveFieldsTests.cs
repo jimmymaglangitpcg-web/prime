@@ -107,7 +107,7 @@ public class DescriptiveFieldsTests(WebApplicationFactory<Program> factory) : IC
         var transactions = c.Services.GetRequiredService<ITransactionService>();
         var transfer = (await transactions.CreateTypeAsync(new CreateTransactionTypeRequest(
             "DEMO — not LAM", new DateOnly(2020, 1, 1), null, $"D{Guid.NewGuid():N}"[..8], "DEMO transfer", PropertyTransactionKind.Transfer, 7, null, []))).Value;
-        (await transactions.ApproveTypeAsync(transfer.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => transactions.ApproveTypeAsync(transfer.Id))).IsSuccess.ShouldBeTrue();
         var t = (await transactions.OpenAsync(new OpenTransactionRequest(transfer.Id, c.Seed.PropertyId, new DateOnly(2026, 7, 1), "DEMO sale"))).Value;
         var td = await c.Services.GetRequiredService<Application.Features.TaxDeclarations.ITaxDeclarationService>().CreateAsync(new(
             c.Seed.RpuId, $"DEMO-TD-{Guid.NewGuid():N}"[..24], new DateOnly(2026, 7, 1), Taxability.Taxable, c.Seed.ClassificationId,
@@ -133,7 +133,7 @@ public class DescriptiveFieldsTests(WebApplicationFactory<Program> factory) : IC
         var transactions = c.Services.GetRequiredService<ITransactionService>();
         var type = (await transactions.CreateTypeAsync(new CreateTransactionTypeRequest(
             "DEMO — not LAM", new DateOnly(2020, 1, 1), null, $"D{Guid.NewGuid():N}"[..8], "DEMO cancellation", PropertyTransactionKind.Cancellation, 7, null, []))).Value;
-        (await transactions.ApproveTypeAsync(type.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => transactions.ApproveTypeAsync(type.Id))).IsSuccess.ShouldBeTrue();
         var t = (await transactions.OpenAsync(new OpenTransactionRequest(type.Id, c.Seed.PropertyId, new DateOnly(2026, 7, 1), "DEMO"))).Value;
 
         (await c.Descriptions.SetTransferTaxClearanceAsync(t.Id, new SetTransferTaxClearanceRequest(

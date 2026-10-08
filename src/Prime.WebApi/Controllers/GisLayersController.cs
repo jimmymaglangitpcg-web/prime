@@ -1,6 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Prime.Application.Common;
 using Prime.Application.Features.Gis.ReferenceLayers;
+using Prime.Application.Common.Security;
+using Prime.WebApi.Authorization;
+using Prime.WebApi.Security;
 
 namespace Prime.WebApi.Controllers;
 
@@ -9,6 +13,7 @@ namespace Prime.WebApi.Controllers;
 public class GisLayersController(IReferenceLayerService layerService) : ApiControllerBase
 {
     /// <summary>Features valid on asOf (default today) in a WGS84 bbox, as GeoJSON. layer = barangays | zones | roads | sections | disputedareas | submarketareas.</summary>
+    [RequirePermission(Permissions.GisView)]
     [HttpGet("{layer}")]
     public async Task<ActionResult<ReferenceLayerFeatureCollection>> Get(
         string layer, [FromQuery] string? bbox, [FromQuery] DateOnly? asOf, [FromQuery] int? limit, CancellationToken cancellationToken) =>
@@ -21,7 +26,10 @@ public class GisLayersController(IReferenceLayerService layerService) : ApiContr
     /// default) validates only. A committing request with any error writes
     /// nothing and returns 422 with the full error report.
     /// </summary>
+    [RequirePermission(Permissions.GisEdit)]
     [HttpPost("{layer}/import")]
+    [RequestSizeLimit(50 * 1024 * 1024)] // GeoJSON of a whole municipality's layer; the server default is 10 MB
+    [EnableRateLimiting(RateLimiting.StrictPolicy)]
     public async Task<ActionResult<ImportReferenceLayerResult>> Import(
         string layer, ImportReferenceLayerRequest request, [FromQuery] bool dryRun = true, CancellationToken cancellationToken = default)
     {

@@ -83,17 +83,17 @@ public class AssessmentFlowTests(WebApplicationFactory<Program> factory) : IClas
         var smvService = services.GetRequiredService<ISmvService>();
         var smv = (await smvService.CreateSmvAsync(new CreateSmvRequest(
             $"ORD-{Guid.NewGuid():N}", new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 15), new DateOnly(2026, 1, 1), 2026, "DEMO_SMV for AssessmentFlowTests"))).Value;
-        await smvService.ApproveSmvAsync(smv.Id);
+        await TestSeed.AsCheckerAsync(services, () => smvService.ApproveSmvAsync(smv.Id));
         var schedule = (await smvService.CreateScheduleAsync(smv.Id, new CreateSmvScheduleRequest(
             classification.Id, actualUse.Id, propertyType.Id, null, "per sqm", rate, null, null, new DateOnly(2026, 1, 1)))).Value;
-        await smvService.ApproveScheduleAsync(schedule.Id);
+        await TestSeed.AsCheckerAsync(services, () => smvService.ApproveScheduleAsync(schedule.Id));
 
         var marketValue = area * rate;
         var assessmentLevelService = services.GetRequiredService<Application.Features.AssessmentLevels.IAssessmentLevelService>();
         var assessmentLevel = (await assessmentLevelService.CreateAsync(new Application.Features.AssessmentLevels.CreateAssessmentLevelRequest(
             $"ORD-{Guid.NewGuid():N}", new DateOnly(2026, 1, 1), classification.Id, actualUse.Id, propertyType.Id,
             0m, marketValue * 2, assessmentPercentage, new DateOnly(2026, 1, 1)))).Value;
-        await assessmentLevelService.ApproveAsync(assessmentLevel.Id);
+        await TestSeed.AsCheckerAsync(services, () => assessmentLevelService.ApproveAsync(assessmentLevel.Id));
 
         var valuationService = services.GetRequiredService<IValuationService>();
         var valuationResult = await valuationService.ComputeForLandAsync(land.Id, asOf: new DateOnly(2026, 1, 1));
@@ -154,6 +154,26 @@ public class AssessmentFlowTests(WebApplicationFactory<Program> factory) : IClas
         var post = await assessmentService.PostAsync(created.Id);
         post.IsSuccess.ShouldBeTrue(post.IsSuccess ? null : post.Message);
         post.Value.Status.ShouldBe(WorkflowStatus.Posted);
+    }
+
+    [Fact]
+    public async Task RejectAssessment_NeedsAReason_AndIsAuditedAsReject()
+    {
+        var (db, services, transaction) = await BeginTestScopeAsync(factory);
+        await using var _ = transaction;
+
+        var valuation = await SeedValuationReadyForAssessmentAsync(services, db);
+        var assessmentService = services.GetRequiredService<IAssessmentService>();
+        var created = (await assessmentService.CreateAsync(new CreateAssessmentRequest(
+            valuation.Id, 2026, new DateOnly(2026, 1, 1), null, null, null))).Value;
+        (await assessmentService.SubmitForReviewAsync(created.Id)).IsSuccess.ShouldBeTrue();
+
+        // P12-3 (docs/analysis/workflow-security.md §4.3): the reason is required and is the audit row's reason.
+        (await assessmentService.RejectAsync(created.Id, " ")).Code.ShouldBe("VALIDATION_FAILED");
+        var rejected = await assessmentService.RejectAsync(created.Id, "DEMO wrong actual use");
+        rejected.IsSuccess.ShouldBeTrue(rejected.IsSuccess ? null : rejected.Message);
+        var row = await db.AuditLogs.AsNoTracking().Where(a => a.RecordId == created.Id).OrderByDescending(a => a.Timestamp).FirstAsync();
+        (row.Action, row.Reason).ShouldBe((AuditAction.Reject, "DEMO wrong actual use"));
     }
 
     [Fact]

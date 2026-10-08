@@ -65,15 +65,15 @@ public class BackTaxTests(WebApplicationFactory<Program> factory) : IClassFixtur
             var created = await smv.CreateSmvAsync(new CreateSmvRequest($"DEMO-BT-{year}-{Guid.NewGuid():N}"[..30], effective.AddMonths(-6), effective.AddMonths(-3),
                 effective, year, "DEMO SMV for BackTaxTests", MunicipalityIds: [town.Id]));
             created.IsSuccess.ShouldBeTrue(created.IsSuccess ? null : created.Message);
-            (await smv.ApproveSmvAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+            (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveSmvAsync(created.Value.Id))).IsSuccess.ShouldBeTrue();
             var schedule = await smv.CreateScheduleAsync(created.Value.Id, new CreateSmvScheduleRequest(classification.Id, use.Id, landType.Id, null, "per sqm", rate, null, null, effective));
             schedule.IsSuccess.ShouldBeTrue(schedule.IsSuccess ? null : schedule.Message);
-            (await smv.ApproveScheduleAsync(schedule.Value.Id)).IsSuccess.ShouldBeTrue();
+            (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveScheduleAsync(schedule.Value.Id))).IsSuccess.ShouldBeTrue();
         }
         var levels = scope.ServiceProvider.GetRequiredService<IAssessmentLevelService>();
         var level = (await levels.CreateAsync(new CreateAssessmentLevelRequest($"DEMO-BT-{Guid.NewGuid():N}"[..20], new DateOnly(2009, 1, 1),
             classification.Id, use.Id, landType.Id, 0m, null, 20m, new DateOnly(2010, 1, 1)))).Value;
-        (await levels.ApproveAsync(level.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => levels.ApproveAsync(level.Id))).IsSuccess.ShouldBeTrue();
         return (new Ctx(db, scope.ServiceProvider, rpu.Id), new Scoped(transaction, scope));
     }
 
@@ -128,13 +128,13 @@ public class BackTaxTests(WebApplicationFactory<Program> factory) : IClassFixtur
         var scheme = await numbering.CreateAsync(new Prime.Application.Features.Numbering.CreateNumberingSchemeRequest(
             "DEMO — not an LGU format", DateOnly.FromDateTime(DateTime.Today), null, NumberedDocumentKind.TaxDeclaration, "DEMO TD", "DEMO-BT-{YEAR}-{SEQ:6}", null, false));
         scheme.IsSuccess.ShouldBeTrue(scheme.IsSuccess ? null : scheme.Message);
-        (await numbering.ApproveAsync(scheme.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => numbering.ApproveAsync(scheme.Value.Id))).IsSuccess.ShouldBeTrue();
         var run = (await c.BackTaxes.CreateAsync(Request(c.RpuId, from: 2023))).Value; // 2023 (2021 SMV) and 2024
         run.Periods.Count.ShouldBe(2);
         foreach (var p in run.Periods)
         {
             (await c.Assessments.SubmitForReviewAsync(p.AssessmentId!.Value)).IsSuccess.ShouldBeTrue();
-            var approved = await c.Assessments.ApproveAsync(p.AssessmentId!.Value);
+            var approved = await TestSeed.AsCheckerAsync(c.Services, () => c.Assessments.ApproveAsync(p.AssessmentId!.Value));
             approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
         }
 
@@ -147,7 +147,7 @@ public class BackTaxTests(WebApplicationFactory<Program> factory) : IClassFixtur
         // The period's TD is approved before the next period's is prepared from it.
         var tds = c.Services.GetRequiredService<Prime.Application.Features.TaxDeclarations.ITaxDeclarationService>();
         (await tds.SubmitForReviewAsync(firstTd.Id)).IsSuccess.ShouldBeTrue();
-        var approvedTd = await tds.ApproveAsync(firstTd.Id);
+        var approvedTd = await TestSeed.AsCheckerAsync(c.Services, () => tds.ApproveAsync(firstTd.Id));
         approvedTd.IsSuccess.ShouldBeTrue(approvedTd.IsSuccess ? null : approvedTd.Message);
         (await c.Assessments.PostAsync(run.Periods[1].AssessmentId!.Value)).IsSuccess.ShouldBeTrue();
         var currentTd = await c.Db.TaxDeclarations.SingleAsync(x => x.AssessmentId == run.Periods[1].AssessmentId);

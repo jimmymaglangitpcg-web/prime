@@ -50,7 +50,11 @@ public static class DependencyInjection
         services.AddScoped<Features.Collection.ICollectionSetupService, Features.Collection.CollectionSetupService>();
         services.AddScoped<Features.Collection.ICollectionReportService, Features.Collection.CollectionReportService>();
         services.AddScoped<Features.Offices.IOfficeContext, Features.Offices.OfficeContext>();
+        // Permissions (docs/analysis/workflow-security.md §4.1)
+        services.AddScoped<Features.Security.IPermissionService, Features.Security.PermissionService>();
+        services.AddScoped<Features.Security.IRolePermissionService, Features.Security.RolePermissionService>();
         services.AddScoped<Features.Offices.IOfficeService, Features.Offices.OfficeService>();
+        services.AddScoped<Features.Users.IUserAccountService, Features.Users.UserAccountService>();
         services.AddScoped<Features.Offices.IApprovalDelegationService, Features.Offices.ApprovalDelegationService>();
         services.AddScoped<INumberingService, NumberingService>();
         services.AddScoped<IApprovalChainService, ApprovalChainService>();
@@ -120,6 +124,7 @@ public static class DependencyInjection
         services.AddScoped<IFormDataProvider, Features.SmvSimulations.ValuationTestFormDataProvider>();
         services.AddScoped<Features.SmvSimulations.IRevenueImpactStudyService, Features.SmvSimulations.RevenueImpactStudyService>();
         services.AddScoped<IFormDataProvider, Features.SmvSimulations.RevenueImpactFormDataProvider>();
+        services.AddScoped<Features.Audit.IAuditTrailService, Features.Audit.AuditTrailService>();
 
         return services;
     }

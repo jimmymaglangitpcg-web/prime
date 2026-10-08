@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Prime.Application.Features.GeneralRevision;
+using Prime.Application.Common.Security;
+using Prime.WebApi.Authorization;
 
 namespace Prime.WebApi.Controllers;
 
@@ -11,6 +13,7 @@ namespace Prime.WebApi.Controllers;
 [Route("api/general-revision")]
 public class GeneralRevisionController(IGeneralRevisionService generalRevisionService) : ApiControllerBase
 {
+    [RequirePermission(Permissions.GeneralRevisionView)]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<GeneralRevisionJobDto>> GetStatus(Guid id, CancellationToken cancellationToken) =>
         HandleResult(await generalRevisionService.GetStatusAsync(id, cancellationToken));

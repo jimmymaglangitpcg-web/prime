@@ -12,6 +12,7 @@ public sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
 
         builder.Property(x => x.Module).HasMaxLength(100).IsRequired();
         builder.Property(x => x.TableName).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.ParentTableName).HasMaxLength(100);
         builder.Property(x => x.Action).HasConversion<string>().HasMaxLength(20);
         builder.Property(x => x.IpAddress).HasMaxLength(45); // IPv6 max length
         builder.Property(x => x.Reason).HasMaxLength(1000);
@@ -24,6 +25,9 @@ public sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.HasIndex(x => new { x.TableName, x.RecordId });
         builder.HasIndex(x => x.Timestamp);
         builder.HasIndex(x => x.UserId);
+        // The audit viewer (docs/analysis/workflow-security.md §4.3): a user's activity, and a record's child rows.
+        builder.HasIndex(x => new { x.UserId, x.Timestamp });
+        builder.HasIndex(x => x.ParentRecordId);
 
         // No FK to AppUser — audit rows must survive even if the acting
         // user's profile is later altered, and (per Phase 3 decision)

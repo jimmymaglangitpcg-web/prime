@@ -23,6 +23,17 @@ public abstract class ApiControllerBase : ControllerBase
     protected ActionResult<T> HandleCreated<T>(Result<T> result, string actionName, Func<T, object> routeValues) =>
         result.IsSuccess ? CreatedAtAction(actionName, routeValues(result.Value), result.Value) : ToErrorResult<T>(result);
 
+    /// <summary>
+    /// Refuses an empty upload or one whose file name lacks an allowed extension (docs/analysis/workflow-security.md
+    /// §4.4). The content is still checked by the service that reads it; the declared content type is not trusted.
+    /// </summary>
+    protected static Result CheckUpload(IFormFile? file, params string[] extensions) =>
+        file is null || file.Length == 0
+            ? Result.Failure("UPLOAD_EMPTY", "Choose a file to upload.")
+            : extensions.Any(e => file.FileName.EndsWith(e, StringComparison.OrdinalIgnoreCase))
+                ? Result.Success()
+                : Result.Failure("UPLOAD_TYPE_INVALID", $"The file must be a {string.Join(" or ", extensions)} file.");
+
     private ActionResult<T> ToErrorResult<T>(Result result)
     {
         var statusCode = result.Code switch

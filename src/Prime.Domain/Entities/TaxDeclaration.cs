@@ -89,6 +89,26 @@ public sealed class TaxDeclaration : AuditableEntity
     public Guid? SupersededByTaxDeclarationId { get; set; }
 
     public List<TaxDeclarationAnnotation> Annotations { get; set; } = [];
+
+    public List<TaxDeclarationCancellationRequest> CancellationRequests { get; set; } = [];
+}
+
+/// <summary>
+/// A request to cancel an approved Tax Declaration outright, with no successor (e.g. a duplicate). One user asks, with a
+/// reason; a second, known user approves it, which cancels the TD, or rejects it with a reason (CLAUDE.md §46;
+/// docs/analysis/workflow-security.md Q19). Requests are kept. A cancellation through a property transaction does not
+/// use this: the transaction has its own approval.
+/// </summary>
+public sealed class TaxDeclarationCancellationRequest : AuditableEntity
+{
+    public Guid TaxDeclarationId { get; set; }
+    public TaxDeclaration? TaxDeclaration { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    /// <summary>PendingReview, then Approved or Rejected.</summary>
+    public WorkflowStatus Status { get; set; } = WorkflowStatus.PendingReview;
+    public Guid? DecidedBy { get; set; }
+    public DateTimeOffset? DecidedAt { get; set; }
+    public string? DecisionReason { get; set; }
 }
 
 /// <summary>

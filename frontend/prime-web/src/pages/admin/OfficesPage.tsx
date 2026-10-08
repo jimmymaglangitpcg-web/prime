@@ -10,6 +10,7 @@ import {
 import { useMunicipalities, useProvinces } from '../../api/referenceData';
 import { ApiRequestError } from '../../lib/apiClient';
 import { DelegationsTab } from './DelegationsTab';
+import { AccountsTab } from './AccountsTab';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error)?.message);
 const day = (d: Dayjs | null | undefined) => (d ? d.format('YYYY-MM-DD') : '');
@@ -43,6 +44,7 @@ export function OfficesPage() {
         { key: 'assignments', label: 'Staff', children: <AssignmentsTab /> },
         { key: 'delegations', label: 'Delegations', children: <DelegationsTab /> },
         { key: 'licences', label: 'Signatory licences', children: <LicencesTab /> },
+        { key: 'accounts', label: 'Accounts', children: <AccountsTab /> },
       ]} />
     </Space>
   );

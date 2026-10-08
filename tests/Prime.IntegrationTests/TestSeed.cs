@@ -1,5 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Prime.Domain.Entities.Identity;
+using Prime.Domain.Entities.Offices;
 using Prime.Domain.Entities.Reference;
+using Prime.Infrastructure.Identity;
 using Prime.Infrastructure.Persistence;
 
 using Prime.Domain.Enums;
@@ -9,6 +13,47 @@ namespace Prime.IntegrationTests;
 /// <summary>Seeding helpers shared by the flow tests, which run against the (possibly already populated) dev database.</summary>
 internal static class TestSeed
 {
+    /// <summary>A DEMO user holding <paramref name="role"/> province-wide (no office: the provincial scope); saved with the caller's next save.</summary>
+    public static async Task<AppUser> UserWithRoleAsync(PrimeDbContext db, string role)
+    {
+        var roleId = await db.Roles.Where(r => r.Code == role).Select(r => r.Id).SingleAsync();
+        var user = new AppUser { SupabaseUserId = Guid.NewGuid(), DisplayName = $"DEMO {role}", Email = $"demo-{Guid.NewGuid():N}@example.invalid" };
+        db.AppUsers.Add(user);
+        db.OfficeAssignments.Add(new OfficeAssignment
+        {
+            AppUserId = user.Id, OfficeId = null, EffectiveDate = new DateOnly(2020, 1, 1), LegalBasis = "DEMO", Status = WorkflowStatus.Approved,
+            ApprovedAt = DateTimeOffset.UtcNow, Roles = [new OfficeAssignmentRole { RoleId = roleId }],
+        });
+        return user;
+    }
+
+    /// <summary>
+    /// Runs <paramref name="decide"/> as a separate DEMO checker, then restores the acting user. Set-up code that needs
+    /// approved records uses it: an approval needs a known user who did not make the record (CLAUDE.md §46;
+    /// docs/analysis/workflow-security.md G7). The checker is added in the test's own transaction.
+    /// </summary>
+    public static async Task<T> AsCheckerAsync<T>(IServiceProvider services, Func<Task<T>> decide)
+    {
+        var user = services.GetRequiredService<CurrentUserService>();
+        var db = services.GetRequiredService<PrimeDbContext>();
+        var checker = new AppUser
+        {
+            SupabaseUserId = Guid.NewGuid(), DisplayName = "DEMO test checker", Email = $"demo-checker-{Guid.NewGuid():N}@example.invalid",
+        };
+        db.AppUsers.Add(checker);
+        await db.SaveChangesAsync();
+        var previous = user.AppUserId;
+        user.AppUserId = checker.Id;
+        try
+        {
+            return await decide();
+        }
+        finally
+        {
+            user.AppUserId = previous;
+        }
+    }
+
     /// <summary>
     /// The LAND property type, reused when the database already has one:
     /// services look it up by code, so any usable database carries exactly

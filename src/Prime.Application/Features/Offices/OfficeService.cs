@@ -42,7 +42,7 @@ public sealed record OfficeAssignmentDto(
 public sealed record RoleDto(string Code, string Name);
 
 /// <summary>A user with their assignment in force today, if any.</summary>
-public sealed record UserSummaryDto(Guid Id, string DisplayName, string Email, RecordStatus Status, string? OfficeCode, bool ProvinceWide, IReadOnlyList<string> Roles,
+public sealed record UserSummaryDto(Guid Id, string DisplayName, string Email, AppUserStatus Status, string? OfficeCode, bool ProvinceWide, IReadOnlyList<string> Roles,
     string? ReaLicenceNumber = null, DateOnly? ReaLicenceValidUntil = null);
 
 /// <summary>
@@ -54,7 +54,16 @@ public sealed record UpdateUserLicenceRequest(string? ReaLicenceNumber, DateOnly
 /// <summary>The signed-in user and their office scope.</summary>
 public sealed record CurrentUserDto(
     Guid? UserId, string? DisplayName, Guid? OfficeId, string? OfficeCode, string? OfficeName, OfficeKind? OfficeKind,
-    bool Assigned, bool ProvinceWide, IReadOnlyList<string> Roles, IReadOnlyList<Guid>? MunicipalityIds);
+    bool Assigned, bool ProvinceWide, IReadOnlyList<string> Roles, IReadOnlyList<Guid>? MunicipalityIds,
+    /// <summary>What the user's roles allow (docs/analysis/workflow-security.md §4.1); the screens hide what is not allowed.</summary>
+    IReadOnlyList<string>? Permissions = null,
+    /// <summary>Pending until a SYSTEM_ADMIN approves the sign-up (workflow-security.md §4.2).</summary>
+    AppUserStatus? Status = null,
+    /// <summary>The user's roles need a second factor (Q7); <see cref="MfaSatisfied"/> says whether this sign-in has one.</summary>
+    bool MfaRequired = false,
+    bool MfaSatisfied = true,
+    /// <summary>Minutes of inactivity before the browser signs out (Q9).</summary>
+    int IdleMinutes = 0);
 
 public sealed class CreateOfficeRequestValidator : AbstractValidator<CreateOfficeRequest>
 {
@@ -130,6 +139,33 @@ public interface IOfficeService
     Task<Result<CurrentUserDto>> GetCurrentAsync(CancellationToken cancellationToken = default);
 }
 
+/// <summary>The office and roles of an assignment, checked the same way wherever one is made (LP; sign-up approval, workflow-security.md §4.2).</summary>
+internal static class AssignmentRules
+{
+    public static async Task<(List<Role> Roles, Result? Refused)> ResolveAsync(IApplicationDbContext db, Guid? officeId, IReadOnlyList<string> roleCodes,
+        CancellationToken ct)
+    {
+        var roles = await db.Roles.Where(r => roleCodes.Contains(r.Code)).ToListAsync(ct);
+        if (roleCodes.Except(roles.Select(r => r.Code)).ToList() is { Count: > 0 } unknown)
+        {
+            return (roles, Result.Failure("ROLE_NOT_FOUND", $"Unknown role(s): {string.Join(", ", unknown)}."));
+        }
+        if (officeId is null)
+        {
+            if (roleCodes.Any(r => !RoleCodes.ProvinceWide.Contains(r)))
+            {
+                return (roles, Result.Failure("ASSIGNMENT_OFFICE_REQUIRED",
+                    $"Only {string.Join(" and ", RoleCodes.ProvinceWide.Order())} may be held province-wide; other roles are held within an office."));
+            }
+        }
+        else if (await db.Offices.AsNoTracking().FirstOrDefaultAsync(x => x.Id == officeId, ct) is not { Status: RecordStatus.Active })
+        {
+            return (roles, Result.Failure("OFFICE_NOT_FOUND", "No active office was found with the given id."));
+        }
+        return (roles, null);
+    }
+}
+
 /// <summary>
 /// Offices, their jurisdictions and user assignments
 /// (docs/analysis/province-wide-operation.md §3.1–§3.2). Offices are plain
@@ -142,6 +178,8 @@ public sealed class OfficeService(
     IApplicationDbContext db,
     ICurrentUserService currentUser,
     IOfficeContext officeContext,
+    Security.IPermissionService permissions,
+    Prime.Application.Common.Security.SecuritySettings security,
     IClock clock,
     IValidator<CreateOfficeRequest> createValidator,
     IValidator<UpdateOfficeRequest> updateValidator,
@@ -307,22 +345,10 @@ public sealed class OfficeService(
         {
             return Result.Failure<OfficeAssignmentDto>("APP_USER_NOT_FOUND", "No user was found with the given id.");
         }
-        var roles = await db.Roles.Where(r => request.Roles.Contains(r.Code)).ToListAsync(cancellationToken);
-        if (request.Roles.Except(roles.Select(r => r.Code)).ToList() is { Count: > 0 } unknown)
+        var (roles, refused) = await AssignmentRules.ResolveAsync(db, request.OfficeId, request.Roles, cancellationToken);
+        if (refused is not null)
         {
-            return Result.Failure<OfficeAssignmentDto>("ROLE_NOT_FOUND", $"Unknown role(s): {string.Join(", ", unknown)}.");
-        }
-        if (request.OfficeId is null)
-        {
-            if (request.Roles.Any(r => !RoleCodes.ProvinceWide.Contains(r)))
-            {
-                return Result.Failure<OfficeAssignmentDto>("ASSIGNMENT_OFFICE_REQUIRED",
-                    $"Only {string.Join(" and ", RoleCodes.ProvinceWide.Order())} may be held province-wide; other roles are held within an office.");
-            }
-        }
-        else if (await db.Offices.AsNoTracking().FirstOrDefaultAsync(x => x.Id == request.OfficeId, cancellationToken) is not { Status: RecordStatus.Active })
-        {
-            return Result.Failure<OfficeAssignmentDto>("OFFICE_NOT_FOUND", "No active office was found with the given id.");
+            return Result.Failure<OfficeAssignmentDto>(refused.Code!, refused.Message!);
         }
 
         var assignment = new OfficeAssignment
@@ -343,9 +369,10 @@ public sealed class OfficeService(
         {
             return AssignmentNotFound();
         }
-        if (currentUser.AppUserId is not null && currentUser.AppUserId == assignment.AppUserId)
+        if (MakerChecker.Refusal(currentUser, assignment.AppUserId, "CANNOT_APPROVE_OWN_OFFICE_ASSIGNMENT",
+                "A user cannot approve their own office assignment (CLAUDE.md §46).") is { } refusal)
         {
-            return Result.Failure<OfficeAssignmentDto>("CANNOT_APPROVE_OWN_OFFICE_ASSIGNMENT", "A user cannot approve their own office assignment (CLAUDE.md §46).");
+            return Result.Failure<OfficeAssignmentDto>(refusal.Code, refusal.Message);
         }
         // Scope: the user. Approving ends their previous assignment.
         if (await ConfigurationApproval.ApproveAsync(db, currentUser, db.OfficeAssignments.Where(x => x.AppUserId == assignment.AppUserId),
@@ -434,10 +461,12 @@ public sealed class OfficeService(
     public async Task<Result<CurrentUserDto>> GetCurrentAsync(CancellationToken cancellationToken = default)
     {
         var scope = await officeContext.GetAsync(cancellationToken);
-        var name = scope.UserId is null ? null
-            : await db.AppUsers.AsNoTracking().Where(u => u.Id == scope.UserId).Select(u => u.DisplayName).FirstOrDefaultAsync(cancellationToken);
-        return Result.Success(new CurrentUserDto(scope.UserId, name, scope.OfficeId, scope.OfficeCode, scope.OfficeName, scope.OfficeKind,
-            scope.Assigned, scope.ProvinceWide, scope.Roles, scope.MunicipalityIds));
+        var user = scope.UserId is null ? null
+            : await db.AppUsers.AsNoTracking().Where(u => u.Id == scope.UserId).Select(u => new { u.DisplayName, u.Status }).FirstOrDefaultAsync(cancellationToken);
+        return Result.Success(new CurrentUserDto(scope.UserId, user?.DisplayName, scope.OfficeId, scope.OfficeCode, scope.OfficeName, scope.OfficeKind,
+            scope.Assigned, scope.ProvinceWide, scope.Roles, scope.MunicipalityIds,
+            (await permissions.GetAsync(cancellationToken)).Order(StringComparer.Ordinal).ToList(),
+            user?.Status, security.RequiresMfa(scope.Roles), security.MfaSatisfied(scope.Roles, currentUser.AssuranceLevel), security.IdleMinutes));
     }
 
     // --- Helpers ---

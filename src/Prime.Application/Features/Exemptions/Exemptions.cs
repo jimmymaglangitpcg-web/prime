@@ -261,9 +261,9 @@ public sealed class ExemptionService(
                 ? "No proof has been filed: the unit stays listed as taxable until it is (LGC §206)."
                 : $"Only a claim with its proof filed can be approved; this one is {claim.Status}.");
         }
-        if (OwnClaim(claim))
+        if (DecisionRefusal(claim) is { } refusal)
         {
-            return Fail("CANNOT_DECIDE_OWN_EXEMPTION_CLAIM", "Whoever recorded the claim cannot also decide it (CLAUDE.md §46).");
+            return Fail(refusal.Code, refusal.Message);
         }
         claim.Status = ExemptionStatus.Approved;
         claim.EffectiveDate = r.EffectiveDate;
@@ -287,9 +287,9 @@ public sealed class ExemptionService(
         {
             return Fail("EXEMPTION_NOT_OPEN", $"Only an open claim can be rejected; this one is {claim.Status}.");
         }
-        if (OwnClaim(claim))
+        if (DecisionRefusal(claim) is { } refusal)
         {
-            return Fail("CANNOT_DECIDE_OWN_EXEMPTION_CLAIM", "Whoever recorded the claim cannot also decide it (CLAUDE.md §46).");
+            return Fail(refusal.Code, refusal.Message);
         }
         claim.Status = ExemptionStatus.Rejected;
         Decide(claim, reason.Trim());
@@ -363,7 +363,8 @@ public sealed class ExemptionService(
         return (await GetAsync(claim.Id, ct)) is { IsSuccess: true } dto ? Result.Success(dto.Value with { ReassessmentNote = note }) : NotFound();
     }
 
-    private bool OwnClaim(PropertyExemption claim) => currentUser.AppUserId is { } me && claim.CreatedBy == me;
+    private (string Code, string Message)? DecisionRefusal(PropertyExemption claim) =>
+        MakerChecker.Refusal(currentUser, claim.CreatedBy, "CANNOT_DECIDE_OWN_EXEMPTION_CLAIM", "Whoever recorded the claim cannot also decide it (CLAUDE.md §46).");
 
     private void Decide(PropertyExemption claim, string? remarks)
     {

@@ -69,3 +69,52 @@ public sealed class RolePermissionConfiguration : IEntityTypeConfiguration<RoleP
         builder.HasOne(x => x.Permission).WithMany(x => x.RolePermissions).HasForeignKey(x => x.PermissionId).OnDelete(DeleteBehavior.Cascade);
     }
 }
+
+public sealed class RolePermissionChangeConfiguration : IEntityTypeConfiguration<RolePermissionChange>
+{
+    public void Configure(EntityTypeBuilder<RolePermissionChange> builder)
+    {
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Reason).HasMaxLength(500).IsRequired();
+        builder.Property(x => x.DecisionReason).HasMaxLength(500);
+        builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+        builder.HasOne(x => x.Role).WithMany().HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Restrict);
+        // One open proposal per role at a time, so two drafts cannot undo each other.
+        builder.HasIndex(x => x.RoleId).IsUnique().HasFilter("\"Status\" = 'Draft'").HasDatabaseName("UX_RolePermissionChanges_OpenDraft");
+    }
+}
+
+
+public sealed class SignUpRequestConfiguration : IEntityTypeConfiguration<SignUpRequest>
+{
+    public void Configure(EntityTypeBuilder<SignUpRequest> builder)
+    {
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Position).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.Note).HasMaxLength(1000);
+        builder.Property(x => x.DecisionReason).HasMaxLength(500);
+        builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+        builder.HasOne(x => x.AppUser).WithMany().HasForeignKey(x => x.AppUserId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.RequestedOffice).WithMany().HasForeignKey(x => x.RequestedOfficeId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Prime.Domain.Entities.Offices.OfficeAssignment>().WithMany().HasForeignKey(x => x.OfficeAssignmentId).OnDelete(DeleteBehavior.Restrict);
+        // One open request per user (workflow-security.md §4.2).
+        builder.HasIndex(x => x.AppUserId).IsUnique().HasFilter("\"Status\" = 'PendingReview'").HasDatabaseName("UX_SignUpRequests_Open");
+        builder.HasIndex(x => new { x.Status, x.CreatedAt });
+    }
+}
+
+public sealed class UserStatusChangeConfiguration : IEntityTypeConfiguration<UserStatusChange>
+{
+    public void Configure(EntityTypeBuilder<UserStatusChange> builder)
+    {
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.Reason).HasMaxLength(500).IsRequired();
+        builder.Property(x => x.DecisionReason).HasMaxLength(500);
+        builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(x => x.NewStatus).HasConversion<string>().HasMaxLength(20);
+        builder.HasOne(x => x.AppUser).WithMany().HasForeignKey(x => x.AppUserId).OnDelete(DeleteBehavior.Restrict);
+        // One open proposal per user, so two drafts cannot undo each other (Q6).
+        builder.HasIndex(x => x.AppUserId).IsUnique().HasFilter("\"Status\" = 'Draft'").HasDatabaseName("UX_UserStatusChanges_OpenDraft");
+    }
+}

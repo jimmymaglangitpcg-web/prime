@@ -65,17 +65,24 @@ public class AssessmentLevelCeilingTests(WebApplicationFactory<Program> factory)
             $"DEMO-CEIL-{Guid.NewGuid():N}"[..20], null, c.LandTypeId, classId ?? c.ClassId, null, lower, upper, max));
         created.IsSuccess.ShouldBeTrue(created.IsSuccess ? null : created.Message);
         (await c.Ceilings.ApproveAsync(created.Value.Id)).Code.ShouldBe("CANNOT_APPROVE_OWN_ASSESSMENT_LEVEL_CEILING");
+        c.User.AppUserId = null;
+        (await c.Ceilings.ApproveAsync(created.Value.Id)).Code.ShouldBe("APPROVING_USER_UNKNOWN");
         c.User.AppUserId = c.Checker.Id;
         var approved = await c.Ceilings.ApproveAsync(created.Value.Id);
         approved.IsSuccess.ShouldBeTrue(approved.IsSuccess ? null : approved.Message);
-        c.User.AppUserId = null;
         return approved.Value;
     }
 
-    private static Task<Application.Common.Result<AssessmentLevelDto>> LevelAsync(Ctx c, decimal percent, decimal lower = 0m, decimal? upper = null,
-        Guid? classId = null, DateOnly? effective = null) =>
-        c.Levels.CreateAsync(new CreateAssessmentLevelRequest($"DEMO-ORD-{Guid.NewGuid():N}"[..20], null, classId ?? c.ClassId, c.UseId, c.LandTypeId,
-            lower, upper, percent, effective ?? new DateOnly(2026, 7, 1)));
+    /// <summary>A draft level made by the maker; the checker is left acting, so the test can approve it.</summary>
+    private static async Task<Application.Common.Result<AssessmentLevelDto>> LevelAsync(Ctx c, decimal percent, decimal lower = 0m, decimal? upper = null,
+        Guid? classId = null, DateOnly? effective = null)
+    {
+        c.User.AppUserId = c.Maker.Id;
+        var created = await c.Levels.CreateAsync(new CreateAssessmentLevelRequest($"DEMO-ORD-{Guid.NewGuid():N}"[..20], null, classId ?? c.ClassId, c.UseId,
+            c.LandTypeId, lower, upper, percent, effective ?? new DateOnly(2026, 7, 1)));
+        c.User.AppUserId = c.Checker.Id;
+        return created;
+    }
 
     [Fact]
     public async Task ALevelAboveTheCeilingInForce_IsRefused_WithItsLegalBasis()

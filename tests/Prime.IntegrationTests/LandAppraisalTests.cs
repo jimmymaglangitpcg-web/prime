@@ -61,7 +61,7 @@ public class LandAppraisalTests(WebApplicationFactory<Program> factory) : IClass
         {
             var schedule = await smv.CreateScheduleAsync(seed.SmvId, request);
             schedule.IsSuccess.ShouldBeTrue(schedule.IsSuccess ? null : schedule.Message);
-            (await smv.ApproveScheduleAsync(schedule.Value.Id)).IsSuccess.ShouldBeTrue();
+            (await TestSeed.AsCheckerAsync(scope.ServiceProvider, () => smv.ApproveScheduleAsync(schedule.Value.Id))).IsSuccess.ShouldBeTrue();
         }
         var landId = await db.Lands.Where(x => x.RpuId == seed.RpuId).Select(x => x.Id).SingleAsync();
         return (new Ctx(db, scope.ServiceProvider, seed, landId, secondUse.Id, mango.Id), new Scoped(transaction, scope));
@@ -81,7 +81,7 @@ public class LandAppraisalTests(WebApplicationFactory<Program> factory) : IClass
         var created = await c.Factors.CreateAsync(new CreateAdjustmentFactorRequest(
             smvId, code, $"DEMO {code}", percent, null, null, "DEMO — not an ordinance", new DateOnly(2026, 1, 1), null));
         created.IsSuccess.ShouldBeTrue(created.IsSuccess ? null : created.Message);
-        (await c.Factors.ApproveAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+        (await TestSeed.AsCheckerAsync(c.Services, () => c.Factors.ApproveAsync(created.Value.Id))).IsSuccess.ShouldBeTrue();
     }
 
     [Fact]

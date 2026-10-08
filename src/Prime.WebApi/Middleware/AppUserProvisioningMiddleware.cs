@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Prime.Domain.Entities.Identity;
 using Prime.Domain.Enums;
 using Prime.Infrastructure.Identity;
 using Prime.Infrastructure.Persistence;
+using Prime.WebApi.Contracts;
 
 namespace Prime.WebApi.Middleware;
 
@@ -17,9 +19,15 @@ namespace Prime.WebApi.Middleware;
 /// Populates the request-scoped CurrentUserService so downstream handlers
 /// and the audit interceptor know who is acting, without every handler
 /// re-deriving it from claims.
+/// A new user starts Pending: they may only ask for an account until a
+/// SYSTEM_ADMIN approves it. A disabled user is refused here, on every
+/// request, whatever their token (docs/analysis/workflow-security.md §4.2).
 /// </summary>
 public class AppUserProvisioningMiddleware(RequestDelegate next, ILogger<AppUserProvisioningMiddleware> logger)
 {
+    /// <summary>Supabase Auth's authenticator assurance level claim (aal1, or aal2 after a second factor).</summary>
+    public const string AssuranceLevelClaim = "aal";
+
     public async Task InvokeAsync(HttpContext context, PrimeDbContext db, CurrentUserService currentUser)
     {
         currentUser.IpAddress = context.Connection.RemoteIpAddress?.ToString();
@@ -37,16 +45,26 @@ public class AppUserProvisioningMiddleware(RequestDelegate next, ILogger<AppUser
                     appUser = new AppUser
                     {
                         SupabaseUserId = supabaseUserId,
-                        DisplayName = context.User.FindFirstValue(ClaimTypes.Name) ?? "Unknown User",
+                        DisplayName = context.User.FindFirstValue(ClaimTypes.Name) ?? context.User.FindFirstValue(ClaimTypes.Email) ?? "Unknown User",
                         Email = context.User.FindFirstValue(ClaimTypes.Email) ?? string.Empty,
-                        Status = RecordStatus.Active,
+                        Status = AppUserStatus.Pending,
                     };
                     db.AppUsers.Add(appUser);
                     await db.SaveChangesAsync();
-                    logger.LogInformation("Provisioned new AppUser {AppUserId} for Supabase user {SupabaseUserId}", appUser.Id, supabaseUserId);
+                    logger.LogInformation("Provisioned new pending AppUser {AppUserId} for Supabase user {SupabaseUserId}", appUser.Id, supabaseUserId);
+                }
+
+                if (appUser.Status == AppUserStatus.Inactive)
+                {
+                    logger.LogWarning("Refused a request from disabled AppUser {AppUserId}", appUser.Id);
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    await context.Response.WriteAsJsonAsync(new ApiError("USER_DISABLED", "Your PRIME account has been disabled. Ask a system administrator.",
+                        null, Activity.Current?.Id ?? context.TraceIdentifier));
+                    return;
                 }
 
                 currentUser.AppUserId = appUser.Id;
+                currentUser.AssuranceLevel = context.User.FindFirstValue(AssuranceLevelClaim);
             }
             else
             {

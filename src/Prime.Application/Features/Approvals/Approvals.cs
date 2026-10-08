@@ -194,6 +194,11 @@ public sealed class ApprovalChainService(
     public async Task<Result<ApprovalStepOutcome>> SignNextStepAsync(ApprovalSubjectType subjectType, Guid subjectId, Guid? creatorId,
         DateOnly asOf, string? remarks, CancellationToken cancellationToken = default)
     {
+        // Every signature, with or without a chain, names its signer (docs/analysis/workflow-security.md G7).
+        if (currentUser.AppUserId is null)
+        {
+            return Result.Failure<ApprovalStepOutcome>(MakerChecker.UnknownUserCode, MakerChecker.UnknownUserMessage);
+        }
         var plan = await PlanNextStepAsync(subjectType, subjectId, creatorId, asOf, cancellationToken);
         if (plan.IsFailure)
         {

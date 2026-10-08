@@ -97,16 +97,16 @@ public class BillingFlowTests(WebApplicationFactory<Program> factory) : IClassFi
         var smvService = services.GetRequiredService<ISmvService>();
         var smv = (await smvService.CreateSmvAsync(new CreateSmvRequest(
             $"ORD-{Guid.NewGuid():N}", new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 15), new DateOnly(2026, 1, 1), 2026, "DEMO_SMV for BillingFlowTests"))).Value;
-        await smvService.ApproveSmvAsync(smv.Id);
+        await TestSeed.AsCheckerAsync(services, () => smvService.ApproveSmvAsync(smv.Id));
         var schedule = (await smvService.CreateScheduleAsync(smv.Id, new CreateSmvScheduleRequest(
             classification.Id, actualUse.Id, propertyType.Id, null, "per sqm", 1000m, null, null, new DateOnly(2026, 1, 1)))).Value;
-        await smvService.ApproveScheduleAsync(schedule.Id);
+        await TestSeed.AsCheckerAsync(services, () => smvService.ApproveScheduleAsync(schedule.Id));
 
         var levels = services.GetRequiredService<IAssessmentLevelService>();
         var level = (await levels.CreateAsync(new CreateAssessmentLevelRequest(
             $"ORD-{Guid.NewGuid():N}", new DateOnly(2026, 1, 1), classification.Id, actualUse.Id, propertyType.Id,
             0m, 1_000_000m, 20m, new DateOnly(2026, 1, 1)))).Value;
-        await levels.ApproveAsync(level.Id);
+        await TestSeed.AsCheckerAsync(services, () => levels.ApproveAsync(level.Id));
 
         var valuation = await services.GetRequiredService<IValuationService>().ComputeForLandAsync(land.Id, asOf: new DateOnly(2026, 1, 1));
         valuation.IsSuccess.ShouldBeTrue(valuation.IsSuccess ? null : valuation.Message);

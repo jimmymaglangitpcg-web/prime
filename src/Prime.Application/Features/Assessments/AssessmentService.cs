@@ -362,9 +362,10 @@ public sealed class AssessmentService(
         if (!step.Value.ChainInForce)
         {
             // No chain configured — maker-checker (CLAUDE.md §46): the creator may not approve their own assessment.
-            if (currentUser.AppUserId is not null && assessment.CreatedBy == currentUser.AppUserId)
+            if (MakerChecker.Refusal(currentUser, assessment.CreatedBy, "CANNOT_APPROVE_OWN_ASSESSMENT",
+                    "The assessment's creator cannot also approve it.") is { } refusal)
             {
-                return Result.Failure<AssessmentDto>("CANNOT_APPROVE_OWN_ASSESSMENT", "The assessment's creator cannot also approve it.");
+                return Result.Failure<AssessmentDto>(refusal.Code, refusal.Message);
             }
         }
         if (!step.Value.ChainInForce || step.Value.Completed)
@@ -408,6 +409,11 @@ public sealed class AssessmentService(
 
     public async Task<Result<AssessmentDto>> RejectAsync(Guid assessmentId, string reason, CancellationToken cancellationToken = default)
     {
+        reason = reason?.Trim() ?? string.Empty;
+        if (reason.Length is 0 or > 1000)
+        {
+            return Result.Failure<AssessmentDto>("VALIDATION_FAILED", "A reason is required (max 1000).");
+        }
         var assessment = await db.Assessments.FirstOrDefaultAsync(x => x.Id == assessmentId, cancellationToken);
         if (assessment is null)
         {

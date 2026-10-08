@@ -9,7 +9,10 @@ namespace Prime.Domain.Entities.Audit;
 /// <see cref="Prime.Infrastructure.Persistence.Interceptors.AuditSaveChangesInterceptor"/>
 /// for every tracked mutation of an <see cref="IAuditable"/> entity; never
 /// written by hand in a feature handler, so no write path can silently
-/// skip auditing (docs/DATABASE.md §6).
+/// skip auditing (docs/DATABASE.md §6). Events that change no record
+/// (sign-in, sign-out, exports and prints) are written by <c>SecurityEventLog</c>.
+/// The database refuses UPDATE, DELETE and TRUNCATE on the table
+/// (docs/analysis/workflow-security.md §4.3).
 /// </summary>
 public sealed class AuditLog : Entity
 {
@@ -19,6 +22,14 @@ public sealed class AuditLog : Entity
     public string Module { get; set; } = string.Empty;
     public string TableName { get; set; } = string.Empty;
     public Guid RecordId { get; set; }
+
+    /// <summary>
+    /// For a child row (a plain <c>Entity</c> such as an assignment's role or a transaction's requirement): the
+    /// table and id of the record it belongs to, so the parent's history shows the child's changes.
+    /// </summary>
+    public string? ParentTableName { get; set; }
+
+    public Guid? ParentRecordId { get; set; }
 
     public AuditAction Action { get; set; }
 

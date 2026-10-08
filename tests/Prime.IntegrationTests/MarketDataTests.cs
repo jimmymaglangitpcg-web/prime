@@ -100,6 +100,9 @@ public class MarketDataTests(WebApplicationFactory<Program> factory) : IClassFix
 
         var cancelled = await c.Transactions.CancelAsync(created.Value.Id, new("DEMO entered twice"));
         cancelled.Value.CancelledAt.ShouldNotBeNull();
+        // A record without a status, cancelled by its CancelledAt: audited as CANCEL with its reason (P12-3).
+        var cancelRow = await c.Db.AuditLogs.AsNoTracking().Where(a => a.RecordId == created.Value.Id).OrderByDescending(a => a.Timestamp).FirstAsync();
+        (cancelRow.Action, cancelRow.Reason).ShouldBe((AuditAction.Cancel, "DEMO entered twice"));
         (await c.Transactions.UpdateAsync(created.Value.Id, Sale(c, 1m, 1m))).Code.ShouldBe("MARKET_DATA_CANCELLED");
         (await c.Transactions.SearchAsync(new MarketTransactionSearchRequest { MunicipalityId = c.MunicipalityId })).Value.Items
             .ShouldNotContain(x => x.Id == created.Value.Id);

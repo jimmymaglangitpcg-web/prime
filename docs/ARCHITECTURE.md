@@ -153,6 +153,8 @@ object storage).
 
 ### 3.4 Authentication & authorization — Supabase Auth + PRIME RBAC
 
+As built in Phase 12 (permissions, sign-up approval, MFA, audit, hardening, personal data): see `docs/SECURITY.md`.
+
 - **Supabase Auth (GoTrue)** is the credential store and token issuer:
   sign-up, sign-in, password hashing, password policy, account lockout,
   and MFA are Supabase Auth features, not custom ASP.NET Core Identity code.
@@ -209,7 +211,10 @@ object storage).
   `assessment:approve`, `payment:reverse`) so a role's exact capabilities are
   configurable without redeploying code — implemented as PRIME's own
   policy-based authorization in `Prime.Application`/`Prime.WebApi`, driven
-  by the `Role`/`Permission` tables, independent of Supabase.
+  by the `Role`/`Permission` tables, independent of Supabase. **Built in Phase 12 (P12-1):** roles come from the
+  user's office assignment in force (not `UserRole`); every API action declares `[RequirePermission]` and an
+  undeclared action is refused; the matrix changes only with a second user's approval
+  (`docs/analysis/workflow-security.md` §4.1, §9).
 - **MFA**: provided by Supabase Auth directly (TOTP/other factors per
   Supabase's supported methods) rather than a custom PRIME implementation.
 - **Maker-checker**: sensitive transactions (SMV approval, assessment

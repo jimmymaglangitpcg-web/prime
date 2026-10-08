@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { usePrintAudit } from '../../api/audit';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Space, Spin, Tag, Typography } from 'antd';
 import { ArrowLeftOutlined, PrinterOutlined } from '@ant-design/icons';
@@ -94,6 +95,7 @@ export function TaxMapSheetPage() {
   const districtId = params.get('districtId');
   const asOf = params.get('asOf') && /^\d{4}-\d{2}-\d{2}$/.test(params.get('asOf')!) ? params.get('asOf')! : todayIso();
   const valid = !!kind && KINDS.includes(kind) && !!id;
+  usePrintAudit(valid ? { tableName: `TaxMapSheet:${kind}`, recordId: id, what: `Tax map sheet (${kind}) as of ${asOf}` } : null);
 
   const sheet = useQuery({
     queryKey: ['tax-map-sheet', kind, id, districtId, asOf],

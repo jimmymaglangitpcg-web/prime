@@ -142,6 +142,7 @@ public sealed class MarketDataAbstractService(IApplicationDbContext db, IClock c
             return PermitNotFound();
         }
         (p.CancelledAt, p.CancelledBy, p.CancellationReason) = (clock.UtcNow, currentUser.AppUserId, r.Reason.Trim());
+        currentUser.Reason = p.CancellationReason;
         await db.SaveChangesAsync(cancellationToken);
         return await GetPermitAsync(p.Id, cancellationToken);
     }
@@ -305,6 +306,7 @@ public sealed class MarketDataAbstractService(IApplicationDbContext db, IClock c
             return RegistrationNotFound();
         }
         (m.CancelledAt, m.CancelledBy, m.CancellationReason) = (clock.UtcNow, currentUser.AppUserId, r.Reason.Trim());
+        currentUser.Reason = m.CancellationReason;
         await db.SaveChangesAsync(cancellationToken);
         return await GetRegistrationAsync(m.Id, cancellationToken);
     }
