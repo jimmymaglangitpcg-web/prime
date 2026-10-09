@@ -121,8 +121,16 @@ history. The end-to-end job runs on demand (Actions → CI → Run workflow → 
 database, and `playwright.config.ts` runs `seed-e2e`, starts the API and Vite, and runs the suite. CI holds only DEMO data
 (CLAUDE.md §118).
 
-Not yet run in CI (no push has been made since the workflow was written): whether the integration suite passes on a
-database built from migrations alone, which the local `prime_dev` has never been.
+A database built from migrations alone holds no reference data (it comes from content packs). Checked 2026-10-09 on a
+fresh local database (`prime_ci`, PostGIS created by the `postgres` superuser): 22 integration tests failed, 21 because they
+take the first municipality, barangay, classification or `LAND` property type they find, or need the DEMO municipal
+users' office, and one because two payments posted in one transaction came back in either order (the test now ignores
+their order; billing is frozen). After `seed-e2e` all 477 pass. CI therefore runs `seed-e2e` after the migrations. On a
+fresh database run it before the integration tests:
+
+```text
+ConnectionStrings__PrimeDb="Host=localhost;Port=5432;Database=prime_ci;Username=prime;Password=..."   dotnet run --project src/Prime.WebApi --no-launch-profile -- seed-e2e      # with ASPNETCORE_ENVIRONMENT=Development
+```
 
 ## 5. Accessibility (WCAG 2.1 AA; production-hardening.md Q10)
 

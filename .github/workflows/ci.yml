@@ -59,6 +59,12 @@ jobs:
         run: |
           dotnet tool install --global dotnet-ef --version 10.0.12
           dotnet ef database update --project src/Prime.Infrastructure --startup-project src/Prime.Infrastructure --no-build --configuration Release
+      # A fresh database has no reference data (it comes from content packs); the tests use the DEMO E2E set, and the
+      # development office seeder gives its DEMO municipalities offices when the tests' host starts.
+      - name: Seed the DEMO E2E set
+        run: dotnet run --project src/Prime.WebApi --no-build -c Release --no-launch-profile -- seed-e2e
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
       - name: Test
         run: dotnet test Prime.slnx --no-build -c Release --logger "trx" --results-directory TestResults
       - name: Vulnerable packages

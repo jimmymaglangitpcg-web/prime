@@ -223,7 +223,9 @@ public class EndToEndFlowTests(WebApplicationFactory<Program> factory) : IClassF
         var statement = Ok(await bills.GetStatementOfAccountAsync(property.Id), "statement");
         statement.TotalPrincipalPaid.ShouldBe(2_000m);
         statement.TotalOutstandingPrincipal.ShouldBe(0m);
-        statement.Payments.Select(p => p.OfficialReceiptNumber).ShouldBe([part.OfficialReceiptNumber, rest.OfficialReceiptNumber]);
+        // Both payments are posted in this test's one transaction, so they share a timestamp and the statement's order
+        // between them is not fixed (billing is frozen, CLAUDE.md §0; seen on a fresh CI database).
+        statement.Payments.Select(p => p.OfficialReceiptNumber).ShouldBe([part.OfficialReceiptNumber, rest.OfficialReceiptNumber], ignoreOrder: true);
         (await payments.QuoteAsync(new QuotePaymentRequest([new PaymentItemRequest(rpu.Id, 2026, 1)]))).Code.ShouldBe("PAYMENT_ALREADY_SETTLED");
 
         // The receipt, the remittance and the day's reconciliation close the loop.
