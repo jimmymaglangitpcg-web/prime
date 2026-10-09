@@ -73,18 +73,39 @@ export function apiGet<T>(path: string, query?: Record<string, string | number |
   return apiFetch<T>(`${path}${qs && qs !== '?' ? qs : ''}`);
 }
 
-export function apiPut<T>(path: string, body: unknown): Promise<T> {
+/**
+ * The record version the screen displayed (its DTO's `rowVersion`). Sent as If-Match, the API refuses the write with
+ * 409 CONCURRENCY_CONFLICT when someone else changed the record since (docs/analysis/production-hardening.md §4.4).
+ */
+export interface WriteOptions {
+  ifMatch?: number;
+}
+
+function jsonHeaders(options?: WriteOptions): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (options?.ifMatch !== undefined && options.ifMatch !== 0) {
+    headers['If-Match'] = `"${options.ifMatch}"`;
+  }
+  return headers;
+}
+
+export function apiPut<T>(path: string, body: unknown, options?: WriteOptions): Promise<T> {
   return apiFetch<T>(path, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: jsonHeaders(options),
     body: JSON.stringify(body),
   });
 }
 
-export function apiPost<T>(path: string, body: unknown): Promise<T> {
+export function apiPost<T>(path: string, body: unknown, options?: WriteOptions): Promise<T> {
   return apiFetch<T>(path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: jsonHeaders(options),
     body: JSON.stringify(body),
   });
+}
+
+/** The record was changed by someone else since it was loaded; nothing was saved (409). */
+export function isConcurrencyConflict(error: unknown): boolean {
+  return error instanceof ApiRequestError && error.apiError.code === 'CONCURRENCY_CONFLICT';
 }

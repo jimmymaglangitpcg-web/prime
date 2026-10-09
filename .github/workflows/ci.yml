@@ -1,0 +1,159 @@
+# PRIME continuous integration (docs/analysis/production-hardening.md §4.7, Q9; how to run the same locally: docs/TESTING.md).
+# Every push and pull request: backend build and tests against a PostGIS container, frontend type-check, build and lint,
+# vulnerability and secret scans. The browser end-to-end suite runs on demand (Actions → CI → Run workflow → e2e) and
+# before a release. CI uses only what is in the repository: DEMO data, never LAM or LGU content (CLAUDE.md §118).
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      e2e:
+        description: Also run the browser end-to-end suite
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  backend:
+    name: Backend build and tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.5
+        env:
+          POSTGRES_USER: prime
+          POSTGRES_PASSWORD: prime_ci_only
+          POSTGRES_DB: prime_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U prime -d prime_ci" --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      # appsettings.Development.json is not in git; the tests' host reads these instead.
+      # The CI database exists only inside the job's service container.
+      ConnectionStrings__PrimeDb: Host=localhost;Port=5432;Database=prime_ci;Username=prime;Password=prime_ci_only
+      PRIME_DB_CONNECTION: Host=localhost;Port=5432;Database=prime_ci;Username=prime;Password=prime_ci_only
+      DevAuth__Enabled: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore Prime.slnx
+      - name: Build
+        run: dotnet build Prime.slnx --no-restore -c Release
+      - name: Apply migrations to the CI database
+        run: |
+          dotnet tool install --global dotnet-ef --version 10.0.12
+          dotnet ef database update --project src/Prime.Infrastructure --startup-project src/Prime.Infrastructure --no-build --configuration Release
+      - name: Test
+        run: dotnet test Prime.slnx --no-build -c Release --logger "trx" --results-directory TestResults
+      - name: Vulnerable packages
+        run: |
+          dotnet list Prime.slnx package --vulnerable --include-transitive | tee vulnerable.txt
+          if grep -q "has the following vulnerable packages" vulnerable.txt; then exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: backend-test-results
+          path: TestResults
+
+  frontend:
+    name: Frontend type-check, build and lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/prime-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/prime-web/package-lock.json
+      - run: npm ci
+      - name: Type-check and build (tsc -b, vite build)
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: http://localhost:5221
+          VITE_SUPABASE_URL: http://localhost:54321
+          VITE_SUPABASE_ANON_KEY: ci-placeholder
+      - name: Lint
+        run: npm run lint
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  e2e:
+    name: Browser end-to-end suite
+    if: github.event_name == 'workflow_dispatch' && inputs.e2e
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.5
+        env:
+          POSTGRES_USER: prime
+          POSTGRES_PASSWORD: prime_ci_only
+          POSTGRES_DB: prime_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U prime -d prime_ci" --health-interval 5s --health-timeout 5s --health-retries 30
+    env:
+      # The CI database exists only inside the job's service container.
+      ConnectionStrings__PrimeDb: Host=localhost;Port=5432;Database=prime_ci;Username=prime;Password=prime_ci_only
+      PRIME_DB_CONNECTION: Host=localhost;Port=5432;Database=prime_ci;Username=prime;Password=prime_ci_only
+      DevAuth__Enabled: 'true'
+      Cors__AllowedOrigins__0: http://localhost:5173
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/prime-web/package-lock.json
+      - name: Apply migrations to the CI database
+        run: |
+          dotnet tool install --global dotnet-ef --version 10.0.12
+          dotnet ef database update --project src/Prime.Infrastructure --startup-project src/Prime.Infrastructure
+      - name: Install
+        working-directory: frontend/prime-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      # playwright.config.ts starts the API (after seed-e2e) and the Vite server itself.
+      - name: Run the suite
+        working-directory: frontend/prime-web
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: frontend/prime-web/playwright-report

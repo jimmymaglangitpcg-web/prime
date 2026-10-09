@@ -23,6 +23,7 @@ namespace Prime.Infrastructure.Persistence.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "btree_gist");
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_trgm");
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
@@ -83,6 +84,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<string>("Remarks")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("RuleKind")
                         .IsRequired()
@@ -263,6 +270,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("RevisionReference")
                         .HasColumnType("uuid");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<Guid>("RpuId")
                         .HasColumnType("uuid");
 
@@ -365,6 +378,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("PropertyTypeId")
                         .HasColumnType("uuid");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -449,6 +468,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<string>("Remarks")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -624,6 +649,8 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ParentRecordId");
+
+                    b.HasIndex("RecordId");
 
                     b.HasIndex("Timestamp");
 
@@ -1641,6 +1668,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("PropertyId")
                         .HasColumnType("uuid");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<Guid>("RpuId")
                         .HasColumnType("uuid");
 
@@ -2502,6 +2535,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -2901,6 +2940,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<bool>("RequiresProof")
                         .HasColumnType("boolean");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -3006,6 +3051,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<Guid>("RpuId")
                         .HasColumnType("uuid");
 
@@ -3092,6 +3143,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<string>("Remarks")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("SourceReference")
                         .HasMaxLength(500)
@@ -3324,6 +3381,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -3469,6 +3532,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<string>("Remarks")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<int>("Sequence")
                         .HasColumnType("integer");
@@ -3768,6 +3837,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("RevisionYear")
                         .HasColumnType("integer");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<Guid>("SmvId")
                         .HasColumnType("uuid");
@@ -4515,6 +4590,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uuid");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -4584,6 +4665,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.PrimitiveCollection<List<string>>("RequestedRoles")
                         .IsRequired()
                         .HasColumnType("text[]");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -4726,6 +4813,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsCurrent")
                         .HasColumnType("boolean");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<Guid>("RpuId")
                         .HasColumnType("uuid");
 
@@ -4857,6 +4950,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("RoadTypeId")
                         .HasColumnType("uuid");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<Guid>("RpuId")
                         .HasColumnType("uuid");
@@ -5226,6 +5325,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("ReplacementCost")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<Guid>("RpuId")
                         .HasColumnType("uuid");
@@ -5918,6 +6023,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("ReceivedDate")
                         .HasColumnType("date");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<Guid>("RpuId")
                         .HasColumnType("uuid");
 
@@ -6040,6 +6151,10 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("PropertyId");
 
+                    b.HasIndex("RpuId");
+
+                    b.HasIndex("TaxDeclarationId");
+
                     b.HasIndex("NoticeOfAssessmentId", "Sequence")
                         .IsUnique();
 
@@ -6126,6 +6241,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<string>("ReplacedByTaxDeclarationNumber")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<DateOnly?>("SentDate")
                         .HasColumnType("date");
@@ -6256,6 +6377,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("RevokedFrom")
                         .HasColumnType("date");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -6338,6 +6465,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("SanggunianName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -6404,6 +6537,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<string>("Remarks")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -6496,6 +6635,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -6566,6 +6711,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("PropertyId")
                         .HasColumnType("uuid");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<Guid?>("SectionId")
                         .HasColumnType("uuid");
 
@@ -6583,12 +6734,6 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid");
-
-                    b.Property<uint>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
 
                     b.Property<Guid?>("ZoneId")
                         .HasColumnType("uuid");
@@ -6882,6 +7027,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ProvinceId")
                         .HasColumnType("uuid");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Sitio")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -7091,6 +7242,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("PropertyId")
                         .HasColumnType("uuid");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("RpuNumber")
                         .IsRequired()
@@ -8447,6 +8604,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ReviewedBy")
                         .HasColumnType("uuid");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -8745,6 +8908,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<DateOnly>("ReferenceDate")
                         .HasColumnType("date");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<Guid>("SmvSimulationRunId")
                         .HasColumnType("uuid");
@@ -9096,6 +9265,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<int>("RevisionYear")
                         .HasColumnType("integer");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -9174,6 +9349,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<string>("Remarks")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<Guid>("SmvId")
                         .HasColumnType("uuid");
@@ -9372,6 +9553,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<Guid>("SmvId")
                         .HasColumnType("uuid");
 
@@ -9445,6 +9632,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<string>("Remarks")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<Guid>("SmvId")
                         .HasColumnType("uuid");
@@ -9524,6 +9717,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("RevisionYear")
                         .HasColumnType("integer");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -9656,6 +9855,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("PropertyTypeId")
                         .HasColumnType("uuid");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<Guid>("SmvId")
                         .HasColumnType("uuid");
@@ -10120,6 +10325,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("SignedAt")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
@@ -10412,6 +10623,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<int>("RevisionNumber")
                         .HasColumnType("integer");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<Guid>("RpuId")
                         .HasColumnType("uuid");
 
@@ -10590,6 +10807,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -10662,6 +10885,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("ProvinceId")
                         .HasColumnType("uuid");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("Sex")
                         .HasMaxLength(10)
@@ -10911,6 +11140,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("ReceivedOn")
                         .HasColumnType("date");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<int>("Sequence")
                         .HasColumnType("integer");
 
@@ -11007,6 +11242,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("RelocatedRpuId")
                         .HasColumnType("uuid");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -11283,6 +11524,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -11468,6 +11715,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("PropertyId")
                         .HasColumnType("uuid");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<Guid>("RpuId")
                         .HasColumnType("uuid");
@@ -11810,6 +12063,12 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -11975,6 +12234,10 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasIndex("ApprovalChainId");
 
                     b.HasIndex("DelegationId");
+
+                    b.HasIndex("SignerOfficeId");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("SubjectType", "SubjectId", "StepSequence")
                         .IsUnique();
@@ -13489,6 +13752,17 @@ namespace Prime.Infrastructure.Persistence.Migrations
                         .HasForeignKey("PropertyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.RealPropertyUnit", null)
+                        .WithMany()
+                        .HasForeignKey("RpuId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Prime.Domain.Entities.TaxDeclaration", null)
+                        .WithMany()
+                        .HasForeignKey("TaxDeclarationId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Assessment");
                 });
@@ -15038,6 +15312,16 @@ namespace Prime.Infrastructure.Persistence.Migrations
                     b.HasOne("Prime.Domain.Entities.Offices.ApprovalDelegation", null)
                         .WithMany()
                         .HasForeignKey("DelegationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Offices.Office", null)
+                        .WithMany()
+                        .HasForeignKey("SignerOfficeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Prime.Domain.Entities.Identity.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

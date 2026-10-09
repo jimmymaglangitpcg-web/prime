@@ -86,7 +86,7 @@ function Results({ s }: { s: StudyDto }) {
 
 /** The Treasurer's figures and the options, saved as a whole. */
 function Editor({ s }: { s: StudyDto }) {
-  const save = useUpdateImpactStudy(s.id);
+  const save = useUpdateImpactStudy(s.id, s.rowVersion);
   const { data: classes = [] } = useClassifications();
   const { data: uses = [] } = useActualUses();
   const [r, setR] = useState<SaveStudyRequest>(() => toRequest(s));

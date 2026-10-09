@@ -63,7 +63,8 @@ public sealed record PropertyExemptionDto(
     DateOnly? EndedOn, string? EndReason, IReadOnlyList<ExemptionEvidenceDto> Evidence,
     Guid? ReassessmentId = null,
     /// <summary>Set by approve and end only: whether a reassessment was opened, and if not, why.</summary>
-    string? ReassessmentNote = null);
+    string? ReassessmentNote = null,
+    uint RowVersion = 0);
 
 public sealed class CreateExemptionTypeRequestValidator : AbstractValidator<CreateExemptionTypeRequest>
 {
@@ -398,7 +399,7 @@ public sealed class ExemptionService(
             x.Reference, x.Remarks, x.Status, x.ProofFiledOn, x.EffectiveDate, x.ExpiryDate,
             x.CreatedBy, Name(x.CreatedBy), x.CreatedAt, x.DecidedBy, Name(x.DecidedBy), x.DecidedAt, x.DecisionRemarks, x.EndedOn, x.EndReason,
             x.Evidence.OrderBy(e => e.Sequence).Select(e => new ExemptionEvidenceDto(e.Sequence, e.Description, e.ReferenceNumber, e.DocumentDate,
-                e.ReceivedOn, Name(e.ReceivedBy))).ToList(), x.ReassessmentId)).ToList();
+                e.ReceivedOn, Name(e.ReceivedBy))).ToList(), x.ReassessmentId, RowVersion: x.RowVersion)).ToList();
     }
 
     private static ExemptionTypeDto ToDto(ExemptionType x) => new(

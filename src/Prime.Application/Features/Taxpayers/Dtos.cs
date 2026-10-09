@@ -42,7 +42,9 @@ public sealed record TaxpayerDto(
     bool Limited = false,
     Sex? Sex = null,
     /// <summary>TIN, contact, e-mail and address are masked: an individual's, for a user without taxpayer.view-personal (Q16).</summary>
-    bool PersonalDataMasked = false);
+    bool PersonalDataMasked = false,
+    /// <summary>Row version, echoed in If-Match when editing details (production-hardening.md §4.4).</summary>
+    uint RowVersion = 0);
 
 public sealed class TaxpayerSearchRequest : Common.PagedRequest
 {

@@ -240,10 +240,11 @@ As built in Phase 12 (permissions, sign-up approval, MFA, audit, hardening, pers
   hard-deleted. Enforced by omitting `DbSet.Remove` support for those
   aggregates at the repository layer and using `Status`/effective-dating
   instead.
-- **Concurrency**: optimistic concurrency via a `xmin`-mapped or explicit
-  `RowVersion` column on financial/assessment tables, combined with unique
-  constraints and DB transactions for payment/posting operations (CLAUDE.md
-  §66).
+- **Concurrency**: optimistic concurrency via an `xmin`-mapped `RowVersion`
+  on every workflow and editable record (`IVersioned`), `If-Match` on writes
+  and 409 `CONCURRENCY_CONFLICT`, combined with unique constraints and DB
+  transactions for numbering and posting (CLAUDE.md §66;
+  `docs/analysis/production-hardening.md` H2).
 - **Money**: `decimal` in C#, `numeric(18,2)` (precision to be confirmed
   against actual LGU currency/rounding rules — flagged in
   DATABASE.md) in PostgreSQL. Never `float`/`double`.
@@ -328,6 +329,20 @@ As built in Phase 12 (permissions, sign-up approval, MFA, audit, hardening, pers
 - Jobs that mutate assessment/billing data must be **idempotent** (safe to
   retry) and must themselves go through the same audit logging as
   interactive requests.
+- Long runs at volume (Phase 14, H4; `docs/analysis/production-hardening.md`
+  §9): a runner clears its `DbContext` change tracker after each item
+  (otherwise every save scans all rows the run has written, and the rate
+  fell by three quarters within ten minutes). Hangfire runs a job again
+  when its server stopped mid-run (after the storage's invisibility
+  timeout, 30 minutes by default) and on retry: a general revision run
+  that finished does nothing, a value run skips the items it finished, and
+  a batch action keeps only the items still in the state it acts on. A
+  deployment during the overnight revision therefore costs the timeout,
+  not the work done. The storage uses a sliding invisibility timeout
+  (`UseSlidingInvisibilityTimeout`): the worker renews its claim while
+  the job runs. Without it, a job running longer than 30 minutes was
+  handed to a second worker while the first was still running. The item list travels as the job argument (15 MB for
+  400,000 items), written once per run.
 
 ### 3.9 Document generation & storage — Supabase Storage
 

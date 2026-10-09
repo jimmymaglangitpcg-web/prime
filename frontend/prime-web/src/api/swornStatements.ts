@@ -47,8 +47,8 @@ function useStatementMutation<V>(fn: (variables: V) => Promise<SwornStatementDto
 export const useCreateSwornStatement = () =>
   useStatementMutation((request: SaveSwornStatementRequest) => apiPost<SwornStatementDto>('/api/sworn-statements', request));
 
-export const useUpdateSwornStatement = (id: string) =>
-  useStatementMutation((request: SaveSwornStatementRequest) => apiPut<SwornStatementDto>(`/api/sworn-statements/${id}`, request));
+export const useUpdateSwornStatement = (id: string, rowVersion?: number) =>
+  useStatementMutation((request: SaveSwornStatementRequest) => apiPut<SwornStatementDto>(`/api/sworn-statements/${id}`, request, { ifMatch: rowVersion }));
 
 export const useAddSwornStatementItem = (id: string) =>
   useStatementMutation((request: AddSwornStatementItemRequest) => apiPost<SwornStatementDto>(`/api/sworn-statements/${id}/items`, request));
@@ -60,8 +60,8 @@ export const useLinkSwornStatementItem = (id: string) =>
   useStatementMutation(({ itemId, rpuId }: { itemId: string; rpuId: string }) =>
     apiPost<SwornStatementDto>(`/api/sworn-statements/${id}/items/${itemId}/link`, { rpuId }));
 
-export const useFileSwornStatement = (id: string) =>
-  useStatementMutation((number: string | null) => apiPost<SwornStatementDto>(`/api/sworn-statements/${id}/file`, { number }));
+export const useFileSwornStatement = (id: string, rowVersion?: number) =>
+  useStatementMutation((number: string | null) => apiPost<SwornStatementDto>(`/api/sworn-statements/${id}/file`, { number }, { ifMatch: rowVersion }));
 
-export const useCancelSwornStatement = (id: string) =>
-  useStatementMutation((reason: string) => apiPost<SwornStatementDto>(`/api/sworn-statements/${id}/cancel`, { reason }));
+export const useCancelSwornStatement = (id: string, rowVersion?: number) =>
+  useStatementMutation((reason: string) => apiPost<SwornStatementDto>(`/api/sworn-statements/${id}/cancel`, { reason }, { ifMatch: rowVersion }));

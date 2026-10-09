@@ -18,8 +18,11 @@ namespace Prime.Domain.Entities;
 /// <see cref="SupersededByTaxDeclarationId"/> on it. At most one Approved TD
 /// per RPU.
 /// </summary>
-public sealed class TaxDeclaration : AuditableEntity
+public sealed class TaxDeclaration : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid RpuId { get; set; }
     public RealPropertyUnit? Rpu { get; set; }
     public Guid PropertyId { get; set; }
@@ -99,8 +102,11 @@ public sealed class TaxDeclaration : AuditableEntity
 /// docs/analysis/workflow-security.md Q19). Requests are kept. A cancellation through a property transaction does not
 /// use this: the transaction has its own approval.
 /// </summary>
-public sealed class TaxDeclarationCancellationRequest : AuditableEntity
+public sealed class TaxDeclarationCancellationRequest : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid TaxDeclarationId { get; set; }
     public TaxDeclaration? TaxDeclaration { get; set; }
     public string Reason { get; set; } = string.Empty;

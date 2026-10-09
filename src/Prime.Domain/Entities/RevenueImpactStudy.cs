@@ -11,8 +11,11 @@ namespace Prime.Domain.Entities;
 /// computes a bill. Options are study data: nothing is approved by being in a study. Results are computed on reading from the
 /// run's frozen results and the posted assessments.
 /// </summary>
-public sealed class RevenueImpactStudy : AuditableEntity
+public sealed class RevenueImpactStudy : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public string Title { get; set; } = string.Empty;
     public Guid SmvSimulationRunId { get; set; }
     public SmvSimulationRun? SmvSimulationRun { get; set; }

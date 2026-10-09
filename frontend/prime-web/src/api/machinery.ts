@@ -32,10 +32,11 @@ export function useMachineryUnitsByRpu(rpuId: string | undefined) {
 }
 
 /** What the derived replacement cost reads, changed with a reason (audited; valuation-foundation.md §4.6). */
-export function useUpdateMachineryValuationInputs(machineryId: string, rpuId: string, propertyId: string) {
+export function useUpdateMachineryValuationInputs(machineryId: string, rpuId: string, propertyId: string, rowVersion?: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (request: UpdateMachineryValuationInputsRequest) => apiPut<MachineryDto>(`/api/machinery/${machineryId}/valuation-inputs`, request),
+    mutationFn: (request: UpdateMachineryValuationInputsRequest) =>
+      apiPut<MachineryDto>(`/api/machinery/${machineryId}/valuation-inputs`, request, { ifMatch: rowVersion }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rpus', rpuId, 'machinery'] });
       queryClient.invalidateQueries({ queryKey: ['properties', propertyId] });

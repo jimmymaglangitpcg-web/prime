@@ -21,7 +21,11 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .Enrich.FromLogContext());
 
 // Every action declares its permission; one that does not is refused (docs/analysis/workflow-security.md §4.1).
-builder.Services.AddControllers(options => options.Conventions.Add(new Prime.WebApi.Authorization.PermissionDeclarationConvention()))
+builder.Services.AddControllers(options =>
+    {
+        options.Conventions.Add(new Prime.WebApi.Authorization.PermissionDeclarationConvention());
+        options.Filters.Add<Prime.WebApi.Concurrency.IfMatchFilter>();
+    })
     .AddJsonOptions(options =>
     {
         // Enums serialize/deserialize as strings ("Active", "Individual",
@@ -151,6 +155,20 @@ var app = builder.Build();
 if (args is [Prime.WebApi.Commands.BootstrapAdminCommand.Name, var bootstrapEmail, ..])
 {
     Environment.ExitCode = await Prime.WebApi.Commands.BootstrapAdminCommand.RunAsync(app.Services, bootstrapEmail);
+    return;
+}
+
+// Development only: the DEMO volume set for the performance measurements (production-hardening.md §4.5).
+if (args is [Prime.WebApi.Commands.GenerateVolumeCommand.Name, ..])
+{
+    Environment.ExitCode = await Prime.WebApi.Commands.GenerateVolumeCommand.RunAsync(app.Configuration, app.Environment, args);
+    return;
+}
+
+// Development only: the DEMO set the browser end-to-end suite works on (production-hardening.md §4.7).
+if (args is [Prime.WebApi.Commands.SeedE2eCommand.Name, ..])
+{
+    Environment.ExitCode = await Prime.WebApi.Commands.SeedE2eCommand.RunAsync(app.Configuration, app.Environment);
     return;
 }
 

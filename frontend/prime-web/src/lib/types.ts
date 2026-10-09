@@ -15,6 +15,8 @@ export interface PagedResult<T> {
   page: number;
   pageSize: number;
   totalPages: number;
+  /** The list stopped counting at totalCount: there are more rows. */
+  totalIsLowerBound?: boolean;
 }
 
 // --- Reference data ---------------------------------------------------
@@ -198,6 +200,8 @@ export interface UpdateTaxpayerDetailsRequest {
 }
 
 export interface TaxpayerDto {
+  /** Row version; sent as If-Match on a write (production-hardening.md §4.4). */
+  rowVersion: number;
   id: string;
   taxpayerType: TaxpayerType;
   displayName: string;
@@ -431,6 +435,8 @@ export interface CreateTaxDeclarationRequest {
 }
 
 export interface TaxDeclarationDto {
+  /** Row version; sent as If-Match on a write (production-hardening.md §4.4). */
+  rowVersion: number;
   id: string;
   rpuId: string;
   propertyId: string;
@@ -527,6 +533,8 @@ export interface CreateLandRequest {
 }
 
 export interface LandDto {
+  /** Row version; sent as If-Match on a write (production-hardening.md §4.4). */
+  rowVersion: number;
   id: string;
   rpuId: string;
   propertyId: string;
@@ -749,6 +757,8 @@ export interface CreateMachineryRequest {
 }
 
 export interface MachineryDto {
+  /** Row version; sent as If-Match on a write (production-hardening.md §4.4). */
+  rowVersion: number;
   id: string;
   rpuId: string;
   propertyId: string;
@@ -1472,6 +1482,8 @@ export interface TransactionTdDto {
 }
 
 export interface PropertyTransactionDto {
+  /** Row version; sent as If-Match on a write (production-hardening.md §4.4). */
+  rowVersion: number;
   id: string;
   transactionNumber: string | null;
   transactionTypeId: string;
@@ -1667,6 +1679,8 @@ export interface AssessmentLineDto {
 }
 
 export interface AssessmentSummaryDto {
+  /** Row version; sent as If-Match on a workflow step (production-hardening.md §4.4). */
+  rowVersion: number;
   id: string;
   rpuId: string;
   assessmentYear: number;
@@ -1891,6 +1905,8 @@ export interface SwornStatementItemDto {
 }
 
 export interface SwornStatementDto extends SaveSwornStatementRequest {
+  /** Row version; sent as If-Match on a write (production-hardening.md §4.4). */
+  rowVersion: number;
   id: string; number: string | null; status: SwornStatementStatus; municipalityName: string; provinceName: string;
   supersedesNumber: string | null; supersededById: string | null; filedAt: string | null; cancelledAt: string | null; cancellationReason: string | null;
   totalDeclaredValue: number; createdAt: string; items: SwornStatementItemDto[];
@@ -2080,6 +2096,8 @@ export interface CreateExemptionTypeRequest {
 export interface ExemptionEvidenceDto { sequence: number; description: string; referenceNumber: string | null; documentDate: string | null; receivedOn: string; receivedBy: string | null }
 
 export interface PropertyExemptionDto {
+  /** Row version; sent as If-Match on a write (production-hardening.md §4.4). */
+  rowVersion: number;
   id: string; propertyId: string; pin: string; rpuId: string; rpuNumber: string; rpuType: RpuType;
   exemptionTypeId: string; typeCode: string; typeName: string; legalBasis: string;
   actualUseId: string | null; actualUseName: string | null; portionDescription: string | null; claimantTaxpayerId: string | null; claimantName: string | null;

@@ -4,6 +4,8 @@ import { apiGet } from '../lib/apiClient';
 // Records whose next approval step the signed-in user may sign (docs/analysis/province-wide-operation.md §3.4).
 
 export interface ApprovalQueueItemDto {
+  /** Row version; sent as If-Match on a write (production-hardening.md §4.4). */
+  rowVersion: number;
   subjectType: 'Assessment' | 'TaxDeclaration' | 'PropertyTransaction';
   subjectId: string;
   propertyId: string;

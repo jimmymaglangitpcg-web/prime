@@ -23,6 +23,8 @@ export interface SmvPreparationEventDto {
 }
 
 export interface SmvPreparationDto {
+  /** Row version; sent as If-Match on a write (production-hardening.md §4.4). */
+  rowVersion: number;
   id: string; revisionYear: number; title: string; dateOfValuation: string | null; baseValuationDate: string | null; status: SmvPreparationStatus;
   notes: string | null; cancellationReason: string | null; proposedSmv: SmvPreparationSmvDto; consultations: SmvConsultationDto[];
   events: SmvPreparationEventDto[]; minimumConsultations: number; nextDue: { what: string; dueOn: string } | null; editable: boolean;

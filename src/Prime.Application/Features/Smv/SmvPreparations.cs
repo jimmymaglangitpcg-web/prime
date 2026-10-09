@@ -55,7 +55,7 @@ public sealed record SmvPreparationDto(
     Guid Id, int RevisionYear, string Title, DateOnly? DateOfValuation, DateOnly? BaseValuationDate, SmvPreparationStatus Status, string? Notes,
     string? CancellationReason, SmvPreparationSmvDto ProposedSmv, IReadOnlyList<SmvConsultationDto> Consultations,
     IReadOnlyList<SmvPreparationEventDto> Events, int MinimumConsultations, SmvPreparationDue? NextDue, bool Editable,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings, uint RowVersion = 0);
 
 public sealed record SmvPreparationSummaryDto(Guid Id, int RevisionYear, string Title, SmvPreparationStatus Status, Guid ProposedSmvId,
     DateOnly EffectivityDate, int ConsultationCount, DateTimeOffset CreatedAt);
@@ -317,7 +317,7 @@ public sealed class SmvPreparationService(IApplicationDbContext db, IClock clock
                 .Select(e => new SmvPreparationEventDto(e.Id, e.Kind, SmvPreparationFlow.Label(e.Kind), e.OccurredOn, e.Reference, e.Note, e.CreatedAt)).ToList(),
             options.Value.MinimumConsultations,
             p.Status == SmvPreparationStatus.Cancelled ? null : SmvPreparationFlow.NextDue(p.Events, options.Value.Periods),
-            open && !jurisdiction.Restricted, []));
+            open && !jurisdiction.Restricted, [], p.RowVersion));
     }
 
     public async Task<Result<IReadOnlyList<SmvPreparationSummaryDto>>> ListAsync(CancellationToken cancellationToken = default) =>

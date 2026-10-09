@@ -6,7 +6,7 @@ import type { TaxpayerDto, UpdateTaxpayerDetailsRequest } from '../../lib/types'
 
 /** Corrects a taxpayer's TIN, address, contact, email and (individuals) sex, with a reason (records-and-forms.md §4.1). */
 export function TaxpayerDetailsModal({ taxpayer, onClose }: { taxpayer: TaxpayerDto; onClose: () => void }) {
-  const save = useUpdateTaxpayerDetails(taxpayer.id);
+  const save = useUpdateTaxpayerDetails(taxpayer.id, taxpayer.rowVersion);
   const clean = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
   return (
     <Modal open title={`Edit details — ${taxpayer.displayName}`} footer={null} onCancel={onClose} width={560} destroyOnHidden>

@@ -33,9 +33,9 @@ export interface CreateSmvPreparationBody {
 export const useCreateSmvPreparation = () =>
   usePreparationMutation((b: CreateSmvPreparationBody) => apiPost<SmvPreparationDto>('/api/smv/preparations', b));
 
-export const useUpdateSmvPreparation = (id: string) =>
+export const useUpdateSmvPreparation = (id: string, rowVersion?: number) =>
   usePreparationMutation((b: { title: string; dateOfValuation: string | null; baseValuationDate: string | null; plannedEffectivityDate: string; notes: string | null }) =>
-    apiPut<SmvPreparationDto>(`/api/smv/preparations/${id}`, b));
+    apiPut<SmvPreparationDto>(`/api/smv/preparations/${id}`, b, { ifMatch: rowVersion }));
 
 export const useAddSmvConsultation = (id: string) =>
   usePreparationMutation((b: { heldOn: string; mode: SmvConsultationMode; venue: string | null; attendance: number | null; minutesReference: string | null; notes: string | null }) =>
@@ -45,5 +45,5 @@ export const useRecordSmvPreparationEvent = (id: string) =>
   usePreparationMutation((b: { kind: SmvPreparationEventKind; occurredOn: string; reference: string | null; note: string | null }) =>
     apiPost<SmvPreparationDto>(`/api/smv/preparations/${id}/events`, b));
 
-export const useCancelSmvPreparation = (id: string) =>
-  usePreparationMutation((b: { reason: string }) => apiPost<SmvPreparationDto>(`/api/smv/preparations/${id}/cancel`, b));
+export const useCancelSmvPreparation = (id: string, rowVersion?: number) =>
+  usePreparationMutation((b: { reason: string }) => apiPost<SmvPreparationDto>(`/api/smv/preparations/${id}/cancel`, b, { ifMatch: rowVersion }));

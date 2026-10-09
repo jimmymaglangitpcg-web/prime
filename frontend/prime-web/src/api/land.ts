@@ -47,10 +47,11 @@ export const useAddLandAdjustment = (landId: string, rpuId: string, propertyId: 
   useAddLandRow<AddLandAdjustmentRequest>('adjustments', landId, rpuId, propertyId);
 
 /** Road, corner, distances and subdivision status, with a reason (audited; valuation-foundation.md §4.4). */
-export function useUpdateLandAppraisalInputs(landId: string, rpuId: string, propertyId: string) {
+export function useUpdateLandAppraisalInputs(landId: string, rpuId: string, propertyId: string, rowVersion?: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (request: UpdateLandAppraisalInputsRequest) => apiPut<LandDto>(`/api/land/${landId}/appraisal-inputs`, request),
+    mutationFn: (request: UpdateLandAppraisalInputsRequest) =>
+      apiPut<LandDto>(`/api/land/${landId}/appraisal-inputs`, request, { ifMatch: rowVersion }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rpus', rpuId, 'land'] });
       queryClient.invalidateQueries({ queryKey: ['properties', propertyId] });

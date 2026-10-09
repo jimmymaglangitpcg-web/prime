@@ -28,6 +28,8 @@ public sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         // The audit viewer (docs/analysis/workflow-security.md §4.3): a user's activity, and a record's child rows.
         builder.HasIndex(x => new { x.UserId, x.Timestamp });
         builder.HasIndex(x => x.ParentRecordId);
+        // A record's or a property's history looks rows up by record id alone; (TableName, RecordId) cannot serve that.
+        builder.HasIndex(x => x.RecordId);
 
         // No FK to AppUser — audit rows must survive even if the acting
         // user's profile is later altered, and (per Phase 3 decision)

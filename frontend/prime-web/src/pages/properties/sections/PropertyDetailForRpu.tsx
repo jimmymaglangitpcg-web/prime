@@ -14,6 +14,20 @@ import { BuildingAppraisalRows } from './BuildingAppraisalRows';
 import { MachineryDescriptionModal } from '../modals/DescriptionModals';
 import { MachineryInputsModal } from '../modals/MachineryInputsModal';
 import { formatMoney } from '../../../lib/format';
+import { useRpuAssessments } from '../../../api/assessments';
+
+/**
+ * The unit's values are those of its current posted assessment (the Assessments list below keeps the history and the
+ * calculation); the land and building records carry no values of their own (CLAUDE.md §31, §102 Rule 9).
+ */
+function useCurrentValues(rpuId: string) {
+  const { data = [] } = useRpuAssessments(rpuId);
+  const current = data.filter((a) => a.status === 'Posted').sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate))[0];
+  return {
+    marketValue: current ? formatMoney(current.marketValue) : 'Not yet assessed',
+    assessedValue: current ? `${formatMoney(current.assessedValue)} (effective ${current.effectiveDate})` : 'Not yet assessed',
+  };
+}
 
 // A LAND_NOT_FOUND/BUILDING_NOT_FOUND/MACHINERY_NOT_FOUND response (mapped
 // to HTTP 404 by ApiControllerBase) means "not registered yet" here, since
@@ -24,6 +38,7 @@ function isNotFound(error: unknown): boolean {
 
 function LandDetail({ propertyId, rpuId }: { propertyId: string; rpuId: string }) {
   const { data, isLoading, isError, error } = useLandByRpu(rpuId);
+  const values = useCurrentValues(rpuId);
   const [addOpen, setAddOpen] = useState(false);
 
   if (isLoading) {
@@ -58,8 +73,8 @@ function LandDetail({ propertyId, rpuId }: { propertyId: string; rpuId: string }
       <Descriptions.Item label="Actual Use">{data.actualUseName}</Descriptions.Item>
       <Descriptions.Item label="Corner Lot">{data.isCornerLot ? 'Yes' : 'No'}</Descriptions.Item>
       <Descriptions.Item label="Zoning">{data.zoning ?? '—'}</Descriptions.Item>
-      <Descriptions.Item label="Market Value">{data.marketValue ?? 'Not yet valued'}</Descriptions.Item>
-      <Descriptions.Item label="Assessed Value">{data.assessedValue ?? 'Not yet assessed'}</Descriptions.Item>
+      <Descriptions.Item label="Market Value">{values.marketValue}</Descriptions.Item>
+      <Descriptions.Item label="Assessed Value">{values.assessedValue}</Descriptions.Item>
     </Descriptions>
     <LandAppraisalRows land={data} rpuId={rpuId} propertyId={propertyId} />
     </>
@@ -68,6 +83,7 @@ function LandDetail({ propertyId, rpuId }: { propertyId: string; rpuId: string }
 
 function BuildingDetail({ propertyId, rpuId }: { propertyId: string; rpuId: string }) {
   const { data, isLoading, isError, error } = useBuildingByRpu(rpuId);
+  const values = useCurrentValues(rpuId);
   const [addOpen, setAddOpen] = useState(false);
 
   if (isLoading) {
@@ -104,8 +120,8 @@ function BuildingDetail({ propertyId, rpuId }: { propertyId: string; rpuId: stri
       <Descriptions.Item label="Total Floor Area">{data.totalFloorArea} sqm</Descriptions.Item>
       <Descriptions.Item label="Year Constructed">{data.yearConstructed ?? '—'}</Descriptions.Item>
       <Descriptions.Item label="Completion">{data.completionPercentage}%</Descriptions.Item>
-      <Descriptions.Item label="Market Value">{data.marketValue ?? 'Not yet valued'}</Descriptions.Item>
-      <Descriptions.Item label="Assessed Value">{data.assessedValue ?? 'Not yet assessed'}</Descriptions.Item>
+      <Descriptions.Item label="Market Value">{values.marketValue}</Descriptions.Item>
+      <Descriptions.Item label="Assessed Value">{values.assessedValue}</Descriptions.Item>
     </Descriptions>
     <BuildingAppraisalRows building={data} rpuId={rpuId} propertyId={propertyId} />
     </>

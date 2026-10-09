@@ -109,11 +109,12 @@ function ClaimActionModal({ action, onClose }: { action: Action | null; onClose:
   function submit(v: Record<string, never>) {
     if (!action) return;
     const id = action.claim.id;
+    const rowVersion = action.claim.rowVersion;
     const a = v as unknown as Record<string, dayjs.Dayjs & string>;
     if (action.kind === 'evidence') evidence.mutate({ id, description: a.description, referenceNumber: a.referenceNumber || null, documentDate: day(a.documentDate), receivedOn: day(a.receivedOn) }, done);
-    if (action.kind === 'approve') approve.mutate({ id, effectiveDate: day(a.effectiveDate)!, expiryDate: day(a.expiryDate), remarks: a.remarks || null }, decided);
-    if (action.kind === 'reject') reject.mutate({ id, reason: a.reason }, done);
-    if (action.kind === 'end') end.mutate({ id, endedOn: day(a.endedOn)!, reason: a.reason }, decided);
+    if (action.kind === 'approve') approve.mutate({ id, effectiveDate: day(a.effectiveDate)!, expiryDate: day(a.expiryDate), remarks: a.remarks || null, rowVersion }, decided);
+    if (action.kind === 'reject') reject.mutate({ id, reason: a.reason, rowVersion }, done);
+    if (action.kind === 'end') end.mutate({ id, endedOn: day(a.endedOn)!, reason: a.reason, rowVersion }, decided);
   }
 
   return (

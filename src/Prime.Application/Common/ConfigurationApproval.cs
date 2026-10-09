@@ -56,7 +56,7 @@ internal static class ConfigurationApproval
                 await transaction.CommitAsync(ct);
             }
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException) // a row-version conflict is a 409 CONCURRENCY_CONFLICT
         {
             return Result.Failure($"{codePrefix}_APPROVAL_CONFLICT",
                 "Another version for the same scope was approved at the same time. Nothing was changed; reload and try again.");

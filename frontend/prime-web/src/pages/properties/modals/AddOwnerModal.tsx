@@ -14,6 +14,8 @@ export function AddOwnerModal({ propertyId, units, open, onClose }: { propertyId
   const role = Form.useWatch('role', form) ?? 'Owner';
   const [taxpayerSearchTerm, setTaxpayerSearchTerm] = useState('');
   const [showCreateTaxpayer, setShowCreateTaxpayer] = useState(false);
+  // A taxpayer registered from this dialog is not among the search results; kept as an option so the field shows its name.
+  const [created, setCreated] = useState<TaxpayerDto | null>(null);
 
   const { data: taxpayerResults, isFetching: searchingTaxpayers } = useTaxpayerSearch(
     { searchTerm: taxpayerSearchTerm, pageSize: 10 },
@@ -25,10 +27,12 @@ export function AddOwnerModal({ propertyId, units, open, onClose }: { propertyId
   function handleClose() {
     form.resetFields();
     setShowCreateTaxpayer(false);
+    setCreated(null);
     onClose();
   }
 
   function handleNewTaxpayerCreated(taxpayer: TaxpayerDto) {
+    setCreated(taxpayer);
     form.setFieldsValue({ taxpayerId: taxpayer.id });
     setShowCreateTaxpayer(false);
   }
@@ -91,7 +95,8 @@ export function AddOwnerModal({ propertyId, units, open, onClose }: { propertyId
               loading={searchingTaxpayers}
               onSearch={setTaxpayerSearchTerm}
               notFoundContent={taxpayerSearchTerm.length >= 2 ? 'No taxpayers found' : 'Type to search'}
-              options={taxpayerResults?.items.map((t) => ({ value: t.id, label: `${t.displayName}${t.tin ? ` (TIN ${t.tin})` : ''}` }))}
+              options={[...(created && !taxpayerResults?.items.some((t) => t.id === created.id) ? [created] : []), ...(taxpayerResults?.items ?? [])]
+                .map((t) => ({ value: t.id, label: `${t.displayName}${t.tin ? ` (TIN ${t.tin})` : ''}` }))}
             />
           </Form.Item>
           <Space style={{ marginBottom: 16 }}>

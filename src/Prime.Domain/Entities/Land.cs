@@ -9,8 +9,11 @@ namespace Prime.Domain.Entities;
 /// computed by the Phase 5 valuation/assessment engine, never entered
 /// directly — nullable here because no valuation exists yet in Phase 3.
 /// </summary>
-public sealed class Land : AuditableEntity
+public sealed class Land : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid RpuId { get; set; }
     public RealPropertyUnit? Rpu { get; set; }
     public Guid PropertyId { get; set; }

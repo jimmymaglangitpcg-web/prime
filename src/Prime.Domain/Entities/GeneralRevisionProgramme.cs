@@ -10,8 +10,11 @@ namespace Prime.Domain.Entities;
 /// <see cref="GeneralRevisionItem"/> that records its previous and new values and why a run could not value it
 /// (CLAUDE.md §33). Runs are <see cref="GeneralRevisionJob"/>s; the assessments they draft reference the run.
 /// </summary>
-public sealed class GeneralRevisionProgramme : AuditableEntity
+public sealed class GeneralRevisionProgramme : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public int RevisionYear { get; set; }
     /// <summary>The revision's effectivity: every unit is valued and assessed as of it.</summary>
     public DateOnly EffectiveDate { get; set; }

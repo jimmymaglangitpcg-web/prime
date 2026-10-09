@@ -284,7 +284,7 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
                 await transaction.CommitAsync(cancellationToken);
             }
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException) // a row-version conflict is a 409 CONCURRENCY_CONFLICT
         {
             return Result.Failure<TaxDeclarationDto>("TAX_DECLARATION_APPROVAL_CONFLICT",
                 "Another approval for this RPU happened at the same time. Nothing was changed; reload and try again.");
@@ -578,7 +578,8 @@ public sealed class TaxDeclarationService(IApplicationDbContext db, IValidator<C
         td.TransactionRank,
         td.AssessmentCount,
         td.RestoresTaxDeclarationId,
-        td.CancellationRequests.Where(r => r.Status == WorkflowStatus.PendingReview).Select(ToDto).FirstOrDefault());
+        td.CancellationRequests.Where(r => r.Status == WorkflowStatus.PendingReview).Select(ToDto).FirstOrDefault(),
+        td.RowVersion);
 
     /// <summary>A TD is a FAAS once it declares an assessment; its number follows <see cref="FaasOptions.NumberSource"/>.</summary>
     private string? FaasNumber(TaxDeclaration td) => td.AssessmentId is null

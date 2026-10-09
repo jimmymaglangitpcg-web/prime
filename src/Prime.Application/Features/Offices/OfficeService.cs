@@ -20,7 +20,7 @@ public sealed record UpdateOfficeRequest(string Name, string? HeadPosition, stri
     string? LguName = null, string? SanggunianName = null);
 
 public sealed record OfficeDto(Guid Id, string Code, string Name, OfficeKind Kind, string? HeadPosition, string? Address, string? Contact, RecordStatus Status,
-    string? LguName, string? SanggunianName = null);
+    string? LguName, string? SanggunianName = null, uint RowVersion = 0);
 
 public sealed record CreateOfficeJurisdictionRequest(Guid OfficeId, Guid MunicipalityId, DateOnly EffectiveDate, string LegalBasis, string? Remarks);
 
@@ -483,7 +483,7 @@ public sealed class OfficeService(
     private static IReadOnlyList<string> RoleCodesOf(OfficeAssignment? a) =>
         a?.Roles.Select(r => r.Role!.Code).Order(StringComparer.Ordinal).ToList() ?? [];
 
-    private static OfficeDto ToDto(Office x) => new(x.Id, x.Code, x.Name, x.Kind, x.HeadPosition, x.Address, x.Contact, x.Status, x.LguName, x.SanggunianName);
+    private static OfficeDto ToDto(Office x) => new(x.Id, x.Code, x.Name, x.Kind, x.HeadPosition, x.Address, x.Contact, x.Status, x.LguName, x.SanggunianName, x.RowVersion);
 
     private static OfficeJurisdictionDto ToDto(OfficeJurisdiction x) => new(
         x.Id, x.OfficeId, x.Office!.Code, x.MunicipalityId, x.Municipality!.Name, x.Municipality.PsgcCode,

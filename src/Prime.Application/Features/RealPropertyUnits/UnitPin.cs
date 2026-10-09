@@ -116,8 +116,13 @@ public static class UnitPin
     {
         var units = await db.RealPropertyUnits.AsNoTracking().Where(r => r.PropertyId == rpu.PropertyId).ToDictionaryAsync(r => r.Id, ct);
         units[rpu.Id] = rpu;
-        return Compose(propertyPin, Parts(rpu, units), ownedSeparately, options.Parentheses, await TemporaryPostfixAsync(db, rpu.PropertyId, rpu.Id, ct));
+        return ForUnit(options, rpu, propertyPin, ownedSeparately, units, await TemporaryPostfixAsync(db, rpu.PropertyId, rpu.Id, ct));
     }
+
+    /// <summary><see cref="ForUnitAsync"/> from rows already loaded: the property's units and the unit's temporary postfix.</summary>
+    public static string ForUnit(UnitPinOptions options, RealPropertyUnit rpu, string propertyPin, bool ownedSeparately,
+        IReadOnlyDictionary<Guid, RealPropertyUnit> units, string? temporaryPostfix) =>
+        Compose(propertyPin, Parts(rpu, units), ownedSeparately, options.Parentheses, temporaryPostfix);
 
     /// <summary>
     /// The temporary unit PINs (MRPAAO Ch. II §2 A.c, p.51): for each property whose

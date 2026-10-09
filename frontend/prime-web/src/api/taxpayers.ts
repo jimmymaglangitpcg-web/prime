@@ -34,10 +34,12 @@ export function useCreateTaxpayer() {
   });
 }
 
-export function useUpdateTaxpayerDetails(taxpayerId: string) {
+/** `rowVersion`: the version of the taxpayer the screen displayed, sent as If-Match. */
+export function useUpdateTaxpayerDetails(taxpayerId: string, rowVersion?: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (request: UpdateTaxpayerDetailsRequest) => apiPut<TaxpayerDto>(`/api/taxpayers/${taxpayerId}/details`, request),
+    mutationFn: (request: UpdateTaxpayerDetailsRequest) =>
+      apiPut<TaxpayerDto>(`/api/taxpayers/${taxpayerId}/details`, request, { ifMatch: rowVersion }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['taxpayers'] });
       queryClient.invalidateQueries({ queryKey: ['properties'] });

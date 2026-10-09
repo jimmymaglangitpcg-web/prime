@@ -9,8 +9,11 @@ namespace Prime.Domain.Entities;
 /// Provincial Assessor's Office (Q2). The statutory periods are settings used only for due dates and reminders; nothing
 /// changes by itself when one passes. The stage dates on <see cref="ProposedSmv"/> are written from the events.
 /// </summary>
-public sealed class SmvPreparation : AuditableEntity
+public sealed class SmvPreparation : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public int RevisionYear { get; set; }
     public string Title { get; set; } = string.Empty;
     /// <summary>The date of valuation (in January of the first year, Book IV p.112).</summary>

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prime.Application.Common.Interfaces;
+using Prime.Domain.Common;
 using Prime.Domain.Entities;
 using Prime.Domain.Entities.Billing;
 using Prime.Domain.Entities.Forms;
@@ -22,12 +23,16 @@ namespace Prime.Infrastructure.Persistence;
 /// <see cref="IApplicationDbContext"/> so Application handlers depend on
 /// that interface, not this concrete EF Core type.
 /// </summary>
-public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infrastructure.Identity.JurisdictionState? jurisdiction = null)
+public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infrastructure.Identity.JurisdictionState? jurisdiction = null,
+    Prime.Infrastructure.Persistence.Concurrency.ConcurrencyExpectation? concurrency = null)
     : DbContext(options), IApplicationDbContext
 {
     // Read by the jurisdiction query filters for every query (EF evaluates context members per query).
     private bool JurisdictionRestricted => jurisdiction?.Restricted ?? false;
     private List<Guid> JurisdictionMunicipalities => jurisdiction?.FilterIds ?? [];
+
+    /// <summary>The request's If-Match, for <see cref="Concurrency.ConcurrencyMaterializationInterceptor"/> (production-hardening.md §4.4).</summary>
+    internal Prime.Infrastructure.Persistence.Concurrency.ConcurrencyExpectation? Concurrency => concurrency;
 
     // Reference / lookup data (CLAUDE.md §27)
     public DbSet<Province> Provinces => Set<Province>();
@@ -219,11 +224,28 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
         modelBuilder.HasPostgresExtension("postgis");
         // Exclusion constraint over uuid/text + daterange on TaxIncreaseCapRules.
         modelBuilder.HasPostgresExtension("btree_gist");
+        // Trigram indexes for the substring searches of properties and owners (migration SearchTrigramIndexes).
+        modelBuilder.HasPostgresExtension("pg_trgm");
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PrimeDbContext).Assembly);
+        ApplyRowVersions(modelBuilder);
         ApplyJurisdictionFilters(modelBuilder);
 
         base.OnModelCreating(modelBuilder);
+    }
+
+    /// <summary>
+    /// Every <see cref="IVersioned"/> table gets its row version from PostgreSQL's
+    /// <c>xmin</c> (docs/analysis/production-hardening.md §4.4): Npgsql maps a uint row
+    /// version to the system column, so no physical column is added.
+    /// </summary>
+    private static void ApplyRowVersions(ModelBuilder modelBuilder)
+    {
+        foreach (var type in modelBuilder.Model.GetEntityTypes()
+                     .Where(t => t.BaseType is null && !t.IsOwned() && typeof(IVersioned).IsAssignableFrom(t.ClrType)).ToList())
+        {
+            modelBuilder.Entity(type.ClrType).Property(nameof(IVersioned.RowVersion)).IsRowVersion();
+        }
     }
 
     /// <summary>

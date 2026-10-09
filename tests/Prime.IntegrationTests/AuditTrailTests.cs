@@ -140,4 +140,30 @@ public class AuditTrailTests(WebApplicationFactory<Program> factory) : IClassFix
         (await refused.Content.ReadFromJsonAsync<JsonObject>())!["message"]!.GetValue<string>().ShouldContain(Permissions.AuditView);
         (await client.GetFromJsonAsync<List<string>>("/api/audit-logs/tables"))!.ShouldContain("RegisterRuns");
     }
+
+    /// <summary>A broad filter is counted only up to the cap and says there are more (production-hardening.md §9, H4); rolled back.</summary>
+    [Fact]
+    public async Task A_broad_list_counts_up_to_the_cap_and_says_there_are_more()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PrimeDbContext>();
+        await using var _ = await db.Database.BeginTransactionAsync();
+        var module = $"DEMO-{Guid.NewGuid():N}"[..20];
+        async Task AddRows(int count) => await db.Database.ExecuteSqlAsync($"""
+            INSERT INTO "AuditLogs" ("Id", "Module", "TableName", "RecordId", "Action", "Timestamp")
+            SELECT gen_random_uuid(), {module}, 'DEMO', gen_random_uuid(), 'Create', now() - make_interval(secs => g) FROM generate_series(1, {count}) g
+            """);
+        var audit = scope.ServiceProvider.GetRequiredService<IAuditTrailService>();
+
+        await AddRows(Prime.Application.Common.CappedCount.Limit);
+        var exact = (await audit.ListAsync(new AuditLogQuery { Module = module, PageSize = 50 })).Value;
+        (exact.TotalCount, exact.TotalIsLowerBound).ShouldBe((Prime.Application.Common.CappedCount.Limit, false));
+
+        await AddRows(1);
+        var capped = (await audit.ListAsync(new AuditLogQuery { Module = module, PageSize = 50 })).Value;
+        (capped.TotalCount, capped.TotalIsLowerBound, capped.Items.Count).ShouldBe((Prime.Application.Common.CappedCount.Limit, true, 50));
+        // A page past the cap is served as the last countable one.
+        var deep = (await audit.ListAsync(new AuditLogQuery { Module = module, PageSize = 50, Page = 1_000 })).Value;
+        deep.Page.ShouldBe(Prime.Application.Common.CappedCount.Limit / 50 + 1);
+    }
 }

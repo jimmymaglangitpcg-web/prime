@@ -28,6 +28,8 @@ export interface StudyDto {
     levels: (LevelInput & { classificationName: string; actualUseName: string | null })[] }[];
   compliance: Compliance | null; scenarios: { key: string; name: string; ratePercent: number; summary: TaxImpactSummary; rowsAtExistingLevel: number }[];
   unitsLeftOut: number; editable: boolean; warnings: string[]; createdAt: string;
+  /** Row version; sent as If-Match on a save (production-hardening.md §4.4). */
+  rowVersion: number;
 }
 export interface StudySummaryDto { id: string; title: string; year: number; smvReference: string; simulationAsOf: string; optionCount: number; createdAt: string }
 export interface TaxImpactUnitDto {
@@ -55,10 +57,10 @@ export function useCreateImpactStudy() {
   });
 }
 
-export function useUpdateImpactStudy(id: string) {
+export function useUpdateImpactStudy(id: string, rowVersion?: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (r: SaveStudyRequest) => apiPut<StudyDto>(`/api/smv/impact-studies/${id}`, r),
+    mutationFn: (r: SaveStudyRequest) => apiPut<StudyDto>(`/api/smv/impact-studies/${id}`, r, { ifMatch: rowVersion }),
     onSuccess: (dto) => {
       qc.setQueryData(['impact-study', id], dto);
       qc.invalidateQueries({ queryKey: ['impact-study'], exact: true });

@@ -17,8 +17,11 @@ namespace Prime.Domain.Entities;
 /// (<see cref="Status"/>) confirms the SMV was <b>entered</b> correctly; it does
 /// not stand in for certification.
 /// </summary>
-public sealed class Smv : AuditableEntity
+public sealed class Smv : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public SmvBasis Basis { get; set; } = SmvBasis.Ordinance;
 
     /// <summary>Required for an <see cref="SmvBasis.Ordinance"/> SMV.</summary>

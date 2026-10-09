@@ -10,8 +10,11 @@ namespace Prime.Domain.Entities;
 /// property — that role belongs to <see cref="PropertyIdentificationNumber"/>
 /// on this entity (CLAUDE.md §4).
 /// </summary>
-public sealed class PropertyEntity : AuditableEntity
+public sealed class PropertyEntity : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public string PropertyIdentificationNumber { get; set; } = string.Empty;
 
     public Guid ProvinceId { get; set; }

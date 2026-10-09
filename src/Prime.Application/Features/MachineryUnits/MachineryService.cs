@@ -199,5 +199,6 @@ public sealed class MachineryService(IApplicationDbContext db, IValidator<Create
         x.IsInOperation,
         x.CostItems.OrderBy(i => i.Sequence).Select(i => new MachineryCostItemDto(i.Sequence, i.Kind, i.Amount, i.Description)).ToList(),
         new MachineryDocumentsDto(x.EngineeringRegistrationNumber, x.EngineeringRegistrationDate, x.ImportPermitNumber, x.ImportPermitDate,
-            x.SupplierName, x.SupplierAddress, x.ReceiptNumber, x.ReceiptDate));
+            x.SupplierName, x.SupplierAddress, x.ReceiptNumber, x.ReceiptDate),
+        x.RowVersion);
 }

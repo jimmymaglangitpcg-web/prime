@@ -35,7 +35,9 @@ function useClaimMutation<T>(fn: (v: T) => Promise<PropertyExemptionDto>) {
 export const useClaimExemption = () => useClaimMutation((r: ClaimExemptionRequest) => apiPost<PropertyExemptionDto>('/api/exemptions', r));
 export const useAddExemptionEvidence = () => useClaimMutation((v: { id: string; description: string; referenceNumber: string | null; documentDate: string | null; receivedOn: string | null }) =>
   apiPost<PropertyExemptionDto>(`/api/exemptions/${v.id}/evidence`, v));
-export const useApproveExemption = () => useClaimMutation((v: { id: string; effectiveDate: string; expiryDate: string | null; remarks: string | null }) =>
-  apiPost<PropertyExemptionDto>(`/api/exemptions/${v.id}/approve`, v));
-export const useRejectExemption = () => useClaimMutation((v: { id: string; reason: string }) => apiPost<PropertyExemptionDto>(`/api/exemptions/${v.id}/reject`, v));
-export const useEndExemption = () => useClaimMutation((v: { id: string; endedOn: string; reason: string }) => apiPost<PropertyExemptionDto>(`/api/exemptions/${v.id}/end`, v));
+export const useApproveExemption = () => useClaimMutation(({ rowVersion, ...v }: { id: string; effectiveDate: string; expiryDate: string | null; remarks: string | null; rowVersion?: number }) =>
+  apiPost<PropertyExemptionDto>(`/api/exemptions/${v.id}/approve`, v, { ifMatch: rowVersion }));
+export const useRejectExemption = () => useClaimMutation(({ rowVersion, ...v }: { id: string; reason: string; rowVersion?: number }) =>
+  apiPost<PropertyExemptionDto>(`/api/exemptions/${v.id}/reject`, v, { ifMatch: rowVersion }));
+export const useEndExemption = () => useClaimMutation(({ rowVersion, ...v }: { id: string; endedOn: string; reason: string; rowVersion?: number }) =>
+  apiPost<PropertyExemptionDto>(`/api/exemptions/${v.id}/end`, v, { ifMatch: rowVersion }));

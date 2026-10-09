@@ -30,7 +30,7 @@ public sealed record RevenueImpactStudyDto(
     int Year, DateOnly ReferenceDate, decimal? ActualCollection, decimal? Discounts, string? CollectionSource, bool IncludeAllTaxableUnits, string? Notes,
     IReadOnlyList<RevenueImpactRateDto> Rates, decimal ExistingRatePercent, IReadOnlyList<RevenueImpactOptionDto> Options,
     RevenueCompliance? Compliance, IReadOnlyList<TaxImpactScenarioDto> Scenarios, int UnitsLeftOut, bool Editable, IReadOnlyList<string> Warnings,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt, uint RowVersion = 0);
 
 public sealed record RevenueImpactStudySummaryDto(Guid Id, string Title, int Year, string SmvReference, DateOnly SimulationAsOf, int OptionCount, DateTimeOffset CreatedAt);
 
@@ -220,7 +220,7 @@ public sealed class RevenueImpactStudyService(IApplicationDbContext db, IJurisdi
             study.Options.OrderBy(o => o.Sequence).Select(o => new RevenueImpactOptionDto(o.Sequence, o.Name, o.RatePercent, o.Description,
                 o.Levels.Select(l => new RevenueImpactLevelDto(l.ClassificationId, l.Classification?.Name ?? "", l.ActualUseId, l.ActualUse?.Name, l.LowerValue, l.UpperValue,
                     l.Percent)).ToList())).ToList(),
-            compliance, scenarios, leftOut, !jurisdiction.Restricted, warnings, study.CreatedAt));
+            compliance, scenarios, leftOut, !jurisdiction.Restricted, warnings, study.CreatedAt, study.RowVersion));
     }
 
     public async Task<Result<PagedResult<TaxImpactUnitDto>>> SearchUnitsAsync(Guid id, TaxImpactUnitSearch r, CancellationToken cancellationToken = default)

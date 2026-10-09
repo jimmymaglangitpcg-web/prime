@@ -119,6 +119,14 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
                     adjustments.Add(new LandAdjustmentInput(factor.Code, factor.Name, outcome.Percent));
                 }
             }
+            // The factors add (CalculateLandStrip); deductions beyond the whole value would make it negative, which no
+            // rule gives. Whether a floor applies is DOMAIN VERIFICATION REQUIRED (docs/BUSINESS-RULES.md); refused, not floored.
+            if (adjustments.Sum(a => a.Percent) < -100m)
+            {
+                return Result.Failure<ValuationDto>("ADJUSTMENT_TOTAL_OUT_OF_RANGE",
+                    $"Land strip {row.Sequence}: its adjustments ({string.Join(", ", adjustments.Select(a => $"{a.Code} {a.Percent:0.####}%"))}) "
+                    + "deduct more than its whole value. Check the factors named on the land.");
+            }
             var pricedApart = row.PricedClassificationId != row.ClassificationId || row.PricedSubClassificationId != row.SubClassificationId;
             lines.Add((new ValuationLine
             {
@@ -246,9 +254,12 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
         return line;
     }
 
-    /// <summary>The row's market value rounded to the configured step, if any (valuation-foundation.md §4.4, [C5]).</summary>
+    /// <summary>
+    /// The row's market value rounded to the configured step, if any (valuation-foundation.md §4.4, [C5]), then to the
+    /// centavo (production-hardening.md §9, H3). Every row passes through here.
+    /// </summary>
     private ValuationCalculationResult Rounded(ValuationCalculationResult result) =>
-        ValuationCalculator.WithRounding(result, options.Value.MarketValueRoundingStep);
+        ValuationCalculator.ToCentavo(ValuationCalculator.WithRounding(result, options.Value.MarketValueRoundingStep));
 
     /// <summary>
     /// Values a building by use portion (MRPAAO Att. 2; docs/analysis/mrpaao-forms-model.md
@@ -755,7 +766,7 @@ public sealed class ValuationService(IApplicationDbContext db, IOptions<Valuatio
             lines[i].Line.MarketValue = lines[i].Calc.MarketValue;
             lines[i].Line.BreakdownJson = JsonSerializer.Serialize(lines[i].Calc.Breakdown);
         }
-        var total = lines.Sum(x => x.Calc.MarketValue);
+        var total = Money.Checked(lines.Sum(x => x.Calc.MarketValue), "total market value");
         var valuation = new Prime.Domain.Entities.Valuation
         {
             RpuId = rpuId,

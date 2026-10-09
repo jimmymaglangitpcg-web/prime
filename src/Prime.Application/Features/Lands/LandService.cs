@@ -301,5 +301,6 @@ public sealed class LandService(IApplicationDbContext db, IValidator<CreateLandR
         x.Adjustments.OrderBy(a => a.FactorCode).Select(a => LandParts.ToDto(a, x.Strips)).ToList(),
         x.DistanceToAllWeatherRoadKm,
         x.DistanceToPoblacionKm,
-        x.IsSubdivisionLot);
+        x.IsSubdivisionLot,
+        x.RowVersion);
 }

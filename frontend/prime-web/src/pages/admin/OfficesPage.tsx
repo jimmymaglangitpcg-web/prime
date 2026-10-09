@@ -63,7 +63,7 @@ function OfficesTab() {
     const v = await form.validateFields();
     const done = { onSuccess: () => { ok('Office saved.'); setEditing(null); }, onError: fail };
     if (editing === 'new') create.mutate(v, done);
-    else if (editing) update.mutate({ id: editing.id, ...v }, done);
+    else if (editing) update.mutate({ id: editing.id, rowVersion: editing.rowVersion, ...v }, done);
   };
 
   return (

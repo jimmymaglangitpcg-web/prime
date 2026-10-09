@@ -42,4 +42,6 @@ public sealed record LandDto(
     IReadOnlyList<LandAdjustmentDto> Adjustments,
     decimal? DistanceToAllWeatherRoadKm = null,
     decimal? DistanceToPoblacionKm = null,
-    bool IsSubdivisionLot = false);
+    bool IsSubdivisionLot = false,
+    /// <summary>Row version, echoed in If-Match when editing the appraisal inputs (production-hardening.md §4.4).</summary>
+    uint RowVersion = 0);

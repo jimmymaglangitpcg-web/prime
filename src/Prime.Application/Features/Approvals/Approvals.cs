@@ -74,9 +74,10 @@ public sealed class CreateApprovalChainRequestValidator : AbstractValidator<Crea
 /// <param name="Reference">The TD number, the assessment's year and RPU, or the transaction number.</param>
 /// <param name="StepLabel">The step to sign; for a record without a chain, the two-person approval.</param>
 /// <param name="UnderDelegation">The delegation the signature would be given under, if any.</param>
+/// <param name="RowVersion">The record's row version, echoed in If-Match when signing (production-hardening.md §4.4).</param>
 public sealed record ApprovalQueueItemDto(
     ApprovalSubjectType SubjectType, Guid SubjectId, Guid PropertyId, string Pin, string Reference, string StepLabel,
-    string? UnderDelegation, DateTimeOffset CreatedAt);
+    string? UnderDelegation, DateTimeOffset CreatedAt, uint RowVersion = 0);
 
 /// <summary>
 /// What happened when a user signed the next step of a record's approval.
@@ -243,30 +244,30 @@ public sealed class ApprovalChainService(
         Guid? municipalityId = null)
     {
         // Pending records in the jurisdiction (the query filters apply). TDs drafted under a transaction are approved with it.
-        var candidates = new List<(ApprovalSubjectType Type, Guid Id, Guid? CreatedBy, Guid PropertyId, string Pin, string Reference, DateTimeOffset CreatedAt)>();
+        var candidates = new List<(ApprovalSubjectType Type, Guid Id, Guid? CreatedBy, Guid PropertyId, string Pin, string Reference, DateTimeOffset CreatedAt, uint RowVersion)>();
         candidates.AddRange((await db.TaxDeclarations.AsNoTracking()
                 .Where(x => x.Status == WorkflowStatus.PendingReview && x.PropertyTransactionId == null)
                 .Where(x => municipalityId == null || x.Property!.MunicipalityId == municipalityId)
                 .OrderBy(x => x.CreatedAt).Take(QueueLimit)
-                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.TaxDeclarationNumber, x.CreatedAt })
+                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.TaxDeclarationNumber, x.CreatedAt, x.RowVersion })
                 .ToListAsync(cancellationToken))
-            .Select(x => (ApprovalSubjectType.TaxDeclaration, x.Id, x.CreatedBy, x.PropertyId, x.PropertyIdentificationNumber, $"TD {x.TaxDeclarationNumber}", x.CreatedAt)));
+            .Select(x => (ApprovalSubjectType.TaxDeclaration, x.Id, x.CreatedBy, x.PropertyId, x.PropertyIdentificationNumber, $"TD {x.TaxDeclarationNumber}", x.CreatedAt, x.RowVersion)));
         candidates.AddRange((await db.Assessments.AsNoTracking()
                 .Where(x => x.Status == WorkflowStatus.PendingReview)
                 .Where(x => municipalityId == null || x.Property!.MunicipalityId == municipalityId)
                 .OrderBy(x => x.CreatedAt).Take(QueueLimit)
-                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.AssessmentYear, x.Rpu!.RpuNumber, x.CreatedAt })
+                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.AssessmentYear, x.Rpu!.RpuNumber, x.CreatedAt, x.RowVersion })
                 .ToListAsync(cancellationToken))
             .Select(x => (ApprovalSubjectType.Assessment, x.Id, x.CreatedBy, x.PropertyId, x.PropertyIdentificationNumber,
-                $"Assessment {x.AssessmentYear}, RPU {x.RpuNumber}", x.CreatedAt)));
+                $"Assessment {x.AssessmentYear}, RPU {x.RpuNumber}", x.CreatedAt, x.RowVersion)));
         candidates.AddRange((await db.PropertyTransactions.AsNoTracking()
                 .Where(x => x.Status == WorkflowStatus.PendingReview)
                 .Where(x => municipalityId == null || x.Property!.MunicipalityId == municipalityId)
                 .OrderBy(x => x.CreatedAt).Take(QueueLimit)
-                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.TransactionNumber, x.CreatedAt })
+                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.TransactionNumber, x.CreatedAt, x.RowVersion })
                 .ToListAsync(cancellationToken))
             .Select(x => (ApprovalSubjectType.PropertyTransaction, x.Id, x.CreatedBy, x.PropertyId, x.PropertyIdentificationNumber,
-                $"Transaction {x.TransactionNumber ?? "(unnumbered)"}", x.CreatedAt)));
+                $"Transaction {x.TransactionNumber ?? "(unnumbered)"}", x.CreatedAt, x.RowVersion)));
 
         var userId = currentUser.AppUserId;
         var items = new List<ApprovalQueueItemDto>();
@@ -282,12 +283,12 @@ public sealed class ApprovalChainService(
                 // No chain in force: the two-person approval, by anyone but the creator.
                 if (userId is null || userId != c.CreatedBy)
                 {
-                    items.Add(new ApprovalQueueItemDto(c.Type, c.Id, c.PropertyId, c.Pin, c.Reference, "Approve (two-person check)", null, c.CreatedAt));
+                    items.Add(new ApprovalQueueItemDto(c.Type, c.Id, c.PropertyId, c.Pin, c.Reference, "Approve (two-person check)", null, c.CreatedAt, c.RowVersion));
                 }
                 continue;
             }
             items.Add(new ApprovalQueueItemDto(c.Type, c.Id, c.PropertyId, c.Pin, c.Reference, plan.Value.Step!.Label,
-                plan.Value.Delegation?.InstrumentReference, c.CreatedAt));
+                plan.Value.Delegation?.InstrumentReference, c.CreatedAt, c.RowVersion));
         }
         return Result.Success<IReadOnlyList<ApprovalQueueItemDto>>(items.OrderBy(i => i.CreatedAt).ToList());
     }

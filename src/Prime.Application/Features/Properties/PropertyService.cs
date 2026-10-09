@@ -145,6 +145,9 @@ public sealed class PropertyService(IApplicationDbContext db, IValidator<CreateP
         return Result.Success(new PropertyProfileDto(property, owners, parcels, rpus, taxDeclarations));
     }
 
+    /// <summary>Up to this many matches, a search is sorted after it is found rather than read in PIN order (H4).</summary>
+    internal const int SearchSortedInMemoryBelow = 5_000;
+
     public async Task<Result<PagedResult<PropertyDto>>> SearchAsync(PropertySearchRequest request, CancellationToken cancellationToken = default)
     {
         var query = db.Properties.AsQueryable();
@@ -172,11 +175,17 @@ public sealed class PropertyService(IApplicationDbContext db, IValidator<CreateP
             query = query.Where(p => p.MunicipalityId == request.MunicipalityId);
         }
 
-        var totalCount = await query.CountAsync(cancellationToken);
+        var (totalCount, more, page) = await CappedCount.CountAsync(query, request.Page, request.PageSize, cancellationToken);
 
-        var entities = await IncludeReferences(query)
-            .OrderBy(p => p.PropertyIdentificationNumber)
-            .Skip((request.Page - 1) * request.PageSize)
+        // The count chooses the plan (production-hardening.md §9, H4). PostgreSQL cannot estimate a substring match, so
+        // ordered by PIN it walks the PIN index looking for the page: quick when matches are many, a scan of the whole
+        // register (0.7 s at 250,000 properties) when they are few or none. A few matches are found through the search
+        // indexes and sorted instead: ordering by PIN || '' (the same order) keeps the PIN index out of the plan.
+        var ordered = totalCount <= SearchSortedInMemoryBelow
+            ? query.OrderBy(p => p.PropertyIdentificationNumber + "")
+            : query.OrderBy(p => p.PropertyIdentificationNumber);
+        List<PropertyEntity> entities = totalCount == 0 ? [] : await IncludeReferences(ordered)
+            .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
         var items = entities.Select(ProjectToDto).ToList();
@@ -185,7 +194,8 @@ public sealed class PropertyService(IApplicationDbContext db, IValidator<CreateP
         {
             Items = items,
             TotalCount = totalCount,
-            Page = request.Page,
+            TotalIsLowerBound = more,
+            Page = page,
             PageSize = request.PageSize,
         });
     }

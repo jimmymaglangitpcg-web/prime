@@ -304,7 +304,7 @@ public sealed class AssessmentService(
                 MarketValue = marketValue,
                 AssessmentLevelId = level.Id,
                 AssessmentPercentage = level.AssessmentPercentage,
-                AssessedValue = Math.Round(marketValue * level.AssessmentPercentage / 100m, 2, MidpointRounding.AwayFromZero),
+                AssessedValue = Money.ToCentavo(marketValue * level.AssessmentPercentage / 100m),
             });
         }
         // Taxable or exempt by the exemptions in force on the effective date (assessment-listing-exemptions.md §4.1).
@@ -398,7 +398,7 @@ public sealed class AssessmentService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException) // a row-version conflict is a 409 CONCURRENCY_CONFLICT
         {
             // IX_ApprovalRecords_SubjectType_SubjectId_StepSequence: someone signed this step at the same time.
             return Result.Failure<AssessmentDto>("APPROVAL_STEP_CONFLICT", "This approval step was signed by someone else at the same time. Reload and try again.");
@@ -627,5 +627,6 @@ public sealed class AssessmentService(
         x.CauseWindowDays,
         x.CauseWindowExceeded,
         x.MadeOn,
-        x.EffectivityOverrideReason);
+        x.EffectivityOverrideReason,
+        x.RowVersion);
 }

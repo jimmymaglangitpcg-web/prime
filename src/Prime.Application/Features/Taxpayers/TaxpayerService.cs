@@ -161,11 +161,15 @@ public sealed class TaxpayerService(
                     || (t.CorporateName != null && t.CorporateName.ToLower() == term))));
         }
 
-        var totalCount = await query.CountAsync(cancellationToken);
+        var (totalCount, more, page) = await CappedCount.CountAsync(query, request.Page, request.PageSize, cancellationToken);
 
-        var items = await query
-            .OrderBy(t => t.LastName).ThenBy(t => t.CorporateName)
-            .Skip((request.Page - 1) * request.PageSize)
+        // As the property search (PropertyService.SearchAsync): a few matches are found through the search indexes and
+        // sorted, rather than found by reading the surname index in order (production-hardening.md §9, H4).
+        var ordered = totalCount <= Properties.PropertyService.SearchSortedInMemoryBelow
+            ? query.OrderBy(t => t.LastName + "").ThenBy(t => t.CorporateName)
+            : query.OrderBy(t => t.LastName).ThenBy(t => t.CorporateName);
+        List<Taxpayer> items = totalCount == 0 ? [] : await ordered
+            .Skip((page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
         var ids = items.Select(t => t.Id).ToList();
@@ -178,7 +182,8 @@ public sealed class TaxpayerService(
         {
             Items = items.Select(t => full.Contains(t.Id) ? view(ProjectToDto(t)) : Limited(view(ProjectToDto(t)))).ToList(),
             TotalCount = totalCount,
-            Page = request.Page,
+            TotalIsLowerBound = more,
+            Page = page,
             PageSize = request.PageSize,
         });
     }
@@ -332,5 +337,6 @@ public sealed class TaxpayerService(
         t.Email,
         t.Status,
         t.CreatedAt,
-        Sex: t.Sex);
+        Sex: t.Sex,
+        RowVersion: t.RowVersion);
 }

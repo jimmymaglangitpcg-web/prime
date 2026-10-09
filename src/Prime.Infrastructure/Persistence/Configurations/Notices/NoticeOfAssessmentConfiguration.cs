@@ -61,6 +61,9 @@ public sealed class NoticeOfAssessmentItemConfiguration : IEntityTypeConfigurati
         builder.Property(x => x.AssessedValue).HasPrecision(18, 2);
         builder.Property(x => x.MarketValue).HasPrecision(18, 2);
         builder.HasOne<NoticeOfAssessment>().WithMany(x => x.Items).HasForeignKey(x => x.NoticeOfAssessmentId).OnDelete(DeleteBehavior.Restrict);
+        // The unit and its TD (production-hardening.md §4.3: references without a foreign key).
+        builder.HasOne<RealPropertyUnit>().WithMany().HasForeignKey(x => x.RpuId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<TaxDeclaration>().WithMany().HasForeignKey(x => x.TaxDeclarationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<PropertyEntity>().WithMany().HasForeignKey(x => x.PropertyId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Assessment).WithMany().HasForeignKey(x => x.AssessmentId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => new { x.NoticeOfAssessmentId, x.Sequence }).IsUnique();

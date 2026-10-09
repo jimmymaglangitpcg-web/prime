@@ -10,8 +10,11 @@ namespace Prime.Domain.Entities.Notices;
 /// Draft when the cancellation is approved, one per addressee address; issued and served like the Notice of Assessment.
 /// Everything it states is frozen on it.
 /// </summary>
-public sealed class NoticeOfCancellation : AuditableEntity
+public sealed class NoticeOfCancellation : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid PropertyId { get; set; }
     public PropertyEntity? Property { get; set; }
     /// <summary>The cancelled declaration.</summary>

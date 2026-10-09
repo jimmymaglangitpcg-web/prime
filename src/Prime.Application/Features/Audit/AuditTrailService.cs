@@ -102,11 +102,11 @@ public sealed class AuditTrailService(IApplicationDbContext db, ISecurityEventLo
             logs = logs.Where(a => a.Timestamp < end);
         }
 
-        var total = await logs.CountAsync(ct);
+        var (total, more, page) = await CappedCount.CountAsync(logs, query.Page, query.PageSize, ct);
         var items = await Project(logs.OrderByDescending(a => a.Timestamp).ThenBy(a => a.Id)
-                .Skip((Math.Max(query.Page, 1) - 1) * query.PageSize).Take(query.PageSize))
+                .Skip((page - 1) * query.PageSize).Take(query.PageSize))
             .ToListAsync(ct);
-        return Result.Success(new PagedResult<AuditLogDto> { Items = items, TotalCount = total, Page = Math.Max(query.Page, 1), PageSize = query.PageSize });
+        return Result.Success(new PagedResult<AuditLogDto> { Items = items, TotalCount = total, TotalIsLowerBound = more, Page = page, PageSize = query.PageSize });
     }
 
     public async Task<Result<AuditLogDto>> GetAsync(Guid id, CancellationToken ct = default)

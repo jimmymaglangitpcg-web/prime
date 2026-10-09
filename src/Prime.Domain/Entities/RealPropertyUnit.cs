@@ -4,8 +4,11 @@ using Prime.Domain.Enums;
 namespace Prime.Domain.Entities;
 
 /// <summary>CLAUDE.md §22. A property may have multiple RPUs.</summary>
-public sealed class RealPropertyUnit : AuditableEntity
+public sealed class RealPropertyUnit : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid PropertyId { get; set; }
     public PropertyEntity? Property { get; set; }
 

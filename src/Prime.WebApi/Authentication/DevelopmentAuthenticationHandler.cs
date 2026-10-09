@@ -87,7 +87,8 @@ public class DevelopmentAuthenticationHandler(
     {
         // Reachable only where this whole bypass is (Development + DevAuth:Enabled; Program.cs).
         var key = Request.Headers[ActAsHeader].ToString();
-        var named = Options.EffectiveUsers.FirstOrDefault(u => string.Equals(u.Key, key, StringComparison.OrdinalIgnoreCase));
+        var named = Options.EffectiveUsers.FirstOrDefault(u => string.Equals(u.Key, key, StringComparison.OrdinalIgnoreCase))
+            ?? FreshApplicant(key);
         var checker = named is null && string.Equals(key, "checker", StringComparison.OrdinalIgnoreCase);
         var claims = new List<Claim>
         {
@@ -103,5 +104,21 @@ public class DevelopmentAuthenticationHandler(
         var ticket = new AuthenticationTicket(principal, SchemeName);
 
         return Task.FromResult(AuthenticateResult.Success(ticket));
+    }
+
+    /// <summary>
+    /// "applicant-&lt;anything&gt;": a new applicant who has never signed in, with an id derived from the key. A sign-up
+    /// decision cannot be undone, so the fixed "applicant" can try the sign-up screens only once; the end-to-end suite
+    /// uses a fresh one per run (docs/analysis/production-hardening.md §4.7).
+    /// </summary>
+    private static DevelopmentUser? FreshApplicant(string key)
+    {
+        const string prefix = "applicant-";
+        if (!key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || key.Length == prefix.Length || key.Length > 64)
+        {
+            return null;
+        }
+        var id = new Guid(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(key.ToLowerInvariant()))[..16]);
+        return new DevelopmentUser { Key = key, UserId = id.ToString(), DisplayName = $"DEMO Applicant {key[prefix.Length..]}", Office = "none" };
     }
 }

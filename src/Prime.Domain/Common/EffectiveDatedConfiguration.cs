@@ -10,8 +10,11 @@ namespace Prime.Domain.Common;
 /// ends its predecessor; approved versions are never edited or deleted.
 /// <see cref="EndDate"/> is the INCLUSIVE last day.
 /// </summary>
-public abstract class EffectiveDatedConfiguration : AuditableEntity
+public abstract class EffectiveDatedConfiguration : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): approving and editing a version are checked, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     /// <summary>Why this configuration exists, e.g. "PRIME provisional" or "LAM (DOF DC 004-2025) Form __". Required — CLAUDE.md §6.</summary>
     public string LegalBasis { get; set; } = string.Empty;
     public DateOnly EffectiveDate { get; set; }

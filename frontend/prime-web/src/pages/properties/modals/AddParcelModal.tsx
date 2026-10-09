@@ -6,10 +6,15 @@ import { useState } from 'react';
 import type { CreateParcelRequest } from '../../../lib/types';
 import { ApiRequestError } from '../../../lib/apiClient';
 
-export function AddParcelModal({ propertyId, open, onClose }: { propertyId: string; open: boolean; onClose: () => void }) {
+/** The property's location, proposed for the parcel (the usual case); it can be changed. */
+export interface ParcelLocation { provinceId: string; municipalityId: string; barangayId: string }
+
+export function AddParcelModal({ propertyId, location, open, onClose }: {
+  propertyId: string; location?: ParcelLocation; open: boolean; onClose: () => void;
+}) {
   const [form] = Form.useForm<Omit<CreateParcelRequest, 'propertyId'> & { provinceId?: string; municipalityId?: string }>();
-  const [provinceId, setProvinceId] = useState<string>();
-  const [municipalityId, setMunicipalityId] = useState<string>();
+  const [provinceId, setProvinceId] = useState<string | undefined>(location?.provinceId);
+  const [municipalityId, setMunicipalityId] = useState<string | undefined>(location?.municipalityId);
   const { data: zones } = useZones();
   const createParcel = useCreateParcel(propertyId);
 
@@ -33,6 +38,7 @@ export function AddParcelModal({ propertyId, open, onClose }: { propertyId: stri
       <Form
         form={form}
         layout="vertical"
+        initialValues={location}
         onFinish={(values) => {
           const request: CreateParcelRequest = {
             propertyId,

@@ -110,7 +110,7 @@ public sealed class ParcelService(
         // The client's Version becomes the concurrency check value: EF adds
         // "WHERE xmin = @version" to the UPDATE, so a stale edit matches no
         // row and throws instead of overwriting.
-        db.Entry(parcel).Property(p => p.Version).OriginalValue = request.Version;
+        db.Entry(parcel).Property(p => p.RowVersion).OriginalValue = request.Version;
         parcel.Geometry = geometryResult.Value;
         currentUser.Reason = request.Reason?.Trim();
 
@@ -209,6 +209,6 @@ public sealed class ParcelService(
         p.BlockNumber,
         p.Status,
         p.CreatedAt,
-        p.Version,
+        p.RowVersion,
         p.CadastralNumber);
 }

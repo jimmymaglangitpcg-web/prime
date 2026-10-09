@@ -532,4 +532,62 @@ public class GeneralRevisionProgrammeTests(WebApplicationFactory<Program> factor
         (await completion.ReadinessAsync(programme.Id)).Value.Gates.Single(g => g.Gate == GeneralRevisionGate.CompletionReportIssued).Met.ShouldBeTrue();
         (await c.Programmes.StartRunAsync(programme.Id, new(GeneralRevisionRunMode.Compile))).Code.ShouldBe("GENERAL_REVISION_CLOSED");
     }
+    /// <summary>
+    /// The scheduler runs a job again when its server stopped mid-run (production-hardening.md §9, H4): a finished run does
+    /// nothing, an interrupted value run skips what it finished, and an interrupted batch action skips what already moved.
+    /// </summary>
+    [Fact]
+    public async Task RunExecutedAgain_FinishedIsNotRepeated_InterruptedResumes()
+    {
+        var (c, tx) = await BeginAsync();
+        await using var _ = tx;
+        var (programme, itemId, assessmentId) = await AssessedAsync(c);
+        var valueRun = (await c.Db.GeneralRevisionJobs.AsNoTracking().SingleAsync(x => x.GeneralRevisionProgrammeId == programme.Id
+            && x.Mode == GeneralRevisionRunMode.Value)).Id;
+        int Valuations() => c.Db.Valuations.Count(x => x.RpuId == c.Seed.RpuId);
+        var valuations = Valuations();
+
+        // Finished: executed again, nothing happens.
+        await c.Runner.RunAsync(valueRun, [itemId], CancellationToken.None);
+        c.Db.ChangeTracker.Clear();
+        (await c.Db.GeneralRevisionItems.AsNoTracking().SingleAsync(x => x.Id == itemId)).AssessmentId.ShouldBe(assessmentId);
+        Valuations().ShouldBe(valuations);
+
+        // Interrupted after its item was done: the item is skipped, the counts are rebuilt.
+        await c.Db.GeneralRevisionJobs.Where(x => x.Id == valueRun)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, JobExecutionStatus.Running).SetProperty(x => x.CompletedAt, (DateTimeOffset?)null));
+        await c.Runner.RunAsync(valueRun, [itemId], CancellationToken.None);
+        c.Db.ChangeTracker.Clear();
+        (await c.Db.GeneralRevisionItems.AsNoTracking().SingleAsync(x => x.Id == itemId)).AssessmentId.ShouldBe(assessmentId);
+        (await StatusAsync(c, assessmentId)).ShouldBe(WorkflowStatus.Draft);
+        Valuations().ShouldBe(valuations);
+        var resumed = await c.Db.GeneralRevisionJobs.AsNoTracking().SingleAsync(x => x.Id == valueRun);
+        (resumed.Status, resumed.ProcessedCount, resumed.FailedCount).ShouldBe((JobExecutionStatus.Completed, 1, 0));
+
+        // Interrupted after drafting the assessment, before saving the item: that draft is cancelled, not left as a second one.
+        await c.Db.GeneralRevisionJobs.Where(x => x.Id == valueRun)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, JobExecutionStatus.Running).SetProperty(x => x.CompletedAt, (DateTimeOffset?)null));
+        await c.Db.GeneralRevisionItems.Where(x => x.Id == itemId).ExecuteUpdateAsync(s => s
+            .SetProperty(x => x.Status, GeneralRevisionItemStatus.Pending).SetProperty(x => x.AssessmentId, (Guid?)null)
+            .SetProperty(x => x.ValuationId, (Guid?)null).SetProperty(x => x.NewMarketValue, (decimal?)null).SetProperty(x => x.NewAssessedValue, (decimal?)null));
+        await c.Runner.RunAsync(valueRun, [itemId], CancellationToken.None);
+        c.Db.ChangeTracker.Clear();
+        (await StatusAsync(c, assessmentId)).ShouldBe(WorkflowStatus.Cancelled);
+        var redone = await c.Db.GeneralRevisionItems.AsNoTracking().SingleAsync(x => x.Id == itemId);
+        (redone.Status, redone.AssessmentId == assessmentId).ShouldBe((GeneralRevisionItemStatus.Assessed, false));
+        (await c.Db.Assessments.CountAsync(a => a.RpuId == c.Seed.RpuId && a.RevisionReference == valueRun && a.Status == WorkflowStatus.Draft)).ShouldBe(1);
+        assessmentId = redone.AssessmentId!.Value;
+
+        // A batch action interrupted after it submitted the item: not submitted twice, no refusal recorded.
+        var submitRun = await RunAsync(c, programme.Id, GeneralRevisionRunMode.Submit, [itemId]);
+        (await StatusAsync(c, assessmentId)).ShouldBe(WorkflowStatus.PendingReview);
+        await c.Db.GeneralRevisionJobs.Where(x => x.Id == submitRun)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, JobExecutionStatus.Running).SetProperty(x => x.CompletedAt, (DateTimeOffset?)null));
+        await c.Runner.RunAsync(submitRun, [itemId], CancellationToken.None);
+        c.Db.ChangeTracker.Clear();
+        var submitted = await c.Db.GeneralRevisionJobs.AsNoTracking().SingleAsync(x => x.Id == submitRun);
+        (submitted.Status, submitted.ProcessedCount, submitted.FailedCount).ShouldBe((JobExecutionStatus.Completed, 1, 0));
+        (await c.Db.GeneralRevisionRunIssues.CountAsync(x => x.GeneralRevisionJobId == submitRun)).ShouldBe(0);
+        (await StatusAsync(c, assessmentId)).ShouldBe(WorkflowStatus.PendingReview);
+    }
 }

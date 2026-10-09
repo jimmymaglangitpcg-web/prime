@@ -63,7 +63,7 @@ export function AuditTable({ filter, onUser, showRecord = true }: { filter: Audi
       rowKey="id" size="small" loading={isFetching} dataSource={data?.items ?? []} scroll={{ x: 'max-content' }}
       locale={{ emptyText: isError ? 'The audit trail could not be loaded.' : 'No audit rows.' }}
       expandable={{ expandedRowRender: (row) => <AuditValues row={row} /> }}
-      pagination={{ current: paging.page, pageSize: paging.pageSize, total: data?.totalCount ?? 0, showSizeChanger: true, showTotal: (n) => `${n} rows` }}
+      pagination={{ current: paging.page, pageSize: paging.pageSize, total: data?.totalCount ?? 0, showSizeChanger: true, showTotal: (n) => (data?.totalIsLowerBound ? `More than ${n.toLocaleString('en-PH')} rows: narrow by period, user or table to reach older ones` : `${n.toLocaleString('en-PH')} rows`) }}
       onChange={(p: TablePaginationConfig) => setPaging({ page: p.current ?? 1, pageSize: p.pageSize ?? 20 })}
       columns={[
         { title: 'When', dataIndex: 'timestamp', width: 170, render: (v: string) => new Date(v).toLocaleString('en-PH') },

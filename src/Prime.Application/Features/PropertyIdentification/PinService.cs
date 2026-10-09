@@ -214,7 +214,7 @@ public sealed class PinService(
                 await transaction.CommitAsync(cancellationToken);
             }
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException) // a row-version conflict is a 409 CONCURRENCY_CONFLICT
         {
             return Fail("PIN_CONFLICT", "The PIN could not be saved because of a simultaneous change (e.g. the same parcel number). Nothing was changed; try again.");
         }

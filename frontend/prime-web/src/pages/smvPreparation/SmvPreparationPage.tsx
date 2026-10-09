@@ -94,13 +94,13 @@ function WorkFileCard({ p }: { p: SmvPreparationDto }) {
         { key: 'notes', label: 'Team notes', children: p.notes ? <span style={{ whiteSpace: 'pre-wrap' }}>{p.notes}</span> : '—' },
       ]} />
       {editing && <EditModal p={p} onClose={() => setEditing(false)} />}
-      {cancelling && <CancelModal id={p.id} onClose={() => setCancelling(false)} />}
+      {cancelling && <CancelModal id={p.id} rowVersion={p.rowVersion} onClose={() => setCancelling(false)} />}
     </Card>
   );
 }
 
 function EditModal({ p, onClose }: { p: SmvPreparationDto; onClose: () => void }) {
-  const update = useUpdateSmvPreparation(p.id);
+  const update = useUpdateSmvPreparation(p.id, p.rowVersion);
   return (
     <Modal open title="Edit the work file" footer={null} width={640} destroyOnHidden onCancel={onClose}>
       {update.isError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Could not save" description={errorText(update.error)} />}
@@ -125,8 +125,8 @@ function EditModal({ p, onClose }: { p: SmvPreparationDto; onClose: () => void }
   );
 }
 
-function CancelModal({ id, onClose }: { id: string; onClose: () => void }) {
-  const cancel = useCancelSmvPreparation(id);
+function CancelModal({ id, rowVersion, onClose }: { id: string; rowVersion: number; onClose: () => void }) {
+  const cancel = useCancelSmvPreparation(id, rowVersion);
   return (
     <Modal open title="Cancel the preparation" footer={null} destroyOnHidden onCancel={onClose}>
       <Typography.Paragraph>The proposed SMV is cancelled with it; the revision year can then be prepared again.</Typography.Paragraph>

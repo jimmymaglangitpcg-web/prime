@@ -13,18 +13,9 @@ import { PrintFormButton } from '../../../components/PrintFormButton';
 import { PropertyDetailForRpu } from './PropertyDetailForRpu';
 import { AssessmentsForRpu } from './AssessmentsForRpu';
 import { IndependentAppraisalsForRpu } from './IndependentAppraisalsForRpu';
+import { WorkflowStatusTag } from '../../../components/StatusTag';
 import { TaxabilityTag } from '../../../components/TaxabilityTag';
 
-const workflowStatusColor: Record<string, string> = {
-  Draft: 'default',
-  Submitted: 'blue',
-  PendingReview: 'gold',
-  Approved: 'green',
-  Rejected: 'red',
-  Posted: 'green',
-  Cancelled: 'red',
-  Voided: 'red',
-};
 
 type ReasonAction = 'reject' | 'request-cancellation' | 'reject-cancellation';
 
@@ -78,7 +69,8 @@ function TaxDeclarationsForRpu({ propertyId, rpuId, rpuType }: { propertyId: str
       content,
       okButtonProps: kind === 'approve-cancellation' ? { danger: true } : undefined,
       // A failure shows in the alert above the table; let the dialog close rather than stay open over it.
-      onOk: () => action.mutateAsync({ id: td.id, action: kind, cancellationRequestId: td.openCancellationRequest?.id }).catch(() => undefined),
+      onOk: () => action.mutateAsync({ id: td.id, action: kind, cancellationRequestId: td.openCancellationRequest?.id, rowVersion: td.rowVersion })
+        .catch(() => undefined),
     });
   }
 
@@ -115,7 +107,7 @@ function TaxDeclarationsForRpu({ propertyId, rpuId, rpuType }: { propertyId: str
           {
             title: 'Status',
             render: (_, td) => {
-              const tag = <Tag color={workflowStatusColor[td.status] ?? 'default'}>{td.status}</Tag>;
+              const tag = <WorkflowStatusTag status={td.status} />;
               const note = td.supersededByTaxDeclarationId
                 ? `Cancelled by TD ${numberOf(td.supersededByTaxDeclarationId) ?? ''}`
                 : td.cancellationReason;
@@ -129,9 +121,9 @@ function TaxDeclarationsForRpu({ propertyId, rpuId, rpuType }: { propertyId: str
                 {td.propertyTransactionId && ['Draft', 'PendingReview'].includes(td.status) && (
                   <Tooltip title="Submitted and approved with its property transaction (Transactions tab)"><Tag color="purple">In transaction</Tag></Tooltip>
                 )}
-                {!td.propertyTransactionId && td.status === 'Draft' && <Button size="small" onClick={() => run(td, 'submit-for-review')}>Submit</Button>}
-                {!td.propertyTransactionId && td.status === 'PendingReview' && <Button size="small" type="primary" onClick={() => run(td, 'approve')}>Approve</Button>}
-                {!td.propertyTransactionId && td.status === 'PendingReview' && <Button size="small" danger onClick={() => run(td, 'reject')}>Reject</Button>}
+                {!td.propertyTransactionId && td.status === 'Draft' && can('td.prepare') && <Button size="small" onClick={() => run(td, 'submit-for-review')}>Submit</Button>}
+                {!td.propertyTransactionId && td.status === 'PendingReview' && can('td.approve') && <Button size="small" type="primary" onClick={() => run(td, 'approve')}>Approve</Button>}
+                {!td.propertyTransactionId && td.status === 'PendingReview' && can('td.approve') && <Button size="small" danger onClick={() => run(td, 'reject')}>Reject</Button>}
                 {td.status === 'Approved' && !td.openCancellationRequest && can('td.prepare') && (
                   <Button size="small" danger onClick={() => run(td, 'request-cancellation')}>Request cancellation</Button>
                 )}
@@ -172,7 +164,7 @@ function TaxDeclarationsForRpu({ propertyId, rpuId, rpuType }: { propertyId: str
         okButtonProps={{ danger: true, disabled: reason.trim() === '', loading: action.isPending }}
         onCancel={() => setAsking(null)}
         onOk={() => asking && action.mutate({ id: asking.td.id, action: asking.action, reason: reason.trim(),
-          cancellationRequestId: asking.td.openCancellationRequest?.id }, { onSuccess: () => setAsking(null) })}
+          cancellationRequestId: asking.td.openCancellationRequest?.id, rowVersion: asking.td.rowVersion }, { onSuccess: () => setAsking(null) })}
         destroyOnHidden
       >
         {action.isError && (
@@ -203,7 +195,9 @@ export function RpuSection({ propertyId, rpus }: { propertyId: string; rpus: Rpu
         </Button>
       </div>
 
+      {/* Fixed layout: the expanded unit is as wide as the table, so its own tables scroll inside it instead of widening the page. */}
       <Table<RpuSummaryDto>
+        tableLayout="fixed"
         rowKey="id"
         dataSource={rpus}
         pagination={false}

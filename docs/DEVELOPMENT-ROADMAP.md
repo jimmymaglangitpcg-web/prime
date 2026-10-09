@@ -957,14 +957,14 @@ functions. Order from here:
 Phase 10  LAM alignment (L5, L3, L6, L7; L8 when needed)
 Phase 12  Workflow & security          done 2026-10-08 (docs/SECURITY.md)
 Phase 13  Import / migration      before go-live (see the early step below)
-Phase 11  Reporting               when an export or required report is needed, or after go-live
+Phase 11  Reporting               deferred (design kept: docs/analysis/reporting.md); when an export or required report is needed, or after go-live
 Phase 14  Production hardening
 Phase 15  System manual           after all phases
 ```
 
 - **Phase 11 deferred.** The official records already issue as forms (FAAS,
   TD, NOA, TMCR, both Assessment Rolls, ORC, ROA, the monthly roll
-  submissions) and the dashboard reads real data. Until Phase 11 there is no
+  submissions). The dashboard is still a placeholder (corrected 2026-10-08; it is part of Phase 11). Until Phase 11 there is no
   Excel/CSV export, no summary or statistical reports (§57) and no
   BLGF-required report; such reports are compiled by hand meanwhile.
 - **Phase 13 deferred, but not past go-live.** Everything works on records
@@ -1040,6 +1040,8 @@ just trust the dashboard), concurrency testing, financial testing (full
 §75 matrix), regression testing. `docs/DEPLOYMENT.md`, `docs/TESTING.md`,
 `docs/BUSINESS-RULES.md` finalized/updated to reflect what was actually
 built.
+
+Design: `docs/analysis/production-hardening.md` (2026-10-08; steps H1–H8; decisions recorded 2026-10-08; H1, H2, H3 done).
 
 Exit criteria: every item in CLAUDE.md §107 quality gate passes for the
 system as a whole; a restore-from-backup drill against the Supabase
@@ -1257,7 +1259,7 @@ command; migration `SignUpAndUserStatus`, local database only). **P12-3 done** (
 postings, voids and cancellations audited as their action; every table audited, child rows with their parent; reasons
 required and recorded on every reject/cancel path; EXPORT rows for issued forms, register runs and prints; Audit Trail
 viewer and record histories for `audit.view`; append-only trigger on `AuditLogs`; migration `AuditCompleteness`, local
-database only). **P12-4 done** (2026-10-08: rate limits with 429, security headers and HSTS outside Development, trusted-proxy setting, upload size and type checks, raw SQL and template escaping reviewed, dependency and history secret scans clean, Supabase RLS and anon-key checks plus a `row-level-security` health check and a start-up check of the Supabase Auth settings; every §46 approval refuses an unknown acting user; status names checked against §45; no migration). **P12-5 done** (2026-10-08: outright TD cancellation is a request decided by a second user (Q19); an individual's TIN, contact, e-mail and address masked without `taxpayer.view-personal`; logs reviewed; `docs/SECURITY.md`; migration `TaxDeclarationCancellationRequests`). **Phase 12 complete.** Next per the phase order: Phase 13 (import and migration, before go-live), then 11, 14 and 15. The paragraphs below are the earlier history.
+database only). **P12-4 done** (2026-10-08: rate limits with 429, security headers and HSTS outside Development, trusted-proxy setting, upload size and type checks, raw SQL and template escaping reviewed, dependency and history secret scans clean, Supabase RLS and anon-key checks plus a `row-level-security` health check and a start-up check of the Supabase Auth settings; every §46 approval refuses an unknown acting user; status names checked against §45; no migration). **P12-5 done** (2026-10-08: outright TD cancellation is a request decided by a second user (Q19); an individual's TIN, contact, e-mail and address masked without `taxpayer.view-personal`; logs reviewed; `docs/SECURITY.md`; migration `TaxDeclarationCancellationRequests`). **Phase 12 complete.** **Phase 13 skipped for now** (user decision, 2026-10-08: no sample export of the province's records is available, so step 13-0 cannot be done). It stays required before go-live (CLAUDE.md §87). **Phase 11 deferred again** (user decision, 2026-10-08): design kept in `docs/analysis/reporting.md`, Q1–Q12 undecided. Next: Phase 14 (production hardening): decisions recorded (`docs/analysis/production-hardening.md` §8.1: SPA on Vercel, API on Render (Singapore, paid always-on Docker service), Supabase plan unchanged), **H1 done** (2026-10-08: delete guards on 77 history tables and 2 conditional ones, migration `HistoryDeleteGuards`; four missing foreign keys, migration `ReferenceForeignKeys`; `background-jobs` and `database-tls` health checks; 794 tests; local database only, Supabase 79), **H2 done** (2026-10-09: `xmin` row versions on 42 workflow and editable tables, migration `RowVersions` (model-only); If-Match on writes checked when the record is first read; 409 `CONCURRENCY_CONFLICT` and a reload in the UI; middleware errors now camelCase; 805 tests; local database only, Supabase 79), **H3 done** (2026-10-09: §75 calculation matrix mapped in `docs/TESTING.md` §2, rules register `docs/BUSINESS-RULES.md` (R1–R23); found and fixed: rows rounded to the centavo only by the database, so a general revision assessed unrounded values (now `Money.ToCentavo` on every row, R16); out-of-range amounts and adjustments below −100 % gave a 500 (now 400 `VALUE_OUT_OF_RANGE`, `ADJUSTMENT_TOTAL_OUT_OF_RANGE`); 836 tests; no migration; Supabase brought to 82 the same day, level with local). **H4 in progress** (2026-10-09: DEMO volume database `prime_volume`, 250,000 properties and 400,000 RPUs; search, audit trail and register fixes, migrations `SearchTrigramIndexes` and `AuditRecordIndex` (local and Supabase, 84); general revision runs resume after a restart instead of starting over, and no longer run twice at once after 30 minutes (Hangfire sliding invisibility timeout); every measured list and search under 1 s at p95; province-wide revision about 9 hours locally; figures in `docs/TESTING.md` §3). **H5 in progress** (2026-10-09: Playwright end-to-end suite, 17 tests passing: the §74 flow on screen, refused permission, maker-checker, jurisdiction, sign-up approval, axe on 11 screens, keyboard-only registration; `seed-e2e` DEMO set; GitHub Actions CI written, not yet run; UI fixes: permission-aware workflow actions, unit values from the posted assessment, parcel location proposed, no sideways scroll, readable status tags, WCAG contrast; Serilog rolling file; details in `docs/TESTING.md` §4–§5). Next: finish H4 (submit, post and roll at volume, final measurement) and H5 (CI run, manual keyboard pass); then the rest of 14, then 15; Phase 13 is taken up when a sample export is supplied. The paragraphs below are the earlier history.
 
 **Scope change (2026-09-26):** at the user's request CLAUDE.md was revised so
 PRIME is the assessor's office system following the MRPAAO (CLAUDE.md §0).

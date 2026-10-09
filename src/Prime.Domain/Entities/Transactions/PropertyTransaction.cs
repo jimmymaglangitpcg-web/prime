@@ -69,8 +69,11 @@ public sealed class TransactionTypeRequirement : Entity
 /// Everything it changes points back to it, so "why did this change?" is
 /// answerable from the record (CLAUDE.md §77, §111).
 /// </summary>
-public sealed class PropertyTransaction : AuditableEntity
+public sealed class PropertyTransaction : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid TransactionTypeId { get; set; }
     public TransactionType? TransactionType { get; set; }
     /// <summary>Frozen from the type version, so the record keeps its meaning after the catalogue changes.</summary>

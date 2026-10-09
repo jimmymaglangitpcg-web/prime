@@ -14,8 +14,11 @@ namespace Prime.Domain.Entities.SwornStatements;
 /// Draft → Filed, or Cancelled; a filed statement is replaced by a new one
 /// naming it (<see cref="SupersedesId"/>), which marks it Superseded when filed.
 /// </summary>
-public sealed class SwornStatement : AuditableEntity
+public sealed class SwornStatement : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     /// <summary>The Sworn Statement Index No.: generated on filing when a scheme is in force, else typed or blank.</summary>
     public string? Number { get; set; }
 

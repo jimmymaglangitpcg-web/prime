@@ -67,7 +67,8 @@ public sealed record PropertyTransactionDto(
     IReadOnlyList<TransactionPropertyDto> RelatedProperties,
     Guid? TransferRpuId,
     TransferTaxClearanceDto? TaxClearance = null,
-    Guid? RelocatedRpuId = null);
+    Guid? RelocatedRpuId = null,
+    uint RowVersion = 0);
 
 /// <summary>The BIR clearance and taxes paid on a transfer (MRPAAO Annex A).</summary>
 public sealed record TransferTaxClearanceDto(

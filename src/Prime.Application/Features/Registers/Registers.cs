@@ -156,6 +156,81 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
 
     private sealed record Faas(TaxDeclaration Td, Assessment? Assessment, DateOnly EnteredOn);
 
+    /// <summary>
+    /// What the rows of a register read about its properties and units, read once for all of them. Row by row these were
+    /// a dozen queries a row: an assessment roll of a barangay of 1,030 DEMO units took 10 s to issue, a large barangay
+    /// would pass a minute (production-hardening.md §9, H4). Each helper uses it for the properties it covers and reads
+    /// the database itself otherwise (a single subject, a previous owner's property).
+    /// </summary>
+    private sealed record Prefetched(
+        HashSet<Guid> PropertyIds,
+        Dictionary<Guid, PropertyEntity> Properties,
+        ILookup<Guid, PropertyParties.PartyRow> Parties,
+        ILookup<Guid, PinAssignment> PermanentPins,
+        ILookup<Guid, RealPropertyUnit> Units,
+        Dictionary<Guid, string> TemporaryPostfixes,
+        Dictionary<Guid, (decimal? Area, string? Unit)> Areas,
+        Dictionary<Guid, List<LineRow>> Lines,
+        Dictionary<Guid, string> UseCodes,
+        ILookup<Guid, string> Improvements,
+        Dictionary<Guid, string?> CadastralNumbers,
+        HashSet<Guid> MayHavePreviousPin,
+        Dictionary<Guid, int> MachineCounts);
+
+    /// <summary>The current build's read; null outside <see cref="BuildAsync(Guid, CancellationToken)"/>.</summary>
+    private Prefetched? prefetched;
+
+    /// <summary>Reads, for the properties and the TDs listed, everything the row helpers would read one by one.</summary>
+    private async Task<Prefetched> PrefetchAsync(IReadOnlyCollection<Guid> propertyIds, IReadOnlyCollection<TaxDeclaration> tds, CancellationToken ct)
+    {
+        var ids = propertyIds.Distinct().ToList();
+        var properties = await db.Properties.AsNoTracking().Include(p => p.Barangay).Include(p => p.TitleType)
+            .Where(p => ids.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct);
+        var parties = (await PropertyParties.Rows(db.PropertyTaxpayers.Where(x => ids.Contains(x.PropertyId))).ToListAsync(ct)).ToLookup(x => x.PropertyId);
+        var pins = (await db.PinAssignments.AsNoTracking().Include(x => x.Section)
+            .Where(x => ids.Contains(x.PropertyId) && x.Kind == PinKind.Permanent).ToListAsync(ct)).ToLookup(x => x.PropertyId);
+        var units = (await db.RealPropertyUnits.AsNoTracking().Where(r => ids.Contains(r.PropertyId)).ToListAsync(ct)).ToLookup(r => r.PropertyId);
+        var landRpus = tds.Where(t => t.Rpu!.RpuType == RpuType.Land).Select(t => t.RpuId).Distinct().ToList();
+        var buildingRpus = tds.Where(t => t.Rpu!.RpuType == RpuType.Building).Select(t => t.RpuId).Distinct().ToList();
+        var machineRpus = tds.Where(t => t.Rpu!.RpuType == RpuType.Machinery).Select(t => t.RpuId).Distinct().ToList();
+        var areas = new Dictionary<Guid, (decimal?, string?)>();
+        foreach (var land in await db.Lands.Where(x => landRpus.Contains(x.RpuId)).Select(x => new { x.RpuId, x.Area, x.AreaUnit }).ToListAsync(ct))
+        {
+            areas.TryAdd(land.RpuId, (land.Area, land.AreaUnit));
+        }
+        foreach (var building in await db.Buildings.Where(x => buildingRpus.Contains(x.RpuId)).Select(x => new { x.RpuId, x.TotalFloorArea }).ToListAsync(ct))
+        {
+            areas.TryAdd(building.RpuId, (building.TotalFloorArea, "sqm floor"));
+        }
+        // A unit without its description row reads as AreaAsync would: no area (with the building's unit).
+        foreach (var td in tds.Where(t => !areas.ContainsKey(t.RpuId)))
+        {
+            areas[td.RpuId] = td.Rpu!.RpuType == RpuType.Building ? (null, "sqm floor") : (null, null);
+        }
+        var improvements = (await db.LandImprovements.Join(db.Lands.Where(l => landRpus.Contains(l.RpuId)), i => i.LandId, l => l.Id,
+                (i, l) => new { l.RpuId, i.ImprovementKind!.Name }).Distinct().ToListAsync(ct))
+            .ToLookup(x => x.RpuId, x => x.Name);
+        var cadastral = (await db.Parcels.AsNoTracking().Where(x => ids.Contains(x.PropertyId) && x.Status == RecordStatus.Active && x.CadastralNumber != null)
+                .Select(x => new { x.PropertyId, x.CadastralNumber, x.CreatedAt }).ToListAsync(ct))
+            .GroupBy(x => x.PropertyId).ToDictionary(g => g.Key, g => g.OrderBy(x => x.CreatedAt).First().CadastralNumber);
+        // LamFormData.PreviousPinAsync finds a previous PIN only in a retired assignment or a transaction that resulted in
+        // the property: for the others it is null without asking.
+        var mayHavePrevious = (await db.PinAssignments.Where(x => ids.Contains(x.PropertyId) && x.RetiredAt != null).Select(x => x.PropertyId)
+                .Union(db.PropertyTransactionProperties.Where(r => ids.Contains(r.PropertyId) && r.Role == TransactionPropertyRole.Result).Select(r => r.PropertyId))
+                .ToListAsync(ct)).ToHashSet();
+        var machineCounts = await db.MachineryUnits.Where(m => machineRpus.Contains(m.RpuId)).GroupBy(m => m.RpuId)
+            .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+        return new Prefetched(ids.ToHashSet(), properties, parties, pins, units, await UnitPin.TemporaryPostfixesAsync(db, ids, ct), areas,
+            await LinesAsync(tds.Where(t => t.AssessmentId is not null).Select(t => t.AssessmentId!.Value).ToList(), ct),
+            await db.ActualUses.ToDictionaryAsync(x => x.Id, x => x.Code, ct), improvements, cadastral, mayHavePrevious, machineCounts);
+    }
+
+    /// <summary>The previous PIN (<see cref="LamFormData.PreviousPinAsync"/>), asked only of a property that may have one.</summary>
+    private async Task<string?> PreviousPinAsync(Guid propertyId, DateOnly asOf, CancellationToken ct) =>
+        prefetched is { } c && c.PropertyIds.Contains(propertyId) && !c.MayHavePreviousPin.Contains(propertyId)
+            ? null
+            : await LamFormData.PreviousPinAsync(db, clock, propertyId, asOf, ct);
+
     public async Task<FormSubjectData?> BuildAsync(Guid subjectId, CancellationToken cancellationToken)
     {
         var run = await db.RegisterRuns.AsNoTracking().Include(x => x.Barangay).ThenInclude(b => b!.Municipality).ThenInclude(m => m!.Province)
@@ -165,7 +240,19 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
         {
             return null;
         }
-        var ct = cancellationToken;
+        prefetched = null;
+        try
+        {
+            return await BuildAsync(run, cancellationToken);
+        }
+        finally
+        {
+            prefetched = null;
+        }
+    }
+
+    private async Task<FormSubjectData> BuildAsync(RegisterRun run, CancellationToken ct)
+    {
         var roll = run.Kind switch
         {
             RegisterKind.AssessmentRollTaxable => await RollRowsAsync(run, Taxability.Taxable, ct),
@@ -236,17 +323,19 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
             .GroupBy(x => x.RpuId)
             .Select(g => g.OrderByDescending(x => x.EffectivityDate).ThenByDescending(x => x.RevisionNumber).First())
             .ToList();
-        var result = new List<Faas>();
-        foreach (var td in inForce)
-        {
-            result.Add(new Faas(td, td.Assessment ?? await LatestPostedAsync(td.RpuId, asOf, ct), Entered(td)));
-        }
-        return result;
+        var posted = await PostedAsync(inForce.Where(x => x.Assessment is null).Select(x => x.RpuId).ToList(), ct);
+        return inForce.Select(td => new Faas(td, td.Assessment ?? LatestPosted(posted[td.RpuId], asOf), Entered(td))).ToList();
     }
 
-    private Task<Assessment?> LatestPostedAsync(Guid rpuId, DateOnly asOf, CancellationToken ct) =>
-        db.Assessments.AsNoTracking().Where(x => x.RpuId == rpuId && x.Status == WorkflowStatus.Posted && x.EffectiveDate <= asOf)
-            .OrderByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt).FirstOrDefaultAsync(ct);
+    /// <summary>The posted assessments of the units, for <see cref="LatestPosted"/>.</summary>
+    private async Task<ILookup<Guid, Assessment>> PostedAsync(IReadOnlyCollection<Guid> rpuIds, CancellationToken ct) =>
+        rpuIds.Count == 0 ? Array.Empty<Assessment>().ToLookup(x => x.RpuId)
+            : (await db.Assessments.AsNoTracking().Where(x => rpuIds.Contains(x.RpuId) && x.Status == WorkflowStatus.Posted).ToListAsync(ct))
+                .ToLookup(x => x.RpuId);
+
+    /// <summary>The unit's posted assessment in force on the date: the latest effective by then, the latest made among equals.</summary>
+    private static Assessment? LatestPosted(IEnumerable<Assessment> posted, DateOnly asOf) =>
+        posted.Where(x => x.EffectiveDate <= asOf).OrderByDescending(x => x.EffectiveDate).ThenByDescending(x => x.CreatedAt).FirstOrDefault();
 
     private DateOnly Entered(TaxDeclaration td) => clock.LocalDate(td.ApprovedAt ?? td.CreatedAt);
 
@@ -264,10 +353,7 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
     {
         if (td.AssessmentId is { } id)
         {
-            var lines = await db.AssessmentLines.AsNoTracking().Where(l => l.AssessmentId == id)
-                .Select(l => new { l.Taxability, l.MarketValue, l.AssessedValue, LegalBasis = l.Taxability == Taxability.Exempt && l.PropertyExemption != null
-                    ? l.PropertyExemption.ExemptionType!.LegalBasis : null })
-                .ToListAsync(ct);
+            var lines = prefetched?.Lines.TryGetValue(id, out var read) == true ? read : (await LinesAsync([id], ct))[id];
             if (lines.Count > 0)
             {
                 var taxable = lines.Where(l => l.Taxability == Taxability.Taxable).ToList();
@@ -283,6 +369,18 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
         return td.Taxability == Taxability.Taxable ? new Split(mv, av ?? 0, null, null, null) : new Split(null, null, mv, av ?? 0, null);
     }
 
+    private sealed record LineRow(Guid AssessmentId, Taxability Taxability, decimal MarketValue, decimal AssessedValue, string? LegalBasis);
+
+    /// <summary>The assessment lines of each assessment (an empty list for one without lines).</summary>
+    private async Task<Dictionary<Guid, List<LineRow>>> LinesAsync(IReadOnlyCollection<Guid> assessmentIds, CancellationToken ct)
+    {
+        var lines = (await db.AssessmentLines.AsNoTracking().Where(l => assessmentIds.Contains(l.AssessmentId))
+            .Select(l => new LineRow(l.AssessmentId, l.Taxability, l.MarketValue, l.AssessedValue, l.Taxability == Taxability.Exempt && l.PropertyExemption != null
+                ? l.PropertyExemption.ExemptionType!.LegalBasis : null))
+            .ToListAsync(ct)).ToLookup(l => l.AssessmentId);
+        return assessmentIds.Distinct().ToDictionary(id => id, id => lines[id].ToList());
+    }
+
     private async Task<int?> RevisionYearAsync(RegisterRun run, CancellationToken ct) =>
         run.BarangayId is not { } b ? null
             : await db.Assessments.Where(a => a.Status == WorkflowStatus.Posted && a.Property!.BarangayId == b && a.Valuation!.Smv != null)
@@ -290,21 +388,37 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
 
     // ---------------- Shared row fields ----------------
 
+    /// <summary>A party row in force on the date: begun by then and not ended by then, as everywhere in the registers.</summary>
+    private static bool InForce(PropertyParties.PartyRow x, DateOnly asOf) => x.StartDate <= asOf && (x.EndDate == null || x.EndDate > asOf);
+
+    /// <summary>All the party rows of the property, from the register's read when it covers the property.</summary>
+    private async Task<IReadOnlyList<PropertyParties.PartyRow>> PartiesAsync(Guid propertyId, CancellationToken ct) =>
+        prefetched is { } c && c.PropertyIds.Contains(propertyId) ? c.Parties[propertyId].ToList()
+            : await PropertyParties.Rows(db.PropertyTaxpayers.Where(x => x.PropertyId == propertyId)).ToListAsync(ct);
+
     private async Task<(string Names, string? Address)> OwnersAsync(Guid propertyId, Guid? rpuId, DateOnly asOf, CancellationToken ct)
     {
-        var rows = await PropertyParties.ProjectAsync(await PropertyParties.ScopeAsync(db, propertyId, rpuId,
-            x => x.StartDate <= asOf && (x.EndDate == null || x.EndDate > asOf)
-                && (x.Role == PropertyPartyRole.Owner || x.Role == PropertyPartyRole.UnknownOwner), ct), ct);
+        var inForce = (await PartiesAsync(propertyId, ct)).Where(x => InForce(x, asOf) && x.Role is PropertyPartyRole.Owner or PropertyPartyRole.UnknownOwner);
+        var rows = PropertyParties.Ordered(PropertyParties.Scope(inForce, rpuId)).Select(r => PropertyParties.ToDto(r)).ToList();
         return (string.Join("; ", rows.Select(o => o.TaxpayerDisplayName)), rows.Select(o => o.Address).FirstOrDefault(a => !string.IsNullOrWhiteSpace(a)));
     }
 
     private async Task<PropertyEntity> PropertyAsync(Guid id, CancellationToken ct) =>
-        await db.Properties.AsNoTracking().Include(p => p.Barangay).Include(p => p.TitleType).FirstAsync(p => p.Id == id, ct);
+        prefetched?.Properties.TryGetValue(id, out var read) == true ? read
+            : await db.Properties.AsNoTracking().Include(p => p.Barangay).Include(p => p.TitleType).FirstAsync(p => p.Id == id, ct);
 
     /// <summary>The unit's full PIN (MRPAAO p.42): the parcel number is parenthesised when the unit has owners of its own.</summary>
-    private async Task<string> UnitPinAsync(PropertyEntity p, RealPropertyUnit rpu, DateOnly asOf, CancellationToken ct) =>
-        await UnitPin.ForUnitAsync(db, unitPins.Value, rpu, p.PropertyIdentificationNumber, await db.PropertyTaxpayers.AnyAsync(
-            x => x.RpuId == rpu.Id && x.StartDate <= asOf && (x.EndDate == null || x.EndDate > asOf), ct), ct);
+    private async Task<string> UnitPinAsync(PropertyEntity p, RealPropertyUnit rpu, DateOnly asOf, CancellationToken ct)
+    {
+        var ownedSeparately = (await PartiesAsync(rpu.PropertyId, ct)).Any(x => x.RpuId == rpu.Id && InForce(x, asOf));
+        if (prefetched is not { } c || !c.PropertyIds.Contains(rpu.PropertyId))
+        {
+            return await UnitPin.ForUnitAsync(db, unitPins.Value, rpu, p.PropertyIdentificationNumber, ownedSeparately, ct);
+        }
+        var units = c.Units[rpu.PropertyId].ToDictionary(x => x.Id);
+        units[rpu.Id] = rpu;
+        return UnitPin.ForUnit(unitPins.Value, rpu, p.PropertyIdentificationNumber, ownedSeparately, units, c.TemporaryPostfixes.GetValueOrDefault(rpu.Id));
+    }
 
     private string? Arp(Faas f) => faas.Value.NumberSource == FaasNumberSource.TaxDeclaration ? f.Td.TaxDeclarationNumber : f.Assessment?.FaasNumber;
 
@@ -320,7 +434,8 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
 
     private static object Effectivity(DateOnly d) => new { quarter = (d.Month - 1) / 3 + 1, year = d.Year };
 
-    private async Task<(decimal? Area, string? Unit)> AreaAsync(TaxDeclaration td, CancellationToken ct) => td.Rpu!.RpuType switch
+    private async Task<(decimal? Area, string? Unit)> AreaAsync(TaxDeclaration td, CancellationToken ct) =>
+        prefetched?.Areas.TryGetValue(td.RpuId, out var area) == true ? area : td.Rpu!.RpuType switch
     {
         RpuType.Land => await db.Lands.Where(x => x.RpuId == td.RpuId).Select(x => new ValueTuple<decimal?, string?>(x.Area, x.AreaUnit)).FirstOrDefaultAsync(ct),
         RpuType.Building => (await db.Buildings.Where(x => x.RpuId == td.RpuId).Select(x => (decimal?)x.TotalFloorArea).FirstOrDefaultAsync(ct), "sqm floor"),
@@ -330,9 +445,9 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
     /// <summary>The administrators of the unit (else the property) on the date, with the first address recorded (LAM Assessment Roll).</summary>
     private async Task<(string? Names, string? Address)> AdministratorAsync(Guid propertyId, Guid rpuId, DateOnly asOf, CancellationToken ct)
     {
-        var rows = (await PropertyParties.ProjectAsync(await PropertyParties.ScopeAsync(db, propertyId, rpuId,
-                x => x.StartDate <= asOf && (x.EndDate == null || x.EndDate > asOf), ct), ct))
-            .Where(o => o.Role is not (PropertyPartyRole.Owner or PropertyPartyRole.UnknownOwner)).ToList();
+        var inForce = (await PartiesAsync(propertyId, ct)).Where(x => InForce(x, asOf));
+        var rows = PropertyParties.Ordered(PropertyParties.Scope(inForce, rpuId))
+            .Where(o => o.Role is not (PropertyPartyRole.Owner or PropertyPartyRole.UnknownOwner)).Select(r => PropertyParties.ToDto(r)).ToList();
         return (rows.Count == 0 ? null : string.Join("; ", rows.Select(o => o.TaxpayerDisplayName)),
             rows.Select(o => o.Address).FirstOrDefault(a => !string.IsNullOrWhiteSpace(a)));
     }
@@ -351,8 +466,9 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
     /// <summary>The section index and the parcel number (as the configured PIN prints it, CLAUDE.md §115) of the permanent PIN in force.</summary>
     private async Task<(string? Section, string? Parcel)> SectionAndParcelAsync(Guid propertyId, DateOnly asOf, CancellationToken ct)
     {
-        var pin = (await db.PinAssignments.AsNoTracking().Include(x => x.Section)
-                .Where(x => x.PropertyId == propertyId && x.Kind == PinKind.Permanent).ToListAsync(ct))
+        var pins = prefetched is { } c && c.PropertyIds.Contains(propertyId) ? c.PermanentPins[propertyId].ToList()
+            : await db.PinAssignments.AsNoTracking().Include(x => x.Section).Where(x => x.PropertyId == propertyId && x.Kind == PinKind.Permanent).ToListAsync(ct);
+        var pin = pins
             .Where(x => clock.LocalDate(x.AssignedAt) <= asOf && (x.RetiredAt is not { } r || clock.LocalDate(r) > asOf))
             .MaxBy(x => x.AssignedAt);
         return pin?.Section?.IndexNumber is { } section ? (section, ParcelNumber(pin.Pin)) : (null, null);
@@ -364,6 +480,7 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
     private async Task<List<object>> TaxMapRowsAsync(RegisterRun run, CancellationToken ct)
     {
         var all = await FaasInForceAsync(db.TaxDeclarations.Where(x => x.Property!.BarangayId == run.BarangayId), run.AsOf, ct);
+        prefetched = await PrefetchAsync(all.Select(x => x.Td.PropertyId).ToList(), all.Select(x => x.Td).ToList(), ct);
         var rows = new List<(string Pin, object Row)>();
         foreach (var f in all.Where(x => x.Td.Rpu!.RpuType == RpuType.Land))
         {
@@ -386,6 +503,7 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
             .OrderBy(x => x.ParcelNumber).ThenBy(x => x.AssignedAt).ToList();
         var propertyIds = assignments.Select(x => x.PropertyId).Distinct().ToList();
         var all = await FaasInForceAsync(db.TaxDeclarations.Where(x => propertyIds.Contains(x.PropertyId)), run.AsOf, ct);
+        prefetched = await PrefetchAsync(propertyIds, all.Select(x => x.Td).ToList(), ct);
         var rows = new List<object>();
         foreach (var a in assignments)
         {
@@ -413,7 +531,7 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
                     lam = new
                     {
                         cadastralNumber = a.Parcel?.CadastralNumber ?? p.CadastralNumber,
-                        previousPin = await LamFormData.PreviousPinAsync(db, clock, p.Id, run.AsOf, ct),
+                        previousPin = await PreviousPinAsync(p.Id, run.AsOf, ct),
                         marketValue = (decimal?)null,
                     },
                 });
@@ -433,6 +551,7 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
         var all = await FaasInForceAsync(db.TaxDeclarations.Where(x => x.Property!.BarangayId == run.BarangayId), run.AsOf, ct);
         var lands = all.Where(x => x.Td.Rpu!.RpuType == RpuType.Land).ToList();
         var propertyIds = lands.Select(x => x.Td.PropertyId).Distinct().ToList();
+        prefetched = await PrefetchAsync(propertyIds, lands.Select(x => x.Td).ToList(), ct);
         var pins = (await db.PinAssignments.AsNoTracking().Where(x => propertyIds.Contains(x.PropertyId)).ToListAsync(ct))
             .Where(x => clock.LocalDate(x.AssignedAt) <= run.AsOf).ToLookup(x => x.PropertyId);
         var parcels = (await db.Parcels.AsNoTracking().Where(x => propertyIds.Contains(x.PropertyId) && x.Status == RecordStatus.Active).ToListAsync(ct))
@@ -472,8 +591,9 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
     {
         var units = all.Where(x => x.Td.PropertyId == f.Td.PropertyId).Select(x => x.Td.Rpu!.RpuType).ToList();
         var machineRpus = all.Where(x => x.Td.PropertyId == f.Td.PropertyId && x.Td.Rpu!.RpuType == RpuType.Machinery).Select(x => x.Td.RpuId).ToList();
-        var improvements = await db.LandImprovements.Where(i => db.Lands.Any(l => l.Id == i.LandId && l.RpuId == f.Td.RpuId))
-            .Select(i => i.ImprovementKind!.Name).Distinct().ToListAsync(ct);
+        var improvements = prefetched is { } c && c.PropertyIds.Contains(f.Td.PropertyId) ? c.Improvements[f.Td.RpuId].ToList()
+            : await db.LandImprovements.Where(i => db.Lands.Any(l => l.Id == i.LandId && l.RpuId == f.Td.RpuId))
+                .Select(i => i.ImprovementKind!.Name).Distinct().ToListAsync(ct);
         var (area, unit) = await AreaAsync(f.Td, ct);
         var (owners, _) = await OwnersAsync(f.Td.PropertyId, f.Td.RpuId, asOf, ct);
         return (p.PropertyIdentificationNumber, new
@@ -487,12 +607,14 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
             remarks = f.Td.TransactionCode,
             lam = new
             {
-                cadastralNumber = await db.Parcels.Where(x => x.PropertyId == p.Id && x.Status == RecordStatus.Active && x.CadastralNumber != null)
-                    .OrderBy(x => x.CreatedAt).Select(x => x.CadastralNumber).FirstOrDefaultAsync(ct) ?? p.CadastralNumber,
-                previousPin = await LamFormData.PreviousPinAsync(db, clock, p.Id, asOf, ct),
+                cadastralNumber = (prefetched is { } read && read.PropertyIds.Contains(p.Id) ? read.CadastralNumbers.GetValueOrDefault(p.Id)
+                    : await db.Parcels.Where(x => x.PropertyId == p.Id && x.Status == RecordStatus.Active && x.CadastralNumber != null)
+                        .OrderBy(x => x.CreatedAt).Select(x => x.CadastralNumber).FirstOrDefaultAsync(ct)) ?? p.CadastralNumber,
+                previousPin = await PreviousPinAsync(p.Id, asOf, ct),
                 marketValue = f.Assessment?.MarketValue,
                 // The LAM's count of machines (the MRPAAO column only marks whether there are any).
-                machineCount = await db.MachineryUnits.CountAsync(m => machineRpus.Contains(m.RpuId), ct),
+                machineCount = prefetched is { } counts && counts.PropertyIds.Contains(p.Id) ? machineRpus.Sum(r => counts.MachineCounts.GetValueOrDefault(r))
+                    : await db.MachineryUnits.CountAsync(m => machineRpus.Contains(m.RpuId), ct),
             },
         });
     }
@@ -509,6 +631,7 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
     private async Task<(List<object> Rows, List<RollLine> Lines)> RollRowsAsync(RegisterRun run, Taxability taxability, CancellationToken ct)
     {
         var all = await FaasInForceAsync(db.TaxDeclarations.Where(x => x.Property!.BarangayId == run.BarangayId), run.AsOf, ct);
+        prefetched = await PrefetchAsync(all.Select(x => x.Td.PropertyId).ToList(), all.Select(x => x.Td).ToList(), ct);
         var perPage = registers.Value.AssessmentRollRowsPerPage;
         var rows = new List<object>();
         var lines = new List<RollLine>();
@@ -527,7 +650,7 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
             var (administrator, administratorAddress) = await AdministratorAsync(f.Td.PropertyId, f.Td.RpuId, run.AsOf, ct);
             var (page, lineNumber) = RollPosition(rows.Count, perPage);
             var (section, parcel) = await SectionAndParcelAsync(p.Id, run.AsOf, ct);
-            var useCode = await db.ActualUses.Where(x => x.Id == f.Td.ActualUseId).Select(x => x.Code).FirstOrDefaultAsync(ct);
+            var useCode = prefetched!.UseCodes.GetValueOrDefault(f.Td.ActualUseId);
             var line = new RollLine(f.Td.Id, run.Kind, page, lineNumber);
             lines.Add(line);
             rows.Add(new
@@ -649,11 +772,13 @@ public sealed class RegisterFormDataProvider(IApplicationDbContext db, IClock cl
             .Where(x => x.Property!.BarangayId == run.BarangayId && x.ClassificationId == run.ClassificationId
                 && (x.Status == WorkflowStatus.Approved || x.Status == WorkflowStatus.Cancelled))
             .ToListAsync(ct);
+        tds = tds.Where(x => Entered(x) <= run.AsOf && (run.FromDate is not { } from || Entered(x) >= from)).ToList();
+        prefetched = await PrefetchAsync(tds.Select(x => x.PropertyId).ToList(), tds, ct);
+        var posted = await PostedAsync(tds.Where(x => x.Assessment is null).Select(x => x.RpuId).ToList(), ct);
         var rows = new List<object>();
-        foreach (var td in tds.Where(x => Entered(x) <= run.AsOf && (run.FromDate is not { } from || Entered(x) >= from))
-                     .OrderBy(Entered).ThenBy(x => x.TaxDeclarationNumber))
+        foreach (var td in tds.OrderBy(Entered).ThenBy(x => x.TaxDeclarationNumber))
         {
-            var assessment = td.Assessment ?? await LatestPostedAsync(td.RpuId, td.EffectivityDate, ct);
+            var assessment = td.Assessment ?? LatestPosted(posted[td.RpuId], td.EffectivityDate);
             var p = await PropertyAsync(td.PropertyId, ct);
             // The declared owner when the FAAS was entered.
             var (owners, _) = await OwnersAsync(td.PropertyId, td.RpuId, Entered(td), ct);

@@ -15,7 +15,7 @@ interface ItemForm { kind?: MachineryCostItemKind; amount?: number; description?
  * items. Changed with a reason (audited); valuations already made keep their figures.
  */
 export function MachineryInputsModal({ machine, rpuId, onClose }: { machine: MachineryDto; rpuId: string; onClose: () => void }) {
-  const update = useUpdateMachineryValuationInputs(machine.id, rpuId, machine.propertyId);
+  const update = useUpdateMachineryValuationInputs(machine.id, rpuId, machine.propertyId, machine.rowVersion);
   const [form] = Form.useForm();
   const imported: boolean = Form.useWatch('isImported', form) ?? machine.isImported;
   return (

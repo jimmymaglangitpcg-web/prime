@@ -5,8 +5,11 @@ using Prime.Domain.Enums;
 namespace Prime.Domain.Entities;
 
 /// <summary>CLAUDE.md §25.</summary>
-public sealed class Building : AuditableEntity
+public sealed class Building : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid RpuId { get; set; }
     public RealPropertyUnit? Rpu { get; set; }
     public Guid PropertyId { get; set; }

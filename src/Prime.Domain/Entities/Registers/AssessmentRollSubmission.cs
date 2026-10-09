@@ -15,8 +15,11 @@ namespace Prime.Domain.Entities.Registers;
 /// submission is kept and a new one is prepared for the same month. Nothing is
 /// deleted. A month with no entries is a nil return (no items).
 /// </summary>
-public sealed class AssessmentRollSubmission : AuditableEntity
+public sealed class AssessmentRollSubmission : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid MunicipalityId { get; set; }
     public Municipality? Municipality { get; set; }
 

@@ -9,8 +9,11 @@ namespace Prime.Domain.Entities.Identity;
 /// differ), or rejects it with a reason. Approval activates the user and creates their office assignment in force at
 /// once: the applicant is its maker, the administrator its checker. Requests are kept; a rejected user may ask again.
 /// </summary>
-public sealed class SignUpRequest : AuditableEntity
+public sealed class SignUpRequest : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid AppUserId { get; set; }
     public AppUser? AppUser { get; set; }
     public string FullName { get; set; } = string.Empty;

@@ -57,7 +57,7 @@ public sealed record SwornStatementDto(
     DateOnly? SwornOn, string? SwornAt, string? AdministeringOfficer, string? OfficerTin,
     string? IdentityDocument, DateOnly? IdentityDocumentIssuedOn, string? IdentityDocumentIssuedAt, DateOnly? ReceivedOn,
     Guid? SupersedesId, string? SupersedesNumber, Guid? SupersededById, DateTimeOffset? FiledAt, DateTimeOffset? CancelledAt, string? CancellationReason,
-    string? Remarks, decimal TotalDeclaredValue, DateTimeOffset CreatedAt, IReadOnlyList<SwornStatementItemDto> Items);
+    string? Remarks, decimal TotalDeclaredValue, DateTimeOffset CreatedAt, IReadOnlyList<SwornStatementItemDto> Items, uint RowVersion = 0);
 
 public sealed record SwornStatementSummaryDto(
     Guid Id, string? Number, SwornStatementStatus Status, string DeclarantName, DeclarantCapacity Capacity, string MunicipalityName,
@@ -547,7 +547,7 @@ public sealed class SwornStatementService(IApplicationDbContext db, INumberingSe
             s.IdentityDocument, s.IdentityDocumentIssuedOn, s.IdentityDocumentIssuedAt, s.ReceivedOn,
             s.SupersedesId, s.Supersedes?.Number, correctedBy.FirstOrDefault(c => c.Old == s.Id)?.Id, s.FiledAt, s.CancelledAt, s.CancellationReason,
             s.Remarks, s.Items.Sum(i => i.DeclaredMarketValue), s.CreatedAt,
-            s.Items.OrderBy(i => i.Sequence).Select(ToDto).ToList())).ToList();
+            s.Items.OrderBy(i => i.Sequence).Select(ToDto).ToList(), s.RowVersion)).ToList();
     }
 
     private static SwornStatementItemDto ToDto(SwornStatementItem i) => new(

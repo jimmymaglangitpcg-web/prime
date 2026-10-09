@@ -48,6 +48,9 @@ export function TaxpayerSearchPage() {
           total: data?.totalCount ?? 0,
           onChange: setPage,
           showSizeChanger: false,
+          showTotal: (n) => (data?.totalIsLowerBound
+            ? `More than ${n.toLocaleString('en-PH')} owners: refine the search to see the rest`
+            : `${n.toLocaleString('en-PH')} owners`),
         }}
         columns={[
           {

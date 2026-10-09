@@ -26,11 +26,14 @@ namespace Prime.IntegrationTests;
 /// against the real WebApi host (authenticated via the Development bypass
 /// — the same code path a real Supabase JWT would take once past
 /// authentication), with real database writes, and verifies AuditLog rows
-/// were produced for each step. All test-created rows (including the
-/// reference data seeded for the test) are deleted in a finally block —
-/// this test commits real data mid-run (unlike ConstraintTests' rolled-back
-/// transactions) because it spans multiple independent HTTP requests, each
-/// with its own DbContext scope, so cleanup must happen after the fact.
+/// were produced for each step. This test commits real data (unlike
+/// ConstraintTests' rolled-back transactions) because it spans multiple
+/// independent HTTP requests, each with its own DbContext scope. Its rows
+/// are not deleted afterwards: properties, TDs and ownership are history
+/// tables that the database refuses to delete (HistoryDeleteGuards;
+/// docs/analysis/production-hardening.md §4.3). They sit under one fixed
+/// TEST_ province and reference set, reused on every run, and are
+/// identifiable by the run's testId.
 /// </summary>
 public class PropertyRegistrationFlowTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -53,17 +56,8 @@ public class PropertyRegistrationFlowTests(WebApplicationFactory<Program> factor
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PrimeDbContext>();
 
-        var province = new Province { PsgcCode = $"TESTP{testId}", Name = $"TEST_Province_{testId}" };
-        var municipality = new Municipality { Province = province, PsgcCode = $"TESTM{testId}", Name = $"TEST_Municipality_{testId}" };
-        var barangay = new Barangay { Municipality = municipality, PsgcCode = $"TESTB{testId}", Name = $"TEST_Barangay_{testId}" };
-        var classification = new Classification { Code = $"TESTCL{testId}", Name = $"TEST_Classification_{testId}" };
-        var actualUse = new ActualUse { Code = $"TESTAU{testId}", Name = $"TEST_ActualUse_{testId}" };
-        var ownershipType = new OwnershipType { Code = $"TESTOT{testId}", Name = $"TEST_OwnershipType_{testId}" };
+        var (province, municipality, barangay, classification, actualUse, ownershipType) = await TestReferenceAsync(db);
 
-        db.AddRange(province, municipality, barangay, classification, actualUse, ownershipType);
-        await db.SaveChangesAsync();
-
-        try
         {
             // 1. Create Property
             var createPropertyResponse = await client.PostAsJsonAsync("/api/properties", new CreatePropertyRequest(
@@ -197,10 +191,6 @@ public class PropertyRegistrationFlowTests(WebApplicationFactory<Program> factor
             propertyAuditLog.NewValue.ShouldNotBeNull();
             propertyAuditLog.NewValue.ShouldContain(property.PropertyIdentificationNumber);
         }
-        finally
-        {
-            await CleanupAsync(db, testId);
-        }
     }
 
     private static async Task AssertAuditLogExists(PrimeDbContext db, string tableName, Guid recordId, AuditAction action)
@@ -209,30 +199,24 @@ public class PropertyRegistrationFlowTests(WebApplicationFactory<Program> factor
         exists.ShouldBeTrue($"Expected an AuditLog row for {tableName}/{recordId}/{action}.");
     }
 
-    private static async Task CleanupAsync(PrimeDbContext db, string testId)
+    // One TEST_ reference set shared by every run: the committed rows of a run hang off it and cannot be deleted.
+    internal static async Task<(Province, Municipality, Barangay, Classification, ActualUse, OwnershipType)> TestReferenceAsync(PrimeDbContext db)
     {
-        // AuditLog rows are deliberately NOT deleted here — AuditLog is
-        // append-only by design (CLAUDE.md §48/§49), and that rule applies
-        // even to rows produced by a test run. They carry no foreign key
-        // to anything (docs/DATABASE.md §6), so leaving them behind does
-        // not block deleting the actual test data below, and they remain
-        // clearly identifiable as test artifacts via the TEST_/testId
-        // markers embedded in their NewValue JSON.
-        db.TaxDeclarations.RemoveRange(db.TaxDeclarations.Where(x => x.TaxDeclarationNumber.Contains(testId)));
-        db.RealPropertyUnits.RemoveRange(db.RealPropertyUnits.Where(x => x.RpuNumber.Contains(testId)));
-        db.Parcels.RemoveRange(db.Parcels.Where(x => x.LotNumber == "L-1" && x.Property!.PropertyIdentificationNumber.Contains(testId)));
-        db.PropertyTaxpayers.RemoveRange(db.PropertyTaxpayers.Where(x => x.Taxpayer!.Tin == $"TIN-{testId}"));
-        // The test's own PIN history (step 10a-2) references its property.
-        db.PinAssignments.RemoveRange(db.PinAssignments.Where(x => x.Property!.PropertyIdentificationNumber.Contains(testId)));
-        db.Properties.RemoveRange(db.Properties.Where(x => x.PropertyIdentificationNumber.Contains(testId)));
-        db.Taxpayers.RemoveRange(db.Taxpayers.Where(x => x.Tin == $"TIN-{testId}"));
-        db.OwnershipTypes.RemoveRange(db.OwnershipTypes.Where(x => x.Code.Contains(testId)));
-        db.ActualUses.RemoveRange(db.ActualUses.Where(x => x.Code.Contains(testId)));
-        db.Classifications.RemoveRange(db.Classifications.Where(x => x.Code.Contains(testId)));
-        db.Barangays.RemoveRange(db.Barangays.Where(x => x.PsgcCode.Contains(testId)));
-        db.Municipalities.RemoveRange(db.Municipalities.Where(x => x.PsgcCode.Contains(testId)));
-        db.Provinces.RemoveRange(db.Provinces.Where(x => x.PsgcCode.Contains(testId)));
+        const string key = "REGFLOW";
+        var province = await db.Provinces.FirstOrDefaultAsync(x => x.PsgcCode == $"TESTP{key}")
+            ?? db.Provinces.Add(new Province { PsgcCode = $"TESTP{key}", Name = "TEST_Province_RegistrationFlow" }).Entity;
+        var municipality = await db.Municipalities.FirstOrDefaultAsync(x => x.PsgcCode == $"TESTM{key}")
+            ?? db.Municipalities.Add(new Municipality { Province = province, PsgcCode = $"TESTM{key}", Name = "TEST_Municipality_RegistrationFlow" }).Entity;
+        var barangay = await db.Barangays.FirstOrDefaultAsync(x => x.PsgcCode == $"TESTB{key}")
+            ?? db.Barangays.Add(new Barangay { Municipality = municipality, PsgcCode = $"TESTB{key}", Name = "TEST_Barangay_RegistrationFlow" }).Entity;
+        var classification = await db.Classifications.FirstOrDefaultAsync(x => x.Code == $"TESTCL{key}")
+            ?? db.Classifications.Add(new Classification { Code = $"TESTCL{key}", Name = "TEST_Classification_RegistrationFlow" }).Entity;
+        var actualUse = await db.ActualUses.FirstOrDefaultAsync(x => x.Code == $"TESTAU{key}")
+            ?? db.ActualUses.Add(new ActualUse { Code = $"TESTAU{key}", Name = "TEST_ActualUse_RegistrationFlow" }).Entity;
+        var ownershipType = await db.OwnershipTypes.FirstOrDefaultAsync(x => x.Code == $"TESTOT{key}")
+            ?? db.OwnershipTypes.Add(new OwnershipType { Code = $"TESTOT{key}", Name = "TEST_OwnershipType_RegistrationFlow" }).Entity;
         await db.SaveChangesAsync();
+        return (province, municipality, barangay, classification, actualUse, ownershipType);
     }
 
     // Mirrors TaxpayersController.AddOwnerBody's shape for the client-side POST body.

@@ -182,7 +182,7 @@ public class GisQueryTests(WebApplicationFactory<Program> factory) : IClassFixtu
         var (lon, lat) = RandomOrigin();
         var parcel = await AddParcelAsync(db, Square(lon, lat), RecordStatus.Superseded);
 
-        var result = await parcels.SetGeometryAsync(parcel.Id, new SetParcelGeometryRequest(Square(lon, lat, 0.002).AsText(), parcel.Version, "Edit history"));
+        var result = await parcels.SetGeometryAsync(parcel.Id, new SetParcelGeometryRequest(Square(lon, lat, 0.002).AsText(), parcel.RowVersion, "Edit history"));
 
         result.Code.ShouldBe("PARCEL_NOT_ACTIVE");
     }

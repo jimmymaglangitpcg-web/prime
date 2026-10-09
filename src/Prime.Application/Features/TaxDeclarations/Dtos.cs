@@ -53,7 +53,9 @@ public sealed record TaxDeclarationDto(
     long? AssessmentCount = null,
     Guid? RestoresTaxDeclarationId = null,
     /// <summary>The cancellation waiting for a second user's decision, if any (workflow-security.md Q19).</summary>
-    TaxDeclarationCancellationRequestDto? OpenCancellationRequest = null);
+    TaxDeclarationCancellationRequestDto? OpenCancellationRequest = null,
+    /// <summary>Row version, echoed in If-Match on a decision (production-hardening.md §4.4).</summary>
+    uint RowVersion = 0);
 
 /// <summary>A request to cancel an approved TD outright, decided by a second user (workflow-security.md Q19).</summary>
 public sealed record TaxDeclarationCancellationRequestDto(

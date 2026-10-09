@@ -36,38 +36,47 @@ public static class PropertyParties
         return rows.Where(x => x.RpuId == null);
     }
 
-    /// <param name="maskPersonal">For API responses to a user without taxpayer.view-personal: an individual's address is
-    /// hidden (workflow-security.md Q16). Forms and notices never mask: they are official records.</param>
-    public static async Task<List<PropertyOwnerDto>> ProjectAsync(IQueryable<PropertyTaxpayer> query, CancellationToken ct, bool maskPersonal = false)
+    /// <summary>
+    /// <see cref="ScopeAsync"/> over rows already loaded and filtered (the registers read a barangay's parties at once,
+    /// production-hardening.md §9, H4): the unit's own rows when it has an owner or unknown-owner row among them,
+    /// otherwise the property's.
+    /// </summary>
+    public static IEnumerable<PartyRow> Scope(IEnumerable<PartyRow> rows, Guid? rpuId)
     {
-        var rows = await query
-            .OrderByDescending(pt => pt.IsCurrent).ThenBy(pt => pt.Role).ThenByDescending(pt => pt.StartDate)
-            .Select(pt => new
-            {
-                pt.Id,
-                pt.Role,
-                pt.TaxpayerId,
-                Taxpayer = pt.Taxpayer == null ? null : new
-                {
-                    pt.Taxpayer.TaxpayerType, pt.Taxpayer.LastName, pt.Taxpayer.FirstName, pt.Taxpayer.MiddleName,
-                    pt.Taxpayer.Suffix, pt.Taxpayer.CorporateName, pt.Taxpayer.Address,
-                },
-                OwnershipTypeName = pt.OwnershipType == null ? null : pt.OwnershipType.Name,
-                pt.OwnershipPercentage,
-                pt.StartDate,
-                pt.EndDate,
-                pt.IsCurrent,
-                pt.EndReason,
-                pt.RpuId,
-                RpuNumber = pt.Rpu == null ? null : pt.Rpu.RpuNumber,
-            })
-            .ToListAsync(ct);
+        var list = rows as IReadOnlyCollection<PartyRow> ?? rows.ToList();
+        return rpuId is { } unit && list.Any(x => x.RpuId == unit && x.Role is PropertyPartyRole.Owner or PropertyPartyRole.UnknownOwner)
+            ? list.Where(x => x.RpuId == unit)
+            : list.Where(x => x.RpuId == null);
+    }
 
-        return rows.Select(r => new PropertyOwnerDto(
+    /// <summary>A party row as read for naming: the projection both <see cref="ProjectAsync"/> and the bulk reads use.</summary>
+    public sealed record PartyRow(Guid Id, Guid PropertyId, PropertyPartyRole Role, Guid? TaxpayerId, TaxpayerType? TaxpayerType,
+        string? LastName, string? FirstName, string? MiddleName, string? Suffix, string? CorporateName, string? Address,
+        string? OwnershipTypeName, decimal OwnershipPercentage, DateOnly StartDate, DateOnly? EndDate, bool IsCurrent, string? EndReason,
+        Guid? RpuId, string? RpuNumber);
+
+    /// <summary>The rows of <paramref name="query"/> as <see cref="PartyRow"/>s, unordered.</summary>
+    public static IQueryable<PartyRow> Rows(IQueryable<PropertyTaxpayer> query) => query.Select(pt => new PartyRow(
+        pt.Id, pt.PropertyId, pt.Role, pt.TaxpayerId, pt.Taxpayer == null ? null : pt.Taxpayer.TaxpayerType,
+        pt.Taxpayer == null ? null : pt.Taxpayer.LastName, pt.Taxpayer == null ? null : pt.Taxpayer.FirstName,
+        pt.Taxpayer == null ? null : pt.Taxpayer.MiddleName, pt.Taxpayer == null ? null : pt.Taxpayer.Suffix,
+        pt.Taxpayer == null ? null : pt.Taxpayer.CorporateName, pt.Taxpayer == null ? null : pt.Taxpayer.Address,
+        pt.OwnershipType == null ? null : pt.OwnershipType.Name, pt.OwnershipPercentage, pt.StartDate, pt.EndDate, pt.IsCurrent, pt.EndReason,
+        pt.RpuId, pt.Rpu == null ? null : pt.Rpu.RpuNumber));
+
+    /// <summary>The order <see cref="ProjectAsync"/> lists parties in: current first, by role (as stored, its name), latest first.</summary>
+    public static IEnumerable<PartyRow> Ordered(IEnumerable<PartyRow> rows) => rows
+        .OrderByDescending(r => r.IsCurrent).ThenBy(r => r.Role.ToString(), StringComparer.Ordinal).ThenByDescending(r => r.StartDate);
+
+    /// <summary>One party as listed and printed; see <see cref="ProjectAsync"/> for <paramref name="maskPersonal"/>.</summary>
+    public static PropertyOwnerDto ToDto(PartyRow r, bool maskPersonal = false)
+    {
+        var masked = maskPersonal && r.TaxpayerType == TaxpayerType.Individual;
+        return new PropertyOwnerDto(
             r.Id,
             r.TaxpayerId,
-            r.Taxpayer is { } t
-                ? TaxpayerNameFormatter.Format(t.TaxpayerType, t.LastName, t.FirstName, t.MiddleName, t.Suffix, t.CorporateName)
+            r.TaxpayerType is { } type
+                ? TaxpayerNameFormatter.Format(type, r.LastName, r.FirstName, r.MiddleName, r.Suffix, r.CorporateName)
                 : UnknownOwnerName,
             r.OwnershipTypeName,
             r.OwnershipPercentage,
@@ -76,13 +85,16 @@ public static class PropertyParties
             r.IsCurrent,
             r.Role,
             r.EndReason,
-            Masked(r.Taxpayer?.TaxpayerType) ? PersonalData.MaskAddress(r.Taxpayer?.Address) : r.Taxpayer?.Address,
+            masked ? PersonalData.MaskAddress(r.Address) : r.Address,
             r.RpuId,
             r.RpuNumber,
-            Masked(r.Taxpayer?.TaxpayerType) && r.Taxpayer?.Address is not null)).ToList();
-
-        bool Masked(TaxpayerType? type) => maskPersonal && type == TaxpayerType.Individual;
+            masked && r.Address is not null);
     }
+
+    /// <param name="maskPersonal">For API responses to a user without taxpayer.view-personal: an individual's address is
+    /// hidden (workflow-security.md Q16). Forms and notices never mask: they are official records.</param>
+    public static async Task<List<PropertyOwnerDto>> ProjectAsync(IQueryable<PropertyTaxpayer> query, CancellationToken ct, bool maskPersonal = false) =>
+        Ordered(await Rows(query).ToListAsync(ct)).Select(r => ToDto(r, maskPersonal)).ToList();
 
     /// <summary>Printed label of a role — English defaults until the LAM's wording is configured.</summary>
     public static string RoleLabel(PropertyPartyRole role) => role switch

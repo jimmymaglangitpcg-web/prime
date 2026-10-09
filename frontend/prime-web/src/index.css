@@ -18,6 +18,23 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/*
+ * WCAG 2.1 AA contrast for status tags (docs/analysis/production-hardening.md Q10; docs/TESTING.md §5): Ant Design draws a
+ * preset tag's text in the colour's 7th shade on its lightest tint, about 3:1 for green; these darker shades keep 4.5:1.
+ * Important: Ant Design's own rule is scoped by its hash class and would otherwise win.
+ */
+.ant-tag.ant-tag-green, .ant-tag.ant-tag-success { color: #237804 !important; }
+.ant-tag.ant-tag-orange { color: #ad4e00 !important; }
+.ant-tag.ant-tag-gold, .ant-tag.ant-tag-warning { color: #874d00 !important; }
+.ant-tag.ant-tag-lime { color: #3f6600 !important; }
+.ant-tag.ant-tag-red, .ant-tag.ant-tag-error { color: #a8071a !important; }
+.ant-tag.ant-tag-volcano { color: #ad2102 !important; }
+.ant-tag.ant-tag-magenta { color: #9e1068 !important; }
+.ant-tag.ant-tag-purple { color: #391085 !important; }
+.ant-tag.ant-tag-blue, .ant-tag.ant-tag-processing { color: #003eb3 !important; }
+.ant-tag.ant-tag-geekblue { color: #10239e !important; }
+.ant-tag.ant-tag-cyan { color: #006d75 !important; }
+
 /* Printable pages (e.g. the tax map, /gis/print): print only the sheet. */
 @page {
   size: A4 landscape;

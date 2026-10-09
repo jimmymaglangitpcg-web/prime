@@ -5,15 +5,14 @@ import { useAssessmentAction, type AssessmentAction } from '../../../api/valuati
 import { useTaxDeclarationsByRpu } from '../../../api/taxDeclarations';
 import { ValuationDrawer } from './ValueAndAssess';
 import { BackTaxModal } from './BackTaxModal';
+import { useCan } from '../../../api/offices';
 import { ApiRequestError } from '../../../lib/apiClient';
 import { formatMoney } from '../../../lib/format';
 import type { AppraisalRecordDto, AssessmentSummaryDto, WorkflowStatus } from '../../../lib/types';
 import { TaxabilityTag } from '../../../components/TaxabilityTag';
+import { WorkflowStatusTag } from '../../../components/StatusTag';
 
-const statusColor: Partial<Record<WorkflowStatus, string>> = {
-  PendingReview: 'gold', Approved: 'green', Posted: 'green', Rejected: 'red', Cancelled: 'red', Voided: 'red',
-};
-const statusTag = (s: WorkflowStatus) => <Tag color={statusColor[s] ?? 'default'}>{s}</Tag>;
+const statusTag = (s: WorkflowStatus) => <WorkflowStatusTag status={s} />;
 const plain = new Intl.NumberFormat('en-PH', { maximumFractionDigits: 6 });
 /** "TotalFloorArea" → "Total floor area". */
 const humanize = (key: string) => key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase())
@@ -106,8 +105,10 @@ function WorkflowActions({ rpuId, assessment: a }: { rpuId: string; assessment: 
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [toast, toastContext] = message.useMessage();
+  // Each action shows only to a user whose roles allow it (the API's permission on it); separation of duties stays the API's.
+  const can = useCan();
   const run = (action: AssessmentAction, extra?: { reason: string }) =>
-    act.mutate({ id: a.id, action, ...extra }, {
+    act.mutate({ id: a.id, action, rowVersion: a.rowVersion, ...extra }, {
       onSuccess: async (result) => {
         setRejecting(false);
         if (action !== 'post') return;
@@ -124,14 +125,14 @@ function WorkflowActions({ rpuId, assessment: a }: { rpuId: string; assessment: 
   return (
     <>
       {toastContext}
-      {a.status === 'Draft' && <Button size="small" loading={act.isPending} onClick={() => run('submit-for-review')}>Submit for review</Button>}
-      {a.status === 'PendingReview' && (
+      {a.status === 'Draft' && can('assessment.prepare') && <Button size="small" loading={act.isPending} onClick={() => run('submit-for-review')}>Submit for review</Button>}
+      {a.status === 'PendingReview' && can('assessment.approve') && (
         <>
           <Button size="small" type="primary" loading={act.isPending} onClick={() => run('approve')}>Approve</Button>
           <Button size="small" danger onClick={() => setRejecting(true)}>Reject</Button>
         </>
       )}
-      {a.status === 'Approved' && (
+      {a.status === 'Approved' && can('assessment.post') && (
         <Popconfirm title="Post this assessment?" description="Posting enters it in the Record of Assessment; it cannot be undone."
           okText="Post" onConfirm={() => run('post')}>
           <Button size="small" type="primary" loading={act.isPending}>Post</Button>

@@ -96,7 +96,7 @@ function HeaderEditor({ statement, initial, supersedesId }: { statement?: SwornS
   const [form] = Form.useForm<HeaderForm>();
   const navigate = useNavigate();
   const create = useCreateSwornStatement();
-  const update = useUpdateSwornStatement(statement?.id ?? '');
+  const update = useUpdateSwornStatement(statement?.id ?? '', statement?.rowVersion);
   const save = statement ? update : create;
   const [provinceId, setProvinceId] = useState<string>();
   const { data: provinces = [] } = useProvinces();
@@ -439,8 +439,8 @@ function ActionsCard({ statement: s }: { statement: SwornStatementDto }) {
   const [number, setNumber] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState('');
-  const file = useFileSwornStatement(s.id);
-  const cancel = useCancelSwornStatement(s.id);
+  const file = useFileSwornStatement(s.id, s.rowVersion);
+  const cancel = useCancelSwornStatement(s.id, s.rowVersion);
   const live = s.status === 'Draft' || s.status === 'Filed';
   return (
     <Card title="Form and filing">

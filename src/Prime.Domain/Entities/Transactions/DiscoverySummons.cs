@@ -10,8 +10,11 @@ namespace Prime.Domain.Entities.Transactions;
 /// follows only an unanswered first; after an unanswered second, the transaction records the verification with other
 /// agencies and the assessor declares the property (LGC §204).
 /// </summary>
-public sealed class DiscoverySummons : AuditableEntity
+public sealed class DiscoverySummons : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid PropertyTransactionId { get; set; }
     public PropertyTransaction? PropertyTransaction { get; set; }
     /// <summary>1 or 2.</summary>

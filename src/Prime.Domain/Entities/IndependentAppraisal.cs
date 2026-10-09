@@ -11,8 +11,11 @@ namespace Prime.Domain.Entities;
 /// income or cost approach (Q13); the assessment's maker-checker approval is the review.
 /// A newer appraisal of the same subject replaces it as current; none is ever deleted.
 /// </summary>
-public sealed class IndependentAppraisal : AuditableEntity
+public sealed class IndependentAppraisal : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid RpuId { get; set; }
     public RealPropertyUnit? Rpu { get; set; }
     public IndependentAppraisalSubject Subject { get; set; }

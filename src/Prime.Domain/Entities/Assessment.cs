@@ -19,8 +19,11 @@ namespace Prime.Domain.Entities;
 /// as <see cref="TaxDeclaration"/>. <see cref="RevisionReference"/> is set
 /// when this row was produced by a General Revision batch.
 /// </summary>
-public sealed class Assessment : AuditableEntity
+public sealed class Assessment : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid RpuId { get; set; }
     public RealPropertyUnit? Rpu { get; set; }
     public Guid PropertyId { get; set; }

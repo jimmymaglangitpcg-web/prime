@@ -52,14 +52,14 @@ export function BuildingAppraisalRows({ building, rpuId, propertyId }: { buildin
         <Alert type="info" showIcon style={{ marginBottom: 6 }}
           title={`The floors recorded total ${plain.format(floorsTotal)} of ${plain.format(building.totalFloorArea)} sqm.`} />
       )}
-      <Table size="small" rowKey="id" dataSource={floors} pagination={false} locale={{ emptyText: 'Not recorded' }}
+      <Table size="small" rowKey="id" dataSource={floors} pagination={false} scroll={{ x: true }} locale={{ emptyText: 'Not recorded' }}
         columns={[
           { title: 'Floor', dataIndex: 'floorNumber', width: 80 },
           { title: 'Area', dataIndex: 'area', align: 'right', render: (v: number) => `${plain.format(v)} sqm` },
         ]} />
 
       {header('Structural materials', 'material', 'Add material')}
-      <Table size="small" rowKey="id" dataSource={materials} pagination={false} locale={{ emptyText: 'Checklist not filled' }}
+      <Table size="small" rowKey="id" dataSource={materials} pagination={false} scroll={{ x: true }} locale={{ emptyText: 'Checklist not filled' }}
         columns={[
           { title: 'Structure part', dataIndex: 'structuralPartName' },
           { title: 'Material', dataIndex: 'materialName' },
@@ -71,7 +71,7 @@ export function BuildingAppraisalRows({ building, rpuId, propertyId }: { buildin
         <Alert type="warning" showIcon style={{ marginBottom: 6 }}
           title={`The portions cover ${plain.format(covered)} of ${plain.format(building.totalFloorArea)} sqm; they must cover it all before the building can be valued.`} />
       )}
-      <Table size="small" rowKey="id" dataSource={building.usePortions} pagination={false}
+      <Table size="small" rowKey="id" dataSource={building.usePortions} pagination={false} scroll={{ x: true }}
         locale={{ emptyText: 'One use: valued under the Tax Declaration’s classification and use' }}
         columns={[
           { title: '#', dataIndex: 'sequence', width: 40 },

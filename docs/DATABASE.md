@@ -155,6 +155,10 @@ Enforcement:
   raises an exception, or simply revoking `DELETE` privilege on those
   tables from the application's database role) is a candidate hardening
   step for Phase 14; decision deferred, not required to start Phase 2/3.
+  **Done (Phase 14, H1, 2026-10-08):** `BEFORE DELETE`/`BEFORE TRUNCATE`
+  triggers on every history table (migration `HistoryDeleteGuards`; list
+  and classification in `HistoryDeleteGuardTests`; design in
+  `docs/analysis/production-hardening.md` §4.3, §9).
 
 ---
 
@@ -181,10 +185,13 @@ defense-in-depth addition later.
 
 ## 7. Concurrency & transactions
 
-- Optimistic concurrency token on assessment/billing/payment tables
-  (Postgres `xmin` mapped via EF Core, or an explicit `RowVersion` column)
-  to protect against simultaneous assessment changes / simultaneous
-  approvals (§66).
+- Optimistic concurrency (§66; `docs/analysis/production-hardening.md` H2):
+  every record that goes through a workflow status or is edited in place
+  implements `IVersioned`; its `RowVersion` maps to Postgres `xmin` (no
+  physical column) by one convention in `PrimeDbContext`. A stale update
+  matches no row and is refused (409 `CONCURRENCY_CONFLICT`); a client may
+  send the version it displayed as `If-Match`. Background-job rows are not
+  versioned (their workers save progress repeatedly).
 - Duplicate submission protection: unique constraints on natural business
   keys (`TaxDeclarationNumber`, `OfficialReceiptNumber`, idempotency key on
   payment posting requests) plus DB transactions wrapping
@@ -484,6 +491,19 @@ design (§48).
   name fields, `TIN`, `LotNumber`, `TitleNumber`, `SurveyNumber`,
   `Barangay`, `TaxMapNumber`; consider a `pg_trgm` GIN index for
   free-text/partial name and address search.
+  **Done (Phase 14, H4, 2026-10-09):** the property and owner searches match
+  `lower(column) LIKE '%term%'`, which no btree serves; `pg_trgm` GIN indexes
+  on `lower()` of the five searched property columns and the four searched
+  taxpayer columns (migration `SearchTrigramIndexes`, expression indexes
+  written as SQL, not in the EF model). Measured at 250,000 DEMO properties:
+  search p95 from 1.0–1.5 s to under 0.1 s (`docs/TESTING.md` §3).
+- Counts: a list over a table that only grows (the audit trail, the
+  property and owner searches) counts at most 10,000 matches
+  (`CappedCount`); beyond that the result says there are more
+  (`TotalIsLowerBound`) and the user narrows the filter.
+- Audit trail: `AuditLogs.RecordId` has its own index (migration
+  `AuditRecordIndex`); the `(TableName, RecordId)` index cannot serve the
+  record and property history views, which look up by id alone.
 - Spatial: GiST index on every `geometry` column.
 - Effective-date composite indexes per §4 above.
 - Foreign keys are indexed by default via EF Core conventions; verified

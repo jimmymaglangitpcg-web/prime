@@ -45,6 +45,8 @@ export function useDelegationActions() {
 }
 
 export interface OfficeDto {
+  /** Row version; sent as If-Match on a write (production-hardening.md §4.4). */
+  rowVersion: number;
   id: string; code: string; name: string; kind: OfficeKind; lguName: string | null; headPosition: string | null; address: string | null; contact: string | null; status: RecordStatus;
   /** The Sanggunian whose tax ordinance the office's TDs cite (records-and-forms.md Q8). */
   sanggunianName?: string | null;
@@ -118,7 +120,11 @@ export function useCreateOffice() {
 }
 export function useUpdateOffice() {
   const invalidate = useInvalidate();
-  return useMutation({ mutationFn: ({ id, ...input }: OfficeInput & { id: string }) => apiPut<OfficeDto>(`/api/offices/${id}`, input), onSuccess: invalidate });
+  return useMutation({
+    mutationFn: ({ id, rowVersion, ...input }: OfficeInput & { id: string; rowVersion?: number }) =>
+      apiPut<OfficeDto>(`/api/offices/${id}`, input, { ifMatch: rowVersion }),
+    onSuccess: invalidate,
+  });
 }
 export function useUpdateUserLicence() {
   const invalidate = useInvalidate();

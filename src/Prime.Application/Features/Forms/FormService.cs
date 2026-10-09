@@ -132,7 +132,7 @@ public sealed class FormService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException) // a row-version conflict is a 409 CONCURRENCY_CONFLICT
         {
             return Result.Failure<FormDefinitionDto>("FORM_VERSION_CONFLICT", "Another version of this form was created at the same time. Try again.");
         }
@@ -214,7 +214,7 @@ public sealed class FormService(
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException) // a row-version conflict is a 409 CONCURRENCY_CONFLICT
         {
             // UX_IssuedForms_Definition_Subject_Valid: issued concurrently — return that one.
             db.AssessmentRollEntries.RemoveRange(entries);

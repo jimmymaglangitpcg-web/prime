@@ -62,6 +62,24 @@ public static class ValuationCalculator
         return result with { MarketValue = rounded, Breakdown = breakdown };
     }
 
+    /// <summary>
+    /// The row's market value to the centavo (<see cref="Money.ToCentavo"/>), the last step of every row before it is
+    /// stored or assessed, so the stored lines add up to the stored total and an assessment made in the same request
+    /// sees the stored value. Intermediate breakdown values keep full precision; when the rounding changed the value,
+    /// the value before it is kept (unless a rounding step already recorded it). Too large to store: refused.
+    /// </summary>
+    public static ValuationCalculationResult ToCentavo(ValuationCalculationResult result)
+    {
+        var value = Money.Checked(Money.ToCentavo(result.MarketValue), "market value");
+        if (value == result.MarketValue)
+        {
+            return result;
+        }
+        var breakdown = new Dictionary<string, decimal>(result.Breakdown) { ["MarketValue"] = value };
+        breakdown.TryAdd("MarketValueBeforeRounding", result.MarketValue);
+        return result with { MarketValue = value, Breakdown = breakdown };
+    }
+
     /// <summary>Breakdown key prefix for one adjustment factor's percent, e.g. "Adjustment:CORNER".</summary>
     public const string AdjustmentKeyPrefix = "Adjustment:";
 

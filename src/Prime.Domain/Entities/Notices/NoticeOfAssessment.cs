@@ -15,8 +15,11 @@ namespace Prime.Domain.Entities.Notices;
 /// addressees, values, reason and the periods applied — is frozen on it,
 /// so it stays what was sent after the records or the configuration change.
 /// </summary>
-public sealed class NoticeOfAssessment : AuditableEntity
+public sealed class NoticeOfAssessment : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid PropertyId { get; set; }
     public PropertyEntity? Property { get; set; }
     public Guid RpuId { get; set; }

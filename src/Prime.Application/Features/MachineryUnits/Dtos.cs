@@ -83,7 +83,9 @@ public sealed record MachineryDto(
     DateOnly? DateInstalled = null,
     bool IsInOperation = true,
     IReadOnlyList<MachineryCostItemDto>? CostItems = null,
-    MachineryDocumentsDto? Documents = null);
+    MachineryDocumentsDto? Documents = null,
+    /// <summary>Row version, echoed in If-Match when editing the valuation inputs (production-hardening.md §4.4).</summary>
+    uint RowVersion = 0);
 
 /// <summary>The acquisition documents of the LAM machinery FAAS (docs/analysis/records-and-forms.md Q14).</summary>
 public sealed record MachineryDocumentsDto(

@@ -149,6 +149,9 @@ public sealed class ApprovalRecordConfiguration : IEntityTypeConfiguration<Appro
         builder.Property(x => x.SignatoryLicenceNumber).HasMaxLength(50);
         builder.HasOne<Prime.Domain.Entities.Offices.ApprovalDelegation>().WithMany().HasForeignKey(x => x.DelegationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ApprovalChain>().WithMany().HasForeignKey(x => x.ApprovalChainId).OnDelete(DeleteBehavior.Restrict);
+        // The signer and their office (production-hardening.md §4.3: references without a foreign key).
+        builder.HasOne<Prime.Domain.Entities.Identity.AppUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Prime.Domain.Entities.Offices.Office>().WithMany().HasForeignKey(x => x.SignerOfficeId).OnDelete(DeleteBehavior.Restrict);
         // Each step is signed once per record; concurrent signers of the same step conflict here.
         builder.HasIndex(x => new { x.SubjectType, x.SubjectId, x.StepSequence }).IsUnique();
     }

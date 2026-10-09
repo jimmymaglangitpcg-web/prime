@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Button, Empty, Table, Tag, Typography } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import type { ParcelSummaryDto } from '../../../lib/types';
-import { AddParcelModal } from '../modals/AddParcelModal';
+import { AddParcelModal, type ParcelLocation } from '../modals/AddParcelModal';
 
-export function ParcelsSection({ propertyId, parcels }: { propertyId: string; parcels: ParcelSummaryDto[] }) {
+export function ParcelsSection({ propertyId, parcels, location }: { propertyId: string; parcels: ParcelSummaryDto[]; location?: ParcelLocation }) {
   const [addOpen, setAddOpen] = useState(false);
 
   return (
@@ -31,7 +31,7 @@ export function ParcelsSection({ propertyId, parcels }: { propertyId: string; pa
         ]}
       />
 
-      <AddParcelModal propertyId={propertyId} open={addOpen} onClose={() => setAddOpen(false)} />
+      <AddParcelModal propertyId={propertyId} location={location} open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
   );
 }

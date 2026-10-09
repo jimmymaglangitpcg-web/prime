@@ -11,7 +11,7 @@ namespace Prime.Domain.Entities;
 /// <see cref="Area"/> is the declared area (e.g. from the title/technical
 /// description) and is never overwritten by the geometry's measured area.
 /// </summary>
-public sealed class Parcel : AuditableEntity
+public sealed class Parcel : AuditableEntity, IVersioned
 {
     public Guid PropertyId { get; set; }
     public PropertyEntity? Property { get; set; }
@@ -43,5 +43,5 @@ public sealed class Parcel : AuditableEntity
     /// it back on updates; a stale value is rejected rather than silently
     /// overwriting someone else's edit.
     /// </summary>
-    public uint Version { get; set; }
+    public uint RowVersion { get; set; }
 }

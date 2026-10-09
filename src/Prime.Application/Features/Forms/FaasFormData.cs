@@ -5,6 +5,7 @@ using Prime.Application.Features.Appraisal;
 using Prime.Application.Features.Properties;
 using Prime.Application.Features.RealPropertyUnits;
 using Prime.Application.Features.TaxDeclarations;
+using Prime.Domain.DomainServices;
 using Prime.Domain.Entities;
 using Prime.Domain.Enums;
 
@@ -293,8 +294,8 @@ public sealed class FaasFormDataProvider(IApplicationDbContext db, IAppraisalRec
                 // The LAM FAAS splits the original cost (Annex I-F columns i and j).
                 acquisitionCost = m.AcquisitionCost, installationAndOtherCost = (m.InstallationCost ?? 0m) + (m.OtherCost ?? 0m),
                 rcn, yearsUsed = m.EconomicLifeYears is { } e && m.RemainingLifeYears is { } rl ? e - rl : (int?)null,
-                depreciationPercent = fraction is { } f ? Math.Round((1m - f) * 100m, 2) : (decimal?)null,
-                depreciationValue = fraction is { } f2 && rcn is { } c ? Math.Round(c * (1m - f2), 2) : (decimal?)null,
+                depreciationPercent = fraction is { } f ? Money.ToCentavo((1m - f) * 100m) : (decimal?)null,
+                depreciationValue = fraction is { } f2 && rcn is { } c ? Money.ToCentavo(c * (1m - f2)) : (decimal?)null,
                 depreciatedValue = line is null ? null : Key(line, "DepreciatedValue"),
                 marketValue = line?.MarketValue,
             };

@@ -12,8 +12,11 @@ namespace Prime.Domain.Entities;
 /// re-running the calculation. Never updated in place — recomputing creates
 /// a new row, giving Rpu/Property a full valuation history for free.
 /// </summary>
-public sealed class Valuation : AuditableEntity
+public sealed class Valuation : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid RpuId { get; set; }
     public RealPropertyUnit? Rpu { get; set; }
     public Guid PropertyId { get; set; }

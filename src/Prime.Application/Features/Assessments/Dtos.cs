@@ -71,7 +71,9 @@ public sealed record AssessmentDto(
     int? CauseWindowDays = null,
     bool CauseWindowExceeded = false,
     DateOnly? MadeOn = null,
-    string? EffectivityOverrideReason = null);
+    string? EffectivityOverrideReason = null,
+    /// <summary>Row version, echoed in If-Match on a workflow step (production-hardening.md §4.4).</summary>
+    uint RowVersion = 0);
 
 /// <summary>A FAAS "Property Assessment" row (docs/analysis/mrpaao-forms-model.md §8.2).</summary>
 public sealed record AssessmentLineDto(

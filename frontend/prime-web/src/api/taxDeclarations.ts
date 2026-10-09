@@ -57,8 +57,11 @@ function tdActionPath(id: string, action: TdAction, cancellationRequestId?: stri
 export function useTdAction(propertyId: string, rpuId: string) {
   const invalidate = useInvalidateTds(propertyId, rpuId);
   return useMutation({
-    mutationFn: ({ id, action, reason, cancellationRequestId }: { id: string; action: TdAction; reason?: string; cancellationRequestId?: string }) =>
-      apiPost<TaxDeclarationDto>(tdActionPath(id, action, cancellationRequestId), reason === undefined ? {} : { reason }),
+    mutationFn: ({ id, action, reason, cancellationRequestId, rowVersion }:
+      { id: string; action: TdAction; reason?: string; cancellationRequestId?: string; rowVersion?: number }) =>
+      apiPost<TaxDeclarationDto>(tdActionPath(id, action, cancellationRequestId), reason === undefined ? {} : { reason },
+        // The TD's version guards actions on the TD itself; a cancellation decision is on the request's own route.
+        { ifMatch: action === 'approve-cancellation' || action === 'reject-cancellation' ? undefined : rowVersion }),
     onSuccess: invalidate,
   });
 }

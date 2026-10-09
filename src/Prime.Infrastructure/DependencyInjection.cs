@@ -13,6 +13,7 @@ using Prime.Infrastructure.Identity;
 using Prime.Infrastructure.Jobs;
 using Prime.Infrastructure.Persistence;
 using Prime.Infrastructure.Persistence.HealthChecks;
+using Prime.Infrastructure.Persistence.Concurrency;
 using Prime.Infrastructure.Persistence.Interceptors;
 
 namespace Prime.Infrastructure;
@@ -33,6 +34,10 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserService>(sp => sp.GetRequiredService<CurrentUserService>());
         services.AddScoped<ISecurityEventLog, SecurityEventLog>();
         services.AddScoped<AuditSaveChangesInterceptor>();
+        // If-Match of the request (docs/analysis/production-hardening.md §4.4).
+        services.AddScoped<ConcurrencyExpectation>();
+        services.AddScoped<IConcurrencyExpectation>(sp => sp.GetRequiredService<ConcurrencyExpectation>());
+        services.AddScoped<ConcurrencyExpectationInterceptor>();
         // Jurisdiction of the request (docs/analysis/province-wide-operation.md §3.3); PrimeDbContext's query filters read it.
         services.AddScoped<JurisdictionState>();
         services.AddScoped<IJurisdiction>(sp => sp.GetRequiredService<JurisdictionState>());
@@ -40,7 +45,10 @@ public static class DependencyInjection
         services.AddDbContext<PrimeDbContext>((serviceProvider, options) =>
         {
             options.UseNpgsql(connectionString, npgsql => npgsql.UseNetTopologySuite());
-            options.AddInterceptors(serviceProvider.GetRequiredService<AuditSaveChangesInterceptor>());
+            options.AddInterceptors(
+                ConcurrencyMaterializationInterceptor.Instance,
+                serviceProvider.GetRequiredService<ConcurrencyExpectationInterceptor>(),
+                serviceProvider.GetRequiredService<AuditSaveChangesInterceptor>());
         });
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<PrimeDbContext>());
 
@@ -141,16 +149,22 @@ public static class DependencyInjection
         services.AddHealthChecks()
             .AddNpgSql(connectionString, name: "postgresql", tags: ["ready"])
             .AddCheck<PostGisHealthCheck>("postgis", tags: ["ready"])
-            .AddCheck<RowLevelSecurityHealthCheck>("row-level-security", tags: ["ready"]);
+            .AddCheck<RowLevelSecurityHealthCheck>("row-level-security", tags: ["ready"])
+            .AddCheck<BackgroundJobsHealthCheck>("background-jobs", tags: ["ready"])
+            .AddCheck("database-tls", new DatabaseTlsHealthCheck(connectionString));
 
         // Background jobs (CLAUDE.md §33/§72 General Revision; ARCHITECTURE.md
         // §3.8). Packages were referenced since Phase 2 and deliberately left
         // unwired until Phase 6 actually needed them.
+        // Sliding invisibility timeout: without it the storage hands a job that has run for 30 minutes to another worker
+        // while the first is still running, so a province-wide revision ran twice at once (production-hardening.md §9, H4).
+        // The job is handed on only when its server stops renewing it.
         services.AddHangfire(config => config
             .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
             .UseSimpleAssemblyNameTypeSerializer()
             .UseRecommendedSerializerSettings()
-            .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString)));
+            .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(connectionString),
+                new PostgreSqlStorageOptions { UseSlidingInvisibilityTimeout = true }));
         services.AddHangfireServer();
         services.AddScoped<IBackgroundJobScheduler, HangfireBackgroundJobScheduler>();
 

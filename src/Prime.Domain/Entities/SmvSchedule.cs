@@ -13,8 +13,11 @@ namespace Prime.Domain.Entities;
 /// overwrite historical SMVs"). Only <see cref="WorkflowStatus.Approved"/>
 /// schedules are eligible for use by the valuation engine.
 /// </summary>
-public sealed class SmvSchedule : AuditableEntity
+public sealed class SmvSchedule : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid SmvId { get; set; }
     public Smv? Smv { get; set; }
 

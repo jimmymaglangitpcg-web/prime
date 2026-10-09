@@ -51,8 +51,8 @@ export const useSatisfyRequirement = (propertyId: string) =>
 export type TransactionAction = 'submit' | 'approve' | 'reject' | 'withdraw';
 
 export const useTransactionAction = (propertyId: string) =>
-  useTxMutation(propertyId, ({ id, action, reason }: { id: string; action: TransactionAction; reason?: string }) =>
-    apiPost<PropertyTransactionDto>(`/api/transactions/${id}/${action}`, reason === undefined ? {} : { reason }));
+  useTxMutation(propertyId, ({ id, action, reason, rowVersion }: { id: string; action: TransactionAction; reason?: string; rowVersion?: number }) =>
+    apiPost<PropertyTransactionDto>(`/api/transactions/${id}/${action}`, reason === undefined ? {} : { reason }, { ifMatch: rowVersion }));
 
 // --- Discovery summonses on a new-discovery transaction (assessment-listing-exemptions.md §4.4, Q10) ---
 

@@ -13,8 +13,11 @@ namespace Prime.Domain.Entities.Offices;
 /// that points to it, revoked early with a reason, and never deleted or
 /// sub-delegated.
 /// </summary>
-public sealed class ApprovalDelegation : AuditableEntity
+public sealed class ApprovalDelegation : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     /// <summary>The municipal office the authority is delegated to.</summary>
     public Guid OfficeId { get; set; }
     public Office? Office { get; set; }

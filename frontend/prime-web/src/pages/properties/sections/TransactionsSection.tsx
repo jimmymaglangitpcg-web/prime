@@ -20,11 +20,11 @@ import {
 } from '../../../lib/types';
 import { AddTaxDeclarationModal } from '../modals/AddTaxDeclarationModal';
 import { DiscoveryPanel } from './DiscoveryPanel';
+import { WorkflowStatusTag } from '../../../components/StatusTag';
 import { AuditHistoryCard } from '../../../components/AuditTable';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
-const statusColor: Partial<Record<WorkflowStatus, string>> = { Draft: 'default', PendingReview: 'gold', Approved: 'green', Rejected: 'red', Cancelled: 'red' };
-const statusTag = (s: WorkflowStatus) => <Tag color={statusColor[s]}>{s}</Tag>;
+const statusTag = (s: WorkflowStatus) => <WorkflowStatusTag status={s} />;
 
 /** Searchable taxpayer picker (min. 2 characters). */
 function TaxpayerPicker({ value, onChange }: { value?: string; onChange?: (v: string) => void }) {
@@ -259,7 +259,7 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
   function confirm(kind: TransactionAction, title: string, content?: string) {
     action.reset();
     // A failure shows in the drawer's alert; swallow it here so the dialog closes instead of staying open over it.
-    modal.confirm({ title, content, onOk: () => action.mutateAsync({ id: tx!.id, action: kind }).catch(() => undefined) });
+    modal.confirm({ title, content, onOk: () => action.mutateAsync({ id: tx!.id, action: kind, rowVersion: tx!.rowVersion }).catch(() => undefined) });
   }
 
   return (
@@ -399,7 +399,7 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
       <Modal title={asking === 'reject' ? 'Reject transaction' : 'Withdraw transaction'} open={asking !== null}
         okText={asking === 'reject' ? 'Reject' : 'Withdraw'} okButtonProps={{ danger: true, disabled: reason.trim() === '', loading: action.isPending }}
         onCancel={() => setAsking(null)}
-        onOk={() => asking && action.mutate({ id: tx.id, action: asking, reason: reason.trim() }, { onSuccess: () => setAsking(null) })}
+        onOk={() => asking && action.mutate({ id: tx.id, action: asking, reason: reason.trim(), rowVersion: tx.rowVersion }, { onSuccess: () => setAsking(null) })}
         destroyOnHidden>
         {action.isError && <Alert type="error" showIcon style={{ marginBottom: 12 }} title="Action failed" description={errorText(action.error)} />}
         <Typography.Paragraph>The transaction stays on record; its TDs, which never took effect, are rejected with it.</Typography.Paragraph>

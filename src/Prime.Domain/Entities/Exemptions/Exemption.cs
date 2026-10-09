@@ -29,8 +29,11 @@ public sealed class ExemptionType : EffectiveDatedConfiguration
 /// A claim of exemption for one unit (RPU), or for the part of it in one actual use (Q1, a line of its assessment).
 /// Until approved the unit stays taxable (LGC §206). Never deleted: a claim is rejected or ended, with a reason.
 /// </summary>
-public sealed class PropertyExemption : AuditableEntity
+public sealed class PropertyExemption : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public Guid PropertyId { get; set; }
     public PropertyEntity? Property { get; set; }
     public Guid RpuId { get; set; }

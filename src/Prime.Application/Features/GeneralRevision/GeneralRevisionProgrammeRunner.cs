@@ -8,6 +8,7 @@ using Prime.Application.Features.Properties;
 using Prime.Application.Features.TaxDeclarations;
 using Prime.Application.Features.Valuation;
 using Prime.Domain.Entities;
+using Prime.Domain.Exceptions;
 using Prime.Domain.Enums;
 
 namespace Prime.Application.Features.GeneralRevision;
@@ -37,15 +38,26 @@ public sealed class GeneralRevisionProgrammeRunner(
         {
             return;
         }
+        // Run again by the scheduler (it re-queues the job of a server that stopped mid-run, and retries): a finished run is
+        // not repeated, and a run that was under way resumes instead of starting over (production-hardening.md §9, H4).
+        if (job.Status is JobExecutionStatus.Completed or JobExecutionStatus.Failed)
+        {
+            return;
+        }
+        var resumed = job.Status == JobExecutionStatus.Running;
         currentUser.ActAsForBackgroundJob(job.StartedBy);
         job.Status = JobExecutionStatus.Running;
         await db.SaveChangesAsync(cancellationToken);
         var programme = await db.GeneralRevisionProgrammes.AsNoTracking().Include(x => x.Scope).FirstAsync(x => x.Id == programmeId, cancellationToken);
+        if (resumed)
+        {
+            (job, itemIds) = await ResumeAsync(job, programmeId, itemIds, cancellationToken);
+        }
         try
         {
             if (job.Mode == GeneralRevisionRunMode.Compile)
             {
-                await CompileAsync(job, programme, cancellationToken);
+                job = await CompileAsync(job, programme, cancellationToken);
             }
             else if (job.Mode == GeneralRevisionRunMode.Value)
             {
@@ -54,6 +66,7 @@ public sealed class GeneralRevisionProgrammeRunner(
                     job = await ValueAsync(job, programme, itemId, cancellationToken);
                     job.ProcessedCount++;
                     await db.SaveChangesAsync(cancellationToken);
+                    job = await ReleaseAsync(job.Id, cancellationToken);
                 }
             }
             else
@@ -73,6 +86,7 @@ public sealed class GeneralRevisionProgrammeRunner(
                         job = await ActAsync(job, itemId, cancellationToken);
                         job.ProcessedCount++;
                         await db.SaveChangesAsync(cancellationToken);
+                        job = await ReleaseAsync(job.Id, cancellationToken);
                     }
                 }
                 var done = job.ProcessedCount - job.FailedCount;
@@ -94,8 +108,47 @@ public sealed class GeneralRevisionProgrammeRunner(
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Forgets what the last item loaded and wrote, and returns the job tracked again. Without it the change tracker grows
+    /// with every item, and each save scans all of it: on a 3,200-unit DEMO run the rate fell from 311 to 74 units a minute
+    /// within ten minutes (production-hardening.md §9, H4).
+    /// </summary>
+    private async Task<GeneralRevisionJob> ReleaseAsync(Guid jobId, CancellationToken ct)
+    {
+        db.ClearChangeTracker();
+        return await db.GeneralRevisionJobs.FirstAsync(x => x.Id == jobId, ct);
+    }
+
+    /// <summary>
+    /// Where an interrupted run picks up. A value run goes through its list again and skips the items it already finished
+    /// (<see cref="ValueAsync"/>), so its counts start again from zero. A batch action keeps only the items still in the state
+    /// it acts on; the others were done before the interruption, or refused with an issue, which is counted again.
+    /// </summary>
+    private async Task<(GeneralRevisionJob Job, IReadOnlyList<Guid> ItemIds)> ResumeAsync(GeneralRevisionJob job, Guid programmeId,
+        IReadOnlyList<Guid> itemIds, CancellationToken ct)
+    {
+        if (job.Mode is not { } mode || mode is GeneralRevisionRunMode.Compile or GeneralRevisionRunMode.Value)
+        {
+            (job.ProcessedCount, job.FailedCount) = (0, 0);
+        }
+        else
+        {
+            var waiting = (await GeneralRevisionProgrammeService.Actionable(db,
+                    db.GeneralRevisionItems.IgnoreQueryFilters().Where(x => x.GeneralRevisionProgrammeId == programmeId), mode)
+                .Select(x => x.Id).ToListAsync(ct)).ToHashSet();
+            var remaining = itemIds.Where(waiting.Contains).ToList();
+            job.ProcessedCount = itemIds.Count - remaining.Count;
+            job.FailedCount = await db.GeneralRevisionRunIssues.CountAsync(x => x.GeneralRevisionJobId == job.Id && x.Failed, ct);
+            itemIds = remaining;
+        }
+        logger.LogWarning("General revision run {JobId} resumed ({Mode}): {Count} item(s) to go through{Skipping}", job.Id, job.Mode, itemIds.Count,
+            job.Mode == GeneralRevisionRunMode.Value ? ", skipping those it finished" : "");
+        await db.SaveChangesAsync(ct);
+        return (job, itemIds);
+    }
+
     /// <summary>Adds the units in scope not yet in the programme, in batches; the count is what was added.</summary>
-    private async Task CompileAsync(GeneralRevisionJob job, GeneralRevisionProgramme programme, CancellationToken ct)
+    private async Task<GeneralRevisionJob> CompileAsync(GeneralRevisionJob job, GeneralRevisionProgramme programme, CancellationToken ct)
     {
         var municipalities = programme.Scope.Select(s => s.MunicipalityId).ToList();
         var existing = (await db.GeneralRevisionItems.IgnoreQueryFilters().Where(x => x.GeneralRevisionProgrammeId == programme.Id)
@@ -125,8 +178,10 @@ public sealed class GeneralRevisionProgrammeRunner(
             }));
             job.ProcessedCount += batch.Length;
             await db.SaveChangesAsync(ct);
+            job = await ReleaseAsync(job.Id, ct);
         }
         job.Remarks = adding.Count == 0 ? "Every unit in scope is already compiled." : $"{adding.Count} unit(s) compiled.";
+        return job;
     }
 
     /// <summary>Returns the job as tracked afterwards (reloaded when an unexpected error cleared the change tracker).</summary>
@@ -136,6 +191,12 @@ public sealed class GeneralRevisionProgrammeRunner(
         if (item is null)
         {
             job.FailedCount++;
+            return job;
+        }
+        // Finished by this run before it was interrupted. One it had only reset (still Pending) is valued again.
+        if (item.LastRunId == job.Id && item.Status != GeneralRevisionItemStatus.Pending)
+        {
+            job.FailedCount += item.Status == GeneralRevisionItemStatus.Failed ? 1 : 0;
             return job;
         }
         // A draft from an earlier run gives way to the new one; anything already in review is left alone.
@@ -149,6 +210,14 @@ public sealed class GeneralRevisionProgrammeRunner(
             {
                 earlier.Status = WorkflowStatus.Cancelled;
             }
+        }
+        // Reset by this run but not finished: the run stopped after drafting the unit's assessment and before saving the item, so
+        // that draft is not on the item and would stay behind as a second one (production-hardening.md §9, H4).
+        if (item.LastRunId == job.Id)
+        {
+            var strays = await db.Assessments.Where(a => a.RpuId == item.RpuId && a.RevisionReference == job.Id
+                && a.Status == WorkflowStatus.Draft && a.Id != item.AssessmentId).ToListAsync(ct);
+            strays.ForEach(a => a.Status = WorkflowStatus.Cancelled);
         }
         // Reset (a Failed item keeps no reason without its status: CK_GeneralRevisionItems_Failed).
         (item.Status, item.AssessmentId, item.ValuationId, item.NewMarketValue, item.NewAssessedValue, item.FailureReason) =
@@ -195,7 +264,7 @@ public sealed class GeneralRevisionProgrammeRunner(
             db.ClearChangeTracker();
             item = await db.GeneralRevisionItems.IgnoreQueryFilters().FirstAsync(x => x.Id == itemId, ct);
             job = await db.GeneralRevisionJobs.FirstAsync(x => x.Id == job.Id, ct);
-            Fail(job, item, "An unexpected error stopped this unit's valuation; see the server log.");
+            Fail(job, item, ex is DomainException ? ex.Message : "An unexpected error stopped this unit's valuation; see the server log.");
         }
         return job;
     }
@@ -252,6 +321,7 @@ public sealed class GeneralRevisionProgrammeRunner(
             }
             job.ProcessedCount += group.Count;
             await db.SaveChangesAsync(ct);
+            job = await ReleaseAsync(job.Id, ct);
         }
         job.ProcessedCount = job.TotalCount;
         return job;
@@ -288,6 +358,7 @@ public sealed class GeneralRevisionProgrammeRunner(
             }
             job.ProcessedCount += notice.Count();
             await db.SaveChangesAsync(ct);
+            job = await ReleaseAsync(job.Id, ct);
         }
         job.ProcessedCount = job.TotalCount;
         return job;

@@ -62,8 +62,8 @@ export type AssessmentAction = 'submit-for-review' | 'approve' | 'reject' | 'pos
 export function useAssessmentAction(rpuId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, action, reason }: { id: string; action: AssessmentAction; reason?: string }) =>
-      apiPost<AssessmentSummaryDto>(`/api/assessments/${id}/${action}`, action === 'reject' ? { reason } : {}),
+    mutationFn: ({ id, action, reason, rowVersion }: { id: string; action: AssessmentAction; reason?: string; rowVersion?: number }) =>
+      apiPost<AssessmentSummaryDto>(`/api/assessments/${id}/${action}`, action === 'reject' ? { reason } : {}, { ifMatch: rowVersion }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rpus', rpuId] });
       queryClient.invalidateQueries({ queryKey: ['properties'] });

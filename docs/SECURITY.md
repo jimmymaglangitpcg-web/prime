@@ -194,7 +194,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'
 |---|---|
 | Every release | `dotnet list package --vulnerable --include-transitive`; `npm audit --omit=dev` in `frontend/prime-web` |
 | Every release | A secret scan of the new commits |
-| Continuously | `/health`: database, PostGIS, `row-level-security`, `supabase-auth` |
+| Continuously | `/health`: database, PostGIS, `row-level-security`, `supabase-auth`, `background-jobs`, `database-tls` (Degraded until the database certificate is verified with `SSL Mode=VerifyFull`) |
 | After Supabase changes | §2.2 manual items |
 | Quarterly | The role–permission matrix and the list of active users and their offices; the audit trail for unusual exports |
 

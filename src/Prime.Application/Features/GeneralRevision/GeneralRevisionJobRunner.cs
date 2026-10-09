@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Prime.Application.Common;
 using Prime.Application.Common.Interfaces;
 using Prime.Application.Features.Assessments;
@@ -32,7 +33,8 @@ public sealed class GeneralRevisionJobRunner(
     ICurrentUserService currentUser,
     IValuationService valuationService,
     IAssessmentService assessmentService,
-    IClock clock)
+    IClock clock,
+    ILogger<GeneralRevisionJobRunner> logger)
 {
     public async Task RunAsync(Guid jobId, IReadOnlyList<Guid> rpuIds, int revisionYear, CancellationToken cancellationToken)
     {
@@ -48,9 +50,23 @@ public sealed class GeneralRevisionJobRunner(
 
         foreach (var rpuId in rpuIds)
         {
-            await ProcessRpuAsync(job, rpuId, revisionYear, cancellationToken);
+            try
+            {
+                await ProcessRpuAsync(job, rpuId, revisionYear, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One unit's error is that unit's failure; the batch goes on (§33 VALIDATE). What it left unsaved is dropped.
+                logger.LogError(ex, "General revision job {JobId}: unit {RpuId} failed", jobId, rpuId);
+                db.ClearChangeTracker();
+                job = await db.GeneralRevisionJobs.FirstAsync(x => x.Id == jobId, cancellationToken);
+                job.FailedCount++;
+            }
             job.ProcessedCount++;
             await db.SaveChangesAsync(cancellationToken);
+            // A tracker that keeps every unit's rows makes each save slower than the last (production-hardening.md §9, H4).
+            db.ClearChangeTracker();
+            job = await db.GeneralRevisionJobs.FirstAsync(x => x.Id == jobId, cancellationToken);
         }
 
         job.Status = job.TotalCount > 0 && job.FailedCount == job.TotalCount ? JobExecutionStatus.Failed : JobExecutionStatus.Completed;

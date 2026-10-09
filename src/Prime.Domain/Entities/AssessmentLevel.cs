@@ -18,8 +18,11 @@ namespace Prime.Domain.Entities;
 /// the same way here rather than inventing a dangling FK or a new entity
 /// out of this phase's scope.
 /// </summary>
-public sealed class AssessmentLevel : AuditableEntity
+public sealed class AssessmentLevel : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public string OrdinanceNumber { get; set; } = string.Empty;
     public DateOnly? OrdinanceDate { get; set; }
 

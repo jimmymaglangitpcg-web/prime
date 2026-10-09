@@ -5,8 +5,11 @@ using Prime.Domain.Enums;
 namespace Prime.Domain.Entities;
 
 /// <summary>CLAUDE.md §20.</summary>
-public sealed class Taxpayer : AuditableEntity
+public sealed class Taxpayer : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     public TaxpayerType TaxpayerType { get; set; }
 
     // Individual

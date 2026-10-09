@@ -74,7 +74,7 @@ export function LandAppraisalRows({ land, rpuId, propertyId }: { land: LandDto; 
         ]} />
 
       {section('Market value adjustments', 'adjustment', 'Add adjustment')}
-      <Table size="small" rowKey="id" dataSource={land.adjustments} pagination={false}
+      <Table size="small" rowKey="id" dataSource={land.adjustments} pagination={false} scroll={{ x: true }}
         locale={{ emptyText: 'None' }}
         columns={[
           { title: 'Factor', dataIndex: 'factorCode' },
@@ -220,7 +220,7 @@ function AdjustmentDialog({ land, rpuId, propertyId, onClose }: DialogProps) {
 
 /** The facts the adjustment factors read, changed with a reason (audited); valuations already made keep their values. */
 function InputsDialog({ land, rpuId, propertyId, onClose }: DialogProps) {
-  const update = useUpdateLandAppraisalInputs(land.id, rpuId, propertyId);
+  const update = useUpdateLandAppraisalInputs(land.id, rpuId, propertyId, land.rowVersion);
   const { data: roadTypes = [] } = useRoadTypes();
   return (
     <Modal open title="What the adjustment factors read" footer={null} onCancel={onClose} destroyOnHidden>

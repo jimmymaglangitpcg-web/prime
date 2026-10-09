@@ -547,7 +547,7 @@ public sealed class TransactionService(
                 await transaction.CommitAsync(cancellationToken);
             }
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException) // a row-version conflict is a 409 CONCURRENCY_CONFLICT
         {
             return Fail("PROPERTY_TRANSACTION_APPROVAL_CONFLICT",
                 "Another change to these records happened at the same time. Nothing was changed; reload and try again.");
@@ -816,7 +816,8 @@ public sealed class TransactionService(
             tx.TaxClearance is { } c ? new TransferTaxClearanceDto(c.CarNumber, c.CarDate, c.TransferorName, c.TransferorTin, c.TransfereeTin,
                 c.CapitalGainsTax, c.CapitalGainsTaxReceipt, c.CapitalGainsTaxDate, c.DocumentaryStampTax, c.DocumentaryStampTaxReceipt,
                 c.DocumentaryStampTaxDate, c.TransferTax, c.TransferTaxReceipt, c.TransferTaxDate, c.Remarks, c.Consideration) : null,
-            tx.RelocatedRpuId);
+            tx.RelocatedRpuId,
+            tx.RowVersion);
     }
 
     private static Result<PropertyTransactionDto> NotFound() => Fail("PROPERTY_TRANSACTION_NOT_FOUND", "No property transaction was found with the given id.");

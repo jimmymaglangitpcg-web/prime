@@ -233,7 +233,7 @@ public sealed class SubmissionService(
                 await transaction.CommitAsync(ct);
             }
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException) // a row-version conflict is a 409 CONCURRENCY_CONFLICT
         {
             return Fail("ROLL_SUBMISSION_EXISTS", $"The roll for {first:MMMM yyyy} was submitted at the same time by someone else.");
         }

@@ -12,8 +12,11 @@ namespace Prime.Domain.Entities.Offices;
 /// themselves are configuration. An office alone grants nothing: access comes
 /// from approved <see cref="OfficeJurisdiction"/>s and <see cref="OfficeAssignment"/>s.
 /// </summary>
-public sealed class Office : AuditableEntity
+public sealed class Office : AuditableEntity, IVersioned
 {
+    /// <summary>Row version (xmin): optimistic concurrency, see <see cref="IVersioned"/>.</summary>
+    public uint RowVersion { get; set; }
+
     /// <summary>Stable code, never changed once created.</summary>
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
