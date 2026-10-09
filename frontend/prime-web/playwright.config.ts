@@ -15,9 +15,12 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 15_000 },
   forbidOnly: !!process.env.CI,
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+  // On GitHub the errors also become annotations of the run, readable without downloading the report.
+  reporter: process.env.CI ? [['list'], ['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: web,
+    // The office's browsers run in the LGU's time zone, as the API's Lgu:TimeZone does; a CI runner's would be UTC.
+    timezoneId: process.env.E2E_BROWSER_TIME_ZONE ?? 'Asia/Manila',
     viewport: { width: 1400, height: 900 },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

@@ -31,7 +31,8 @@ test('a property is registered with the keyboard alone, with the focus always vi
     await page.keyboard.press('Tab');
     expect(await focusShows()).toBe('visible');
     await page.keyboard.type(choice);
-    await expect(page.locator('.ant-select-item-option-active:visible')).toContainText(choice);
+    // The option typed for, not the previous select's (its list may still be closing).
+    await expect(page.locator('.ant-select-item-option-active:visible').filter({ hasText: choice })).toBeVisible();
     await page.keyboard.press('Enter');
   }
   await page.keyboard.press('Tab'); // zone (optional)
