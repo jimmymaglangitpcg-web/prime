@@ -11,6 +11,7 @@ import { ApiRequestError } from '../../../lib/apiClient';
 import {
   exemptionStatusLabel, parseExemptionAppliesTo, type ExemptionStatus, type PropertyExemptionDto, type PropertyOwnerDto, type RpuSummaryDto,
 } from '../../../lib/types';
+import { useCan } from '../../../api/offices';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
 const statusColor: Record<ExemptionStatus, string> = { Claimed: 'orange', ProofFiled: 'blue', Approved: 'green', Rejected: 'red', Ended: 'default' };
@@ -21,6 +22,7 @@ type Action = { kind: 'evidence' | 'approve' | 'reject' | 'end'; claim: Property
 /** The claims table with its actions; used on the property profile and the exemption worklist. */
 export function ExemptionClaimsTable({ claims, loading, showProperty }: { claims: PropertyExemptionDto[]; loading: boolean; showProperty?: boolean }) {
   const [action, setAction] = useState<Action | null>(null);
+  const can = useCan();
   return (
     <>
       <Table<PropertyExemptionDto>
@@ -46,8 +48,8 @@ export function ExemptionClaimsTable({ claims, loading, showProperty }: { claims
             title: 'Actions', render: (_, c) => (
               <Space wrap>
                 {(c.status === 'Claimed' || c.status === 'ProofFiled') && <Button size="small" onClick={() => setAction({ kind: 'evidence', claim: c })}>File proof</Button>}
-                {c.status === 'ProofFiled' && <Button size="small" type="primary" onClick={() => setAction({ kind: 'approve', claim: c })}>Approve</Button>}
-                {(c.status === 'Claimed' || c.status === 'ProofFiled') && <Button size="small" danger onClick={() => setAction({ kind: 'reject', claim: c })}>Reject</Button>}
+                {c.status === 'ProofFiled' && can('exemption.approve') && <Button size="small" type="primary" onClick={() => setAction({ kind: 'approve', claim: c })}>Approve</Button>}
+                {(c.status === 'Claimed' || c.status === 'ProofFiled') && can('exemption.approve') && <Button size="small" danger onClick={() => setAction({ kind: 'reject', claim: c })}>Reject</Button>}
                 {c.status === 'Approved' && <Button size="small" onClick={() => setAction({ kind: 'end', claim: c })}>End</Button>}
               </Space>
             ),

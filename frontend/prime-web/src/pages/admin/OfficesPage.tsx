@@ -11,6 +11,7 @@ import { useMunicipalities, useProvinces } from '../../api/referenceData';
 import { ApiRequestError } from '../../lib/apiClient';
 import { DelegationsTab } from './DelegationsTab';
 import { AccountsTab } from './AccountsTab';
+import { useCan } from '../../api/offices';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error)?.message);
 const day = (d: Dayjs | null | undefined) => (d ? d.format('YYYY-MM-DD') : '');
@@ -117,6 +118,7 @@ function JurisdictionsTab() {
   const provinces = useProvinces();
   const create = useCreateJurisdiction();
   const approve = useApproveJurisdiction();
+  const can = useCan();
   const { context, ok, fail } = useToast();
   const [adding, setAdding] = useState(false);
   const [provinceId, setProvinceId] = useState<string>();
@@ -140,7 +142,7 @@ function JurisdictionsTab() {
           { title: 'Status', dataIndex: 'status', render: statusTag },
           { title: 'Basis', dataIndex: 'legalBasis', ellipsis: true },
           {
-            title: '', render: (_, j) => j.status === 'Draft'
+            title: '', render: (_, j) => j.status === 'Draft' && can('users.approve')
               ? <Button size="small" loading={approve.isPending && approve.variables === j.id} onClick={() => approve.mutate(j.id, { onSuccess: () => ok('Approved.'), onError: fail })}>Approve</Button>
               : null,
           },
@@ -177,6 +179,7 @@ function AssignmentsTab() {
   const roles = useRoles();
   const create = useCreateAssignment();
   const approve = useApproveAssignment();
+  const can = useCan();
   const end = useEndAssignment();
   const { context, ok, fail } = useToast();
   const [adding, setAdding] = useState(false);
@@ -210,7 +213,7 @@ function AssignmentsTab() {
           {
             title: '', render: (_, a) => (
               <Space>
-                {a.status === 'Draft' && (
+                {a.status === 'Draft' && can('users.approve') && (
                   <Button size="small" loading={approve.isPending && approve.variables === a.id}
                     onClick={() => approve.mutate(a.id, { onSuccess: () => ok('Approved.'), onError: fail })}>Approve</Button>
                 )}

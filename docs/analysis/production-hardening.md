@@ -443,13 +443,19 @@ Supabase project settings.
   package check; frontend type-check, build, lint and audit; gitleaks over the history; the end-to-end suite on demand.
   The API's Development settings file is not in git, so the jobs pass the connection string and `DevAuth__Enabled` as
   environment variables. Not run yet: it needs a push. Whether the integration tests pass on a database built from
-  migrations alone has never been checked (they have always run on `prime_dev`); a fresh local database needs PostGIS
-  created by a superuser, which the `prime` role is not.
+  migrations alone had never been checked. First runs (2026-10-09): migrations applied, 22 integration tests failed on
+  the empty reference data; reproduced on a fresh local `prime_ci` (PostGIS created by the `postgres` superuser). CI now
+  runs `seed-e2e` before the tests, and a test that assumed the order of two same-transaction payments ignores it. Run
+  `a619919`: **all jobs green** (the end-to-end job is on demand and has not been run on GitHub yet).
 - **Found and fixed (UI): actions offered to users who cannot take them.** The maker (an encoder) was shown Approve on
   an assessment and on a TD, and the click ended in a 403. Assessment submit, approve, reject and post and TD submit,
   approve and reject now show only to a user whose roles hold the API's permission for them (`useCan`). Separation of
   duties stays with the API: the assessor who prepared an assessment still sees Approve and is refused, with the reason
-  shown, which the suite checks. Other screens still show some actions regardless of permission; the API refuses them.
+  shown, which the suite checks. Extended the same day to the other decision actions: configuration approvals
+  (`ApproveButton`, transaction and exemption types, checklist steps: `config.approve`), office jurisdictions,
+  assignments and delegations (`users.approve`), exemption claims (`exemption.approve`), property transactions
+  (`transaction.prepare` / `transaction.approve`) and issuing notices (`notice.issue`). Role-permission changes, user status
+  changes and sign-up decisions were already gated; the frozen collection screens are left as they are.
 - **Found and fixed (UI): a new taxpayer shown as its id.** After "Register a new taxpayer" in the party dialog, the
   Taxpayer field showed the raw id; the new taxpayer is now an option and shows by name.
 - **Found and fixed (UI): unit values never shown.** The land and building panels read the records' own market and
@@ -469,5 +475,5 @@ Supabase project settings.
 - **Reviewed, no change needed:** Swagger is served only in Development; list endpoints over growing tables are paged or
   capped (approval queue and register runs at 200, others scoped to one record or a date range). EF warns that the H4
   capped count uses `Take` without `OrderBy`; counting does not depend on order, so it is harmless.
-- **Still to do in H5:** run CI once pushed (and fix what a fresh database shows); a person's manual keyboard pass;
-  the rest of the UI review (permission-aware actions on the other screens, printable views in Chrome and Edge).
+- **Still to do in H5:** run the end-to-end job on GitHub once; a person's manual keyboard pass; printable views in
+  Chrome and Edge.

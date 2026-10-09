@@ -99,6 +99,8 @@ export async function choose(page: Page, label: string | RegExp, option: string)
   const name = typeof label === 'string' ? new RegExp(`^\\*?\\s*${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) : label;
   const field = page.getByRole('combobox', { name });
   const shown = field.locator('xpath=ancestor::div[contains(concat(" ", @class, " "), " ant-select ")][1]');
+  // Already chosen (a dialog may propose the only option): nothing to do.
+  if ((await shown.textContent())?.includes(option)) return;
   // Until the select shows the choice: an option list that re-renders as its data arrives can swallow a click.
   await expect(async () => {
     await field.click();
@@ -107,7 +109,7 @@ export async function choose(page: Page, label: string | RegExp, option: string)
     }
     await page.locator('.ant-select-item-option:visible').filter({ hasText: option }).first().click({ timeout: 5_000 });
     await expect(shown).toContainText(option, { timeout: 2_000 });
-  }).toPass({ timeout: 20_000 });
+  }).toPass({ timeout: 30_000 });
 }
 
 /** An issued or previewed form: the document page renders it in an iframe. */

@@ -148,10 +148,12 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: frontend/prime-web/package-lock.json
+      - name: Build
+        run: dotnet build Prime.slnx
       - name: Apply migrations to the CI database
         run: |
           dotnet tool install --global dotnet-ef --version 10.0.12
-          dotnet ef database update --project src/Prime.Infrastructure --startup-project src/Prime.Infrastructure
+          dotnet ef database update --project src/Prime.Infrastructure --startup-project src/Prime.Infrastructure --no-build
       - name: Install
         working-directory: frontend/prime-web
         run: |

@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import { useApproveExemptionType, useCreateExemptionType, useExemptionTypes } from '../../api/exemptions';
 import { ApiRequestError } from '../../lib/apiClient';
 import { exemptionKinds, parseExemptionAppliesTo, type ExemptionTypeDto, type WorkflowStatus } from '../../lib/types';
+import { useCan } from '../../api/offices';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
 const statusColor: Partial<Record<WorkflowStatus, string>> = { Draft: 'default', Approved: 'green', Cancelled: 'red' };
@@ -19,6 +20,7 @@ export function ExemptionTypesTab() {
   const { data = [], isLoading } = useExemptionTypes(false);
   const create = useCreateExemptionType();
   const approve = useApproveExemptionType();
+  const can = useCan();
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm();
   const [toast, ctx] = message.useMessage();
@@ -43,7 +45,7 @@ export function ExemptionTypesTab() {
           { title: 'In force', render: (_, t) => `${t.effectiveDate} → ${t.endDate ?? 'open'}` },
           { title: 'Status', dataIndex: 'status', render: (s: WorkflowStatus) => <Tag color={statusColor[s]}>{s}</Tag> },
           {
-            title: 'Actions', render: (_, t) => t.status === 'Draft' && (
+            title: 'Actions', render: (_, t) => t.status === 'Draft' && can('config.approve') && (
               <Button size="small" type="primary" loading={approve.isPending}
                 onClick={() => approve.mutate(t.id, { onError: (e) => toast.error(errorText(e)) })}>Approve</Button>
             ),

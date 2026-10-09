@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import { useApproveTransactionType, useCreateTransactionType, useTransactionTypes } from '../../api/transactions';
 import { ApiRequestError } from '../../lib/apiClient';
 import { effectivityRules, transactionKinds, type EffectivityRule, type TransactionTypeDto, type WorkflowStatus } from '../../lib/types';
+import { useCan } from '../../api/offices';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
 const statusColor: Partial<Record<WorkflowStatus, string>> = { Draft: 'default', Approved: 'green', Cancelled: 'red' };
@@ -18,6 +19,7 @@ export function TransactionTypesTab() {
   const { data = [], isLoading } = useTransactionTypes(false);
   const create = useCreateTransactionType();
   const approve = useApproveTransactionType();
+  const can = useCan();
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm();
   const rule = Form.useWatch('effectivityRule', form) as EffectivityRule | undefined;
@@ -58,7 +60,7 @@ export function TransactionTypesTab() {
           { title: 'In force', render: (_, t) => `${t.effectiveDate} → ${t.endDate ?? 'open'}` },
           { title: 'Status', dataIndex: 'status', render: (s: WorkflowStatus) => <Tag color={statusColor[s]}>{s}</Tag> },
           {
-            title: 'Actions', render: (_, t) => t.status === 'Draft' && (
+            title: 'Actions', render: (_, t) => t.status === 'Draft' && can('config.approve') && (
               <Button size="small" type="primary" loading={approve.isPending}
                 onClick={() => approve.mutate(t.id, { onError: (e) => toast.error(errorText(e)) })}>Approve</Button>
             ),

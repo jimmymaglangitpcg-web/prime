@@ -22,6 +22,7 @@ import { AddTaxDeclarationModal } from '../modals/AddTaxDeclarationModal';
 import { DiscoveryPanel } from './DiscoveryPanel';
 import { WorkflowStatusTag } from '../../../components/StatusTag';
 import { AuditHistoryCard } from '../../../components/AuditTable';
+import { useCan } from '../../../api/offices';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
 const statusTag = (s: WorkflowStatus) => <WorkflowStatusTag status={s} />;
@@ -239,6 +240,7 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
   onClose: () => void;
 }) {
   const action = useTransactionAction(propertyId);
+  const can = useCan();
   const satisfy = useSatisfyRequirement(propertyId);
   const [modal, modalContext] = Modal.useModal();
   const [asking, setAsking] = useState<'reject' | 'withdraw' | null>(null);
@@ -288,8 +290,8 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
       )}
 
       <Space wrap style={{ marginBottom: 16 }}>
-        {tx.status === 'Draft' && <Button type="primary" onClick={() => confirm('submit', 'Submit for review?', 'Mandatory requirements must be satisfied. Its TDs go for review with it.')}>Submit</Button>}
-        {tx.status === 'PendingReview' && (
+        {tx.status === 'Draft' && can('transaction.prepare') && <Button type="primary" onClick={() => confirm('submit', 'Submit for review?', 'Mandatory requirements must be satisfied. Its TDs go for review with it.')}>Submit</Button>}
+        {tx.status === 'PendingReview' && can('transaction.approve') && (
           <Button type="primary" onClick={() => confirm('approve', 'Approve this transaction?',
             'Approval applies it: its TDs are approved (cancelling the TDs they replace), listed TDs are cancelled' + (tx.kind === 'Transfer'
               ? ', and the current owners are replaced by the new parties.'
@@ -301,7 +303,7 @@ function TransactionDrawer({ tx, propertyId, rpus, onClose }: {
             Approve
           </Button>
         )}
-        {tx.status === 'PendingReview' && <Button danger onClick={() => { setAsking('reject'); setReason(''); action.reset(); }}>Reject</Button>}
+        {tx.status === 'PendingReview' && can('transaction.approve') && <Button danger onClick={() => { setAsking('reject'); setReason(''); action.reset(); }}>Reject</Button>}
         {editable && <Button onClick={() => { setAsking('withdraw'); setReason(''); action.reset(); }}>Withdraw</Button>}
       </Space>
 

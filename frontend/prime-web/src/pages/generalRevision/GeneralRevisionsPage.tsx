@@ -13,6 +13,7 @@ import {
   gateLabel, generalRevisionStatusColor, type ChecklistStepDefinitionDto, type GeneralRevisionGate, type GeneralRevisionStatus, type GeneralRevisionSummaryDto,
 } from '../../lib/generalRevisionTypes';
 import type { WorkflowStatus } from '../../lib/types';
+import { useCan } from '../../api/offices';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
 
@@ -97,6 +98,7 @@ const statusColor: Partial<Record<WorkflowStatus, string>> = { Draft: 'default',
 function ChecklistTemplateCard() {
   const { data = [], isLoading } = useChecklistStepDefinitions();
   const approve = useApproveChecklistStepDefinition();
+  const can = useCan();
   const [adding, setAdding] = useState(false);
   return (
     <Card title="Checklist template (general revision instructions)" size="small"
@@ -118,7 +120,7 @@ function ChecklistTemplateCard() {
           { title: 'Basis', dataIndex: 'legalBasis' },
           { title: 'Status', dataIndex: 'status', render: (s: WorkflowStatus) => <Tag color={statusColor[s]}>{s}</Tag> },
           {
-            title: '', render: (_, r) => r.status === 'Draft' && (
+            title: '', render: (_, r) => r.status === 'Draft' && can('config.approve') && (
               <Button size="small" loading={approve.isPending} onClick={() => approve.mutate(r.id)}>Approve</Button>
             ),
           },

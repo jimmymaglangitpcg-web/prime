@@ -7,6 +7,7 @@ import {
   type ApprovalDelegationDto, type ApprovalSubjectType, type DelegationState, type RpuType,
 } from '../../api/offices';
 import { ApiRequestError } from '../../lib/apiClient';
+import { useCan } from '../../api/offices';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error)?.message);
 const day = (d: Dayjs | null | undefined) => (d ? d.format('YYYY-MM-DD') : '');
@@ -28,6 +29,7 @@ const stateLabel: Record<DelegationState, string> = {
  * signing date, the municipal assessor gives final approval of the records it covers.
  */
 export function DelegationsTab() {
+  const can = useCan();
   const rows = useDelegations();
   const offices = useOffices();
   const { create, approve, reject, revoke } = useDelegationActions();
@@ -77,7 +79,7 @@ export function DelegationsTab() {
           {
             title: '', render: (_, d) => (
               <Space>
-                {d.status === 'Draft' && (
+                {d.status === 'Draft' && can('users.approve') && (
                   <>
                     <Button size="small" loading={approve.isPending && approve.variables === d.id}
                       onClick={() => approve.mutate(d.id, { onSuccess: () => toast.success('Approved.'), onError: fail })}>Approve</Button>

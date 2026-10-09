@@ -16,6 +16,7 @@ import {
   type RpuSummaryDto, cancellationGroundLabel, descriptiveNoticeReasons, noticeReasonLabel, serviceModeLabel,
 } from '../../../lib/types';
 import { PrintFormButton } from '../../../components/PrintFormButton';
+import { useCan } from '../../../api/offices';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
 const statusColor: Record<NoticeStatus, string> = { Draft: 'default', Issued: 'blue', Served: 'green', Cancelled: 'red' };
@@ -28,6 +29,7 @@ const statusColor: Record<NoticeStatus, string> = { Draft: 'default', Issued: 'b
 export function NoticesSection({ propertyId, rpus, owners }: { propertyId: string; rpus: RpuSummaryDto[]; owners: PropertyOwnerDto[] }) {
   const { data = [], isLoading } = usePropertyNotices(propertyId);
   const issue = useIssueNotice(propertyId);
+  const can = useCan();
   const [generating, setGenerating] = useState(false);
   const [combining, setCombining] = useState(false);
   const [serving, setServing] = useState<NoticeDto | null>(null);
@@ -72,7 +74,7 @@ export function NoticesSection({ propertyId, rpus, owners }: { propertyId: strin
           {
             title: 'Actions', render: (_, n) => (
               <Space size={4} wrap>
-                {n.status === 'Draft' && <Button size="small" type="primary" loading={issue.isPending} onClick={() => issue.mutate(n.id)}>Issue</Button>}
+                {n.status === 'Draft' && can('notice.issue') && <Button size="small" type="primary" loading={issue.isPending} onClick={() => issue.mutate(n.id)}>Issue</Button>}
                 {n.status === 'Issued' && <Button size="small" type="primary" onClick={() => setServing(n)}>Record service</Button>}
                 {n.status !== 'Cancelled' && <PrintFormButton formCode="NOTICE_OF_ASSESSMENT" subjectId={n.id} issuable={n.status === 'Issued' || n.status === 'Served'} />}
                 {(n.status === 'Draft' || n.status === 'Issued') && (
@@ -107,6 +109,7 @@ export function NoticesSection({ propertyId, rpus, owners }: { propertyId: strin
 function CancellationNoticesTable({ propertyId }: { propertyId: string }) {
   const { data = [], isLoading } = usePropertyNoticesOfCancellation(propertyId);
   const issue = useIssueNoticeOfCancellation(propertyId);
+  const can = useCan();
   const recordService = useRecordNoticeOfCancellationService(propertyId);
   const cancel = useCancelNoticeOfCancellation(propertyId);
   const [serving, setServing] = useState<NoticeOfCancellationDto | null>(null);
@@ -140,7 +143,7 @@ function CancellationNoticesTable({ propertyId }: { propertyId: string }) {
           {
             title: 'Actions', render: (_, n) => (
               <Space size={4} wrap>
-                {n.status === 'Draft' && <Button size="small" type="primary" loading={issue.isPending} onClick={() => issue.mutate(n.id)}>Issue</Button>}
+                {n.status === 'Draft' && can('notice.issue') && <Button size="small" type="primary" loading={issue.isPending} onClick={() => issue.mutate(n.id)}>Issue</Button>}
                 {n.status === 'Issued' && <Button size="small" type="primary" onClick={() => { recordService.reset(); setServing(n); }}>Record service</Button>}
                 {n.status !== 'Cancelled' && <PrintFormButton formCode="NOTICE_OF_CANCELLATION" subjectId={n.id} issuable={n.status === 'Issued' || n.status === 'Served'} />}
                 {(n.status === 'Draft' || n.status === 'Issued') && (
