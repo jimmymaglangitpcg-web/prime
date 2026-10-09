@@ -15,7 +15,9 @@ export const apiUrl = process.env.E2E_API_URL ?? 'http://localhost:5221';
 /** A short tag that keeps this run's PINs, names and numbers apart from earlier runs. */
 export const runTag = () => Math.random().toString(16).slice(2, 8).toUpperCase();
 
-export const today = () => new Date().toISOString().slice(0, 10);
+/** Today in the LGU's time zone (the API's Lgu:TimeZone), which values and assesses as of that date, not UTC's. */
+const lguTimeZone = process.env.E2E_LGU_TIME_ZONE ?? 'Asia/Manila';
+export const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: lguTimeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
 /** A page acting as a DEMO user, in its own browser context so two users can work side by side. */
 export async function pageAs(browser: Browser, user: DemoUser): Promise<Page> {

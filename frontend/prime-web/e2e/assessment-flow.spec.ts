@@ -1,4 +1,4 @@
-import { apiAs, choose, e2eSet, expect, formDocument, pageAs, runTag, test } from './support';
+import { apiAs, choose, e2eSet, expect, formDocument, pageAs, runTag, test, today } from './support';
 
 /**
  * CLAUDE.md §74 through the screens: register a property and its owner, parcel and land unit; appraise and assess it;
@@ -148,7 +148,7 @@ test('a land property from registration to the assessment roll', async ({ browse
     await choose(maker, 'Register', register);
     if (register === 'Record of Assessment') {
       await choose(maker, 'Classification', set.classification.name);
-      const day = new Date().toISOString().slice(0, 10);
+      const day = today();
       await maker.getByPlaceholder('Start date').fill(`${day.slice(0, 4)}-01-01`);
       await maker.getByPlaceholder('End date').fill(day);
       await maker.keyboard.press('Enter');

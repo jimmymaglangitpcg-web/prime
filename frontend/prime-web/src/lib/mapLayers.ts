@@ -283,4 +283,8 @@ export function createDataLayers(
   } satisfies Record<MapLayerName, VectorLayer>;
 }
 
-export const todayIso = () => new Date().toISOString().slice(0, 10);
+/** Today's date where the user is (the office's day), not UTC's: before 08:00 in Manila UTC is still on yesterday. */
+export const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
