@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Card, DatePicker, Empty, Form, Select, Space, Table, Typography } from 'antd';
+import { Alert, Button, Card, DatePicker, Empty, Form, Input, Select, Space, Table, Typography } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useSearchParams } from 'react-router-dom';
@@ -30,7 +30,26 @@ const numeric = (column: ReportColumn) => column.type === 'Money' || column.type
 /** A report row with its position in the whole report, as the table's key. */
 interface KeyedRow { key: number; cells: ReportCell[] }
 
-interface ParameterForm { asOf?: Dayjs; municipalityId?: string; barangayId?: string }
+interface ParameterForm {
+  asOf?: Dayjs;
+  period?: [Dayjs, Dayjs];
+  municipalityId?: string;
+  barangayId?: string;
+  status?: string;
+  transactionCode?: string;
+  pin?: string;
+}
+
+/** The Tax Declaration statuses the TD list filters by. */
+const tdStatuses = [
+  { value: 'Draft', label: 'Draft' },
+  { value: 'PendingReview', label: 'Pending review' },
+  { value: 'Approved', label: 'Approved' },
+  { value: 'Rejected', label: 'Rejected' },
+  { value: 'Cancelled', label: 'Cancelled' },
+];
+
+const blank = (text?: string) => (text?.trim() ? text.trim() : null);
 
 /**
  * Reports (CLAUDE.md §57; docs/analysis/reporting.md §4.1): choose a report and its parameters, see it a page at a time,
@@ -70,6 +89,11 @@ export function ReportsPage() {
       asOf: (values.asOf ?? dayjs()).format('YYYY-MM-DD'),
       municipalityId: values.municipalityId ?? null,
       barangayId: values.barangayId ?? null,
+      fromDate: values.period?.[0].format('YYYY-MM-DD') ?? null,
+      toDate: values.period?.[1].format('YYYY-MM-DD') ?? null,
+      status: values.status ?? null,
+      transactionCode: blank(values.transactionCode),
+      pin: blank(values.pin),
     });
   }
 
@@ -109,11 +133,17 @@ export function ReportsPage() {
           {report && <Typography.Paragraph type="secondary" style={{ maxWidth: 560, marginTop: 26, marginBottom: 0 }}>{report.description}</Typography.Paragraph>}
         </div>
         {report && (
-          <Form form={form} layout="vertical" initialValues={{ asOf: dayjs() }} onFinish={submit} style={{ marginTop: 16 }}>
+          <Form form={form} layout="vertical" initialValues={{ asOf: dayjs(), period: [dayjs().startOf('year'), dayjs()] }} onFinish={submit}
+            style={{ marginTop: 16 }}>
             <Space wrap align="end">
               {report.parameters.includes('AsOf') && (
                 <Form.Item name="asOf" label="As of" rules={[{ required: true, message: 'Choose the date' }]}>
                   <DatePicker disabledDate={(d) => d.isAfter(dayjs(), 'day')} allowClear={false} />
+                </Form.Item>
+              )}
+              {report.parameters.includes('Period') && (
+                <Form.Item name="period" label="Period" rules={[{ required: true, message: 'Choose the period' }]}>
+                  <DatePicker.RangePicker disabledDate={(d) => d.isAfter(dayjs(), 'day')} allowClear={false} />
                 </Form.Item>
               )}
               {report.parameters.includes('Municipality') && (
@@ -127,6 +157,21 @@ export function ReportsPage() {
                   <Select allowClear showSearch optionFilterProp="label" disabled={!municipalityId} style={{ width: 240 }}
                     placeholder={municipalityId ? 'All barangays' : 'Choose a municipality first'}
                     options={barangays.map((b) => ({ value: b.id, label: b.name }))} />
+                </Form.Item>
+              )}
+              {report.parameters.includes('TdStatus') && (
+                <Form.Item name="status" label="Status">
+                  <Select allowClear placeholder="Any status" options={tdStatuses} style={{ width: 160 }} />
+                </Form.Item>
+              )}
+              {report.parameters.includes('TransactionCode') && (
+                <Form.Item name="transactionCode" label="Transaction code" rules={[{ max: 20 }]}>
+                  <Input allowClear placeholder="Any" style={{ width: 140 }} />
+                </Form.Item>
+              )}
+              {report.parameters.includes('Pin') && (
+                <Form.Item name="pin" label="PIN (or its first part)" rules={[{ max: 100 }]}>
+                  <Input allowClear placeholder="Any" style={{ width: 220 }} />
                 </Form.Item>
               )}
               <Form.Item>

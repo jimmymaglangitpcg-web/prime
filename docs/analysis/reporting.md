@@ -307,3 +307,60 @@ Open after R2:
 - The local development database holds many DEMO classes and barangays left by the integration tests, so its charts
   show mostly "DEMO_Residential" and "Demo Barangay" rows.
 
+
+### R3 — assessment reports and run downloads (2026-10-10)
+
+Built:
+- **Parameters.** A report may now take a period (from and to; without dates, the year to date, and the period's end is
+  the report's date), a Tax Declaration status, a transaction code and a PIN or its first part. The screen shows only the
+  ones a report lists.
+- **Tax Declaration list** (`TD_LIST`): the TDs recorded in the period (on the day approved; not yet approved, on the
+  day drafted), by municipality, barangay, status, transaction code or PIN, in TD number order. Each row has the unit's
+  kind, owners on record that day, class and use codes, taxability, effectivity, status, the values, and what the TD
+  cancels and what cancelled it. The values are those of the declared assessment, else the unit's posted assessment in
+  force on the TD's effectivity (the Record of Assessment's rule). The totals give the count only; the value summary
+  gives sums.
+- **Market and assessed value summary** (`VALUE_SUMMARY`): the FAAS in force on the date per kind of unit and
+  classification (the TD's), with a subtotal per kind and the total, taxable and exempt. One statement:
+  `IFaasInForceQuery.KindSummaryAsync` adds `GROUPING SETS ((kind, classification), (kind), ())` to the R1 query, which
+  now also returns each unit's kind.
+- **Assessment history** (`ASSESSMENT_HISTORY`) and **reassessments** (`REASSESSMENTS`): the posted assessments made
+  in the period, by municipality, barangay or PIN, each beside the one it follows (`PreviousAssessmentId`), with the
+  change in assessed value and the reason (the transaction type, or "General revision", and the remarks). An
+  assessment is made on its `MadeOn` date; one made before that date was recorded counts from its approval, else its
+  posting, else its entry. Reassessments are those made under a transaction type of the reassessment kind, with the
+  cause date and whether they were made after the type's window.
+- **Run downloads** (`IRunExportService`; `GET /api/reports/register-runs/{id}/export` and
+  `/api/reports/sales-report-runs/{id}/export`, `records.export`, strict rate limit): the rows of a TMCR, pre-TMCR,
+  Assessment Roll, ORF or ROA run, and the groups of a lowest-to-highest sales report, as CSV or Excel. A run already
+  issued is written from its frozen snapshot, so the file holds what was printed. A run not yet issued is read now by
+  the form's own data provider, and the header says so. The columns are the snapshot's fields; the official layouts stay
+  with the forms. Owner and administrator addresses are hidden from users without `taxpayer.view-personal`, because a
+  file leaves the system (P12-5). The abstracts (Annexes I-M to I-O) stay print-only. Each download writes an EXPORT row
+  with the run's id.
+- **Screens:** the new parameters on `/reports`; CSV and Excel buttons on each register run and on sales report runs,
+  for users with `records.export`.
+
+Verified: 862 tests pass (7 new in `ReportsTests`: value summary with subtotals, TD list with its filters and period
+check, the posted-value fallback, history and reassessments, a register run downloaded unissued and issued (snapshot
+kept after a later edit), refusals; the API test covers the new endpoints' permissions). Production build and lint
+clean. In a browser as the provincial checker: each new report runs and pages, a filtered TD list downloads as Excel,
+a register run downloads as CSV; no page errors; axe without serious or critical findings on the TD list and the empty
+reassessments result; no sideways scroll at phone width; a view-only user sees no download buttons.
+
+Measured on `prime_volume` (401,197 TDs; 1,150 posted assessments), provincial user, Debug API on the laptop, warm:
+
+| Read | Province-wide | Titay (largest municipality) |
+|---|---|---|
+| Value summary, preview | 3.1 s (7.2 s cold) | 0.9–1.2 s |
+| TD list, first page | 0.7 s | 2.4 s |
+| Assessment history, first page | 0.9 s | 0.6 s |
+| Download: value summary (Excel) | 3.0 s | — |
+| Download: TD list of one barangay (Excel, 137 KB) | — | 1.0 s |
+
+Open after R3:
+- The TD list of one municipality is slower than the province's: PostgreSQL underestimates the date filter (840 rows
+  estimated for 400,000) and probes `Property` once per TD. A sub-query form saves about a third; left for H6, where
+  hosted figures are measured.
+- A municipality's whole TD list (30,816 rows on the volume set) is over the download limit until R5's background run.
+- The volume set has no reassessments; the report is checked by the integration test.

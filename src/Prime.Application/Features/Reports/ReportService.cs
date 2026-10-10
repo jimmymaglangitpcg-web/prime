@@ -136,31 +136,50 @@ public sealed class ReportService(
                 return Result.Failure<ReportScope>(JurisdictionErrors.Code, JurisdictionErrors.Message);
             }
         }
-        return Result.Success(new ReportScope(asOf, municipalityId, barangayId, municipalityName, barangayName));
+        var scope = new ReportScope(asOf, municipalityId, barangayId, municipalityName, barangayName);
+        if (report.Parameters.Contains(ReportParameter.Period))
+        {
+            // Without dates, the year to date; the period's end is the report's as-of date (and its file name's).
+            var to = request.ToDate ?? clock.Today;
+            var from = request.FromDate ?? new DateOnly(to.Year, 1, 1);
+            if (to > clock.Today || from > to)
+            {
+                return Result.Failure<ReportScope>("VALIDATION_FAILED", "The period cannot start after it ends or end later than today.");
+            }
+            scope = scope with { AsOf = to, From = from, To = to };
+        }
+        if (report.Parameters.Contains(ReportParameter.TdStatus) && request.Status is { } status)
+        {
+            if (!Enum.IsDefined(status))
+            {
+                return Result.Failure<ReportScope>("VALIDATION_FAILED", "The status is not a Tax Declaration status.");
+            }
+            scope = scope with { Status = status };
+        }
+        if (report.Parameters.Contains(ReportParameter.TransactionCode) && Trimmed(request.TransactionCode) is { } code)
+        {
+            if (code.Length > 20)
+            {
+                return Result.Failure<ReportScope>("VALIDATION_FAILED", "A transaction code has at most 20 characters.");
+            }
+            scope = scope with { TransactionCode = code.ToUpperInvariant() };
+        }
+        if (report.Parameters.Contains(ReportParameter.Pin) && Trimmed(request.Pin) is { } pin)
+        {
+            if (pin.Length > 100)
+            {
+                return Result.Failure<ReportScope>("VALIDATION_FAILED", "A PIN has at most 100 characters.");
+            }
+            scope = scope with { Pin = pin };
+        }
+        return Result.Success(scope);
     }
+
+    private static string? Trimmed(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
     /// <summary>The header block of a file (§4.1): LGU, office, title, parameters, when it was run and by whom.</summary>
-    private async Task<IReadOnlyList<string>> HeaderAsync(IReport report, IReadOnlyList<string> parameterLines, CancellationToken ct)
-    {
-        var scope = await office.GetAsync(ct);
-        var user = currentUser.AppUserId is { } id
-            ? await db.AppUsers.Where(u => u.Id == id).Select(u => u.DisplayName).FirstOrDefaultAsync(ct)
-            : null;
-        var now = clock.UtcNow;
-        var lines = new List<string>();
-        if (!string.IsNullOrWhiteSpace(lgu.Value.Name))
-        {
-            lines.Add(lgu.Value.Name!);
-        }
-        if ((scope.OfficeName ?? lgu.Value.Office) is { Length: > 0 } officeName)
-        {
-            lines.Add(officeName);
-        }
-        lines.Add(report.Title);
-        lines.AddRange(parameterLines);
-        lines.Add($"Run: {clock.LocalDate(now):yyyy-MM-dd} by {user ?? "system"}");
-        return lines;
-    }
+    private Task<IReadOnlyList<string>> HeaderAsync(IReport report, IReadOnlyList<string> parameterLines, CancellationToken ct) =>
+        ReportHeader.BuildAsync(db, office, currentUser, clock, lgu.Value, report.Title, parameterLines, ct);
 
-    private static string Truncate(string text, int length) => text.Length <= length ? text : text[..(length - 1)] + "…";
+    internal static string Truncate(string text, int length) => text.Length <= length ? text : text[..(length - 1)] + "…";
 }

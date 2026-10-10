@@ -3,7 +3,7 @@ import { apiDownload, apiGet, apiPost } from '../lib/apiClient';
 
 /** Reports (CLAUDE.md §57; docs/analysis/reporting.md §4.1). */
 export type ReportColumnType = 'Text' | 'Integer' | 'Money' | 'Area' | 'Date';
-export type ReportParameter = 'AsOf' | 'Municipality' | 'Barangay';
+export type ReportParameter = 'AsOf' | 'Municipality' | 'Barangay' | 'Period' | 'TdStatus' | 'TransactionCode' | 'Pin';
 
 export interface ReportColumn { key: string; title: string; type: ReportColumnType }
 
@@ -16,7 +16,16 @@ export interface ReportDefinitionDto {
   columns: ReportColumn[];
 }
 
-export interface ReportRunRequest { asOf?: string | null; municipalityId?: string | null; barangayId?: string | null }
+export interface ReportRunRequest {
+  asOf?: string | null;
+  municipalityId?: string | null;
+  barangayId?: string | null;
+  fromDate?: string | null;
+  toDate?: string | null;
+  status?: string | null;
+  transactionCode?: string | null;
+  pin?: string | null;
+}
 
 export type ReportCell = string | number | null;
 
@@ -55,4 +64,13 @@ export const useReportDownload = () =>
       Object.entries(parameters).forEach(([k, v]) => v && query.set(k, v));
       return apiDownload(`/api/reports/${code}/export?${query}`, `${code.toLowerCase()}.${format}`);
     },
+  });
+
+/** A register run or a sales report run (step R3): downloaded from its issued snapshot, else read now; the API audits it. */
+export type RunExportKind = 'register-runs' | 'sales-report-runs';
+
+export const useRunDownload = () =>
+  useMutation({
+    mutationFn: ({ kind, id, format }: { kind: RunExportKind; id: string; format: ReportFileFormat }) =>
+      apiDownload(`/api/reports/${kind}/${id}/export?format=${format}`, `${kind}-${id}.${format}`),
   });

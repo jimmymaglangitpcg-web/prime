@@ -19,6 +19,18 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
     private const string SquareMetres = "'sqm', 'sq m', 'sq.m.', 'm2'";
     private const string Hectares = "'ha', 'hectare', 'hectares'";
 
+    /// <summary>The sums of a summary row over the FAAS values <c>f</c>.</summary>
+    private const string Sums = """
+        COUNT(DISTINCT f."PropertyId")::int AS "Properties",
+        COUNT(*)::int AS "Units",
+        COALESCE(SUM(f."LandAreaSqm"), 0) AS "LandAreaSqm",
+        (COUNT(*) FILTER (WHERE f."LandAreaUnconverted"))::int AS "UnconvertedLandUnits",
+        COALESCE(SUM(f."TaxableMarketValue"), 0) AS "TaxableMarketValue",
+        COALESCE(SUM(f."TaxableAssessedValue"), 0) AS "TaxableAssessedValue",
+        COALESCE(SUM(f."ExemptMarketValue"), 0) AS "ExemptMarketValue",
+        COALESCE(SUM(f."ExemptAssessedValue"), 0) AS "ExemptAssessedValue"
+        """;
+
     /// <summary>Sort and hash memory for one report read (PostgreSQL's default is 4 MB; see <see cref="TunedAsync{T}"/>).</summary>
     private const string WorkMemory = "64MB";
 
@@ -45,17 +57,23 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
               + $"CASE {string.Concat(keys.Select(k => $"WHEN GROUPING({k.Column}) = 0 THEN {k.Column} "))}END AS \"Key\", "
               + $"({string.Join(" AND ", keys.Select(k => $"GROUPING({k.Column}) = 1"))}) AS \"IsTotal\"";
         var sql = $$"""
-            SELECT {{head}},
-                   COUNT(DISTINCT f."PropertyId")::int AS "Properties",
-                   COUNT(*)::int AS "Units",
-                   COALESCE(SUM(f."LandAreaSqm"), 0) AS "LandAreaSqm",
-                   (COUNT(*) FILTER (WHERE f."LandAreaUnconverted"))::int AS "UnconvertedLandUnits",
-                   COALESCE(SUM(f."TaxableMarketValue"), 0) AS "TaxableMarketValue",
-                   COALESCE(SUM(f."TaxableAssessedValue"), 0) AS "TaxableAssessedValue",
-                   COALESCE(SUM(f."ExemptMarketValue"), 0) AS "ExemptMarketValue",
-                   COALESCE(SUM(f."ExemptAssessedValue"), 0) AS "ExemptAssessedValue"
+            SELECT {{head}}, NULL::text AS "Kind",
+                   {{Sums}}
             FROM ({{values}}) f
             {{(keys.Count == 0 ? string.Empty : $"GROUP BY GROUPING SETS ({string.Concat(keys.Select(k => $"({k.Column}), "))}())")}}
+            """;
+        return await TunedAsync(() => db.Database.SqlQueryRaw<FaasGroup>(sql, parameters).ToListAsync(cancellationToken), cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<FaasGroup>> KindSummaryAsync(FaasScope scope, CancellationToken cancellationToken)
+    {
+        var (values, parameters) = Values(scope);
+        // GROUPING(classification) is 1 on a kind's subtotal; GROUPING(kind) is 1 only on the total.
+        var sql = $$"""
+            SELECT 0 AS "GroupBy", f."ClassificationId" AS "Key", f."RpuType" AS "Kind", (GROUPING(f."RpuType") = 1) AS "IsTotal",
+                   {{Sums}}
+            FROM ({{values}}) f
+            GROUP BY GROUPING SETS ((f."RpuType", f."ClassificationId"), (f."RpuType"), ())
             """;
         return await TunedAsync(() => db.Database.SqlQueryRaw<FaasGroup>(sql, parameters).ToListAsync(cancellationToken), cancellationToken);
     }
@@ -113,7 +131,7 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
 
         var sql = $$"""
             SELECT td."Id" AS "TaxDeclarationId", td."TaxDeclarationNumber", td."PropertyId", td."RpuId",
-                   land."Id" IS NOT NULL AS "IsLand",
+                   land."Id" IS NOT NULL AS "IsLand", rpu."RpuType",
                    td."MunicipalityId", td."BarangayId", td."ZoneId", td."ClassificationId", td."ActualUseId",
                    CASE WHEN ln."AssessmentId" IS NOT NULL THEN COALESCE(ln.tmv, 0)
                         WHEN td."Taxability" = 'Taxable' THEN COALESCE(da."MarketValue", pa."MarketValue", 0) ELSE 0 END AS "TaxableMarketValue",
@@ -155,6 +173,7 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
                 GROUP BY l."AssessmentId"
             ) ln ON ln."AssessmentId" = td."AssessmentId"
             LEFT JOIN "Lands" land ON land."RpuId" = td."RpuId"
+            JOIN "RealPropertyUnit" rpu ON rpu."Id" = td."RpuId"
             """;
         return (sql, [.. parameters]);
     }

@@ -79,7 +79,8 @@ public class ReportsTests(WebApplicationFactory<Program> factory) : IClassFixtur
         await using var _ = scope;
 
         c.Reports.List().Select(r => r.Code).ShouldBe(
-            ["PROPERTY_INVENTORY", "PROPERTIES_BY_BARANGAY", "PROPERTIES_BY_CLASSIFICATION", "PROPERTIES_BY_ACTUAL_USE", "PROPERTIES_BY_ZONE"],
+            ["PROPERTY_INVENTORY", "PROPERTIES_BY_BARANGAY", "PROPERTIES_BY_CLASSIFICATION", "PROPERTIES_BY_ACTUAL_USE", "PROPERTIES_BY_ZONE",
+                "TD_LIST", "VALUE_SUMMARY", "ASSESSMENT_HISTORY", "REASSESSMENTS"],
             ignoreOrder: true);
         (await c.Reports.PreviewAsync("NO_SUCH_REPORT", new ReportPreviewRequest())).Code.ShouldBe("REPORT_NOT_FOUND");
     }
@@ -341,11 +342,214 @@ public class ReportsTests(WebApplicationFactory<Program> factory) : IClassFixtur
         downloaded.Content.Headers.ContentType!.MediaType.ShouldBe("text/csv");
         downloaded.Content.Headers.ContentDisposition!.DispositionType.ShouldBe("attachment");
         (await client.SendAsync(Get("/api/reports/PROPERTIES_BY_ZONE/export?format=pdf", "checker"))).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var noRun = $"/api/reports/register-runs/{Guid.NewGuid()}/export?format=csv";
+        (await client.SendAsync(Get(noRun, "viewer"))).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await client.SendAsync(Get(noRun, "checker"))).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await client.SendAsync(Get($"/api/reports/sales-report-runs/{Guid.NewGuid()}/export?format=xlsx", "checker"))).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         var preview = await client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/reports/PROPERTIES_BY_ZONE/preview")
         {
             Content = JsonContent.Create(new { parameters = new { }, page = 1, pageSize = 10 }),
             Headers = { { DevelopmentAuthenticationHandler.ActAsHeader, "viewer" } },
         });
         preview.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    // ---------------- Step R3: assessment reports and run downloads ----------------
+
+    [Fact]
+    public async Task ValueSummary_GivesEachKindAndClassification_WithASubtotalPerKind()
+    {
+        var (c, scope) = await BeginAsync();
+        await using var _ = scope;
+        await AddUnitAsync(c, RpuType.Building, Taxability.Taxable, WorkflowStatus.Approved, 20_000m);
+
+        var report = await PreviewAsync(c, "VALUE_SUMMARY");
+
+        report.Rows.Select(r => (Cell(report, r, "kind"), Cell(report, r, "assessedValue"))).ShouldBe(
+            [("Land", 100_000m), ("Land", 100_000m), ("Building", 20_000m), ("Building", 20_000m)]);
+        Cell(report, report.Rows[1], "classification").ShouldBe("Subtotal, land");
+        Cell(report, report.Rows[0], "landArea").ShouldBe(500m);
+        Cell(report, report.Rows[2], "landArea").ShouldBeNull();
+        Cell(report, report.Rows[2], "marketValue").ShouldBe(100_000m);
+        (Cell(report, report.Totals!, "properties"), Cell(report, report.Totals!, "units"), Cell(report, report.Totals!, "assessedValue"))
+            .ShouldBe((1, 2, 120_000m));
+    }
+
+    [Fact]
+    public async Task TdList_ListsTheTdWithItsValuesAndOwner_AndFiltersByStatusCodePinAndPeriod()
+    {
+        var (c, scope) = await BeginAsync();
+        await using var _ = scope;
+        var td = await c.Db.TaxDeclarations.AsNoTracking().SingleAsync(x => x.Id == c.Seed.TaxDeclaration.Id);
+        var pin = await c.Db.Properties.Where(p => p.Id == c.Seed.PropertyId).Select(p => p.PropertyIdentificationNumber).SingleAsync();
+        var recorded = c.Services.GetRequiredService<IClock>().LocalDate(td.ApprovedAt!.Value);
+        var lastTwoMonths = c.Here with { FromDate = c.Today.AddDays(-60), ToDate = c.Today };
+
+        var report = await PreviewAsync(c, "TD_LIST", lastTwoMonths);
+
+        var row = report.Rows.ShouldHaveSingleItem();
+        (Cell(report, row, "tdNumber"), Cell(report, row, "pin"), Cell(report, row, "kind"), Cell(report, row, "status"))
+            .ShouldBe((td.TaxDeclarationNumber, pin, "Land", "Approved"));
+        (Cell(report, row, "owners"), Cell(report, row, "recordedOn"), Cell(report, row, "assessedValue"))
+            .ShouldBe(("DEMO_ReportOwner, Ana", recorded, 100_000m));
+        report.Totals![0].ShouldBe("Total: 1 Tax Declarations");
+        report.ParameterLines.ShouldContain($"Period: {c.Today.AddDays(-60):yyyy-MM-dd} to {c.Today:yyyy-MM-dd}");
+
+        (await PreviewAsync(c, "TD_LIST", lastTwoMonths with { Status = WorkflowStatus.Draft })).TotalRows.ShouldBe(0);
+        (await PreviewAsync(c, "TD_LIST", lastTwoMonths with { Status = WorkflowStatus.Approved })).TotalRows.ShouldBe(1);
+        (await PreviewAsync(c, "TD_LIST", lastTwoMonths with { TransactionCode = "DEMO_NONE" })).TotalRows.ShouldBe(0);
+        (await PreviewAsync(c, "TD_LIST", lastTwoMonths with { Pin = pin[..12] })).TotalRows.ShouldBe(1);
+        (await PreviewAsync(c, "TD_LIST", lastTwoMonths with { Pin = "NO-SUCH-PIN" })).TotalRows.ShouldBe(0);
+        (await PreviewAsync(c, "TD_LIST", lastTwoMonths with { ToDate = recorded.AddDays(-1) })).TotalRows.ShouldBe(0);
+        (await c.Reports.PreviewAsync("TD_LIST", new ReportPreviewRequest { Parameters = c.Here with { FromDate = c.Today, ToDate = c.Today.AddDays(-1) } }))
+            .Code.ShouldBe("VALIDATION_FAILED");
+    }
+
+    [Fact]
+    public async Task TdList_WithoutADeclaredAssessment_ShowsTheUnitsPostedValue()
+    {
+        var (c, scope) = await BeginAsync(declareAssessment: false);
+        await using var _ = scope;
+        var period = c.Here with { FromDate = c.Today.AddDays(-60) };
+
+        // The seeded TD is effective 2024, before the unit's only posted assessment (2026): nothing was in force then.
+        var before = await PreviewAsync(c, "TD_LIST", period);
+        (Cell(before, before.Rows.Single(), "marketValue"), Cell(before, before.Rows.Single(), "assessedValue")).ShouldBe((null, null));
+
+        var td = await c.Db.TaxDeclarations.SingleAsync(x => x.Id == c.Seed.TaxDeclaration.Id);
+        td.EffectivityDate = new DateOnly(2026, 1, 1);
+        await c.Db.SaveChangesAsync();
+        var report = await PreviewAsync(c, "TD_LIST", period);
+
+        var row = report.Rows.ShouldHaveSingleItem();
+        (Cell(report, row, "marketValue"), Cell(report, row, "assessedValue")).ShouldBe((500_000m, 100_000m));
+    }
+
+    [Fact]
+    public async Task AssessmentHistory_ShowsEachAssessmentBesideThePreviousOne_AndReassessmentsOnlyTheReassessment()
+    {
+        var (c, scope) = await BeginAsync();
+        await using var _ = scope;
+        var first = await c.Db.Assessments.AsNoTracking().SingleAsync(x => x.Id == c.Seed.AssessmentId);
+        var reassessment = new Prime.Domain.Entities.Transactions.TransactionType
+        {
+            Code = $"T{Guid.NewGuid():N}"[..12], Name = "DEMO reassessment", Kind = PropertyTransactionKind.Reassessment, LegalBasis = "DEMO",
+            EffectiveDate = new DateOnly(2020, 1, 1), Status = WorkflowStatus.Approved, ApprovedAt = DateTimeOffset.UtcNow,
+        };
+        c.Db.TransactionTypes.Add(reassessment);
+        c.Db.Assessments.Add(new Assessment
+        {
+            RpuId = first.RpuId, PropertyId = first.PropertyId, ValuationId = first.ValuationId, AssessmentYear = c.Today.Year + 1, MarketValue = 600_000m,
+            AssessmentLevelId = first.AssessmentLevelId, AssessmentPercentage = first.AssessmentPercentage, AssessedValue = 120_000m,
+            Status = WorkflowStatus.Posted, EffectiveDate = new DateOnly(c.Today.Year + 1, 1, 1), MadeOn = c.Today, PreviousAssessmentId = first.Id,
+            TransactionTypeId = reassessment.Id, TransactionCode = "DEMO_RE", CauseDate = c.Today.AddDays(-10), Remarks = "DEMO extension built",
+        });
+        await c.Db.SaveChangesAsync();
+        var pin = await c.Db.Properties.Where(p => p.Id == c.Seed.PropertyId).Select(p => p.PropertyIdentificationNumber).SingleAsync();
+        var period = c.Here with { FromDate = c.Today.AddDays(-60), ToDate = c.Today, Pin = pin };
+
+        var history = await PreviewAsync(c, "ASSESSMENT_HISTORY", period);
+
+        history.Rows.Count.ShouldBe(2);
+        var later = history.Rows[1];
+        (Cell(history, later, "previousAssessedValue"), Cell(history, later, "assessedValue"), Cell(history, later, "change"))
+            .ShouldBe((100_000m, 120_000m, 20_000m));
+        Cell(history, later, "reason").ShouldBe("DEMO reassessment — DEMO extension built");
+        Cell(history, history.Rows[0], "previousAssessedValue").ShouldBeNull();
+        (Cell(history, history.Totals!, "assessedValue"), Cell(history, history.Totals!, "change")).ShouldBe((220_000m, 120_000m));
+
+        var reassessments = await PreviewAsync(c, "REASSESSMENTS", period);
+        var row = reassessments.Rows.ShouldHaveSingleItem();
+        (Cell(reassessments, row, "causeDate"), Cell(reassessments, row, "madeOn"), Cell(reassessments, row, "change"))
+            .ShouldBe((c.Today.AddDays(-10), c.Today, 20_000m));
+        (await PreviewAsync(c, "REASSESSMENTS", period with { ToDate = c.Today.AddDays(-1) })).Rows.ShouldBeEmpty();
+    }
+
+    /// <summary>A taxable Assessment Roll run of the seeded barangay as of today.</summary>
+    private static async Task<Guid> RollRunAsync(Ctx c)
+    {
+        var run = await c.Services.GetRequiredService<Prime.Application.Features.Registers.IRegisterService>().CreateRunAsync(
+            new Prime.Application.Features.Registers.CreateRegisterRunRequest(RegisterKind.AssessmentRollTaxable, c.Today, c.BarangayId, null, null, null, "DEMO export"));
+        run.IsSuccess.ShouldBeTrue(run.IsSuccess ? null : run.Message);
+        return run.Value.Id;
+    }
+
+    private static async Task<List<IDictionary<string, object?>>> ExcelRowsAsync(ReportExport export)
+    {
+        using var stream = new MemoryStream();
+        await export.WriteAsync(stream, CancellationToken.None);
+        stream.Position = 0;
+        return (await stream.QueryAsync()).Cast<IDictionary<string, object?>>().ToList();
+    }
+
+    [Fact]
+    public async Task ARegisterRunNotIssued_IsDownloadedFromTheRecords_WithAddressesHiddenWithoutThePermission()
+    {
+        var (c, scope) = await BeginAsync();
+        await using var _ = scope;
+        var runId = await RollRunAsync(c);
+        var seesPersonal = (await c.Services.GetRequiredService<Prime.Application.Features.Security.IPermissionService>().GetAsync())
+            .Contains(Prime.Application.Common.Security.Permissions.TaxpayerViewPersonal);
+
+        var export = await c.Services.GetRequiredService<IRunExportService>().RegisterRunAsync(runId, ReportFormat.Xlsx);
+
+        export.IsSuccess.ShouldBeTrue(export.IsSuccess ? null : export.Message);
+        export.Value.FileName.ShouldBe($"ar-taxable-{c.Today:yyyyMMdd}.xlsx");
+        var rows = await ExcelRowsAsync(export.Value);
+        rows.ShouldContain(r => Equals(r["A"], "Assessment Roll, taxable properties"));
+        rows.ShouldContain(r => Equals(r["A"], "Not issued: read from the records on the day of the download"));
+        var titles = rows.FindIndex(r => Equals(r["A"], "Page"));
+        var data = rows[titles + 1];
+        data["D"].ShouldBe(c.Seed.TaxDeclaration.TaxDeclarationNumber);
+        data["G"].ShouldBe("DEMO_ReportOwner, Ana");
+        data["H"].ShouldBe(seesPersonal ? "DEMO Address 9" : Prime.Application.Common.Security.PersonalData.MaskAddress("DEMO Address 9"));
+        Convert.ToDecimal(data["N"]).ShouldBe(100_000m);
+
+        var audit = await c.Db.AuditLogs.Where(a => a.Action == AuditAction.Export && a.TableName == ReportService.AuditTable && a.RecordId == runId).SingleAsync();
+        audit.NewValue.ShouldNotBeNull().ShouldContain("Not issued");
+    }
+
+    [Fact]
+    public async Task AnIssuedRegisterRun_IsDownloadedFromItsSnapshot_UnchangedByLaterEdits()
+    {
+        var (c, scope) = await BeginAsync();
+        await using var _ = scope;
+        var runId = await RollRunAsync(c);
+        var issued = await c.Services.GetRequiredService<Prime.Application.Features.Forms.IFormService>()
+            .IssueAsync(new Prime.Application.Features.Forms.IssueFormRequest("AR_TAXABLE", runId));
+        issued.IsSuccess.ShouldBeTrue(issued.IsSuccess ? null : issued.Message);
+        var assessment = await c.Db.Assessments.SingleAsync(x => x.Id == c.Seed.AssessmentId);
+        assessment.AssessedValue = 1m;
+        await c.Db.SaveChangesAsync();
+
+        var export = await c.Services.GetRequiredService<IRunExportService>().RegisterRunAsync(runId, ReportFormat.Csv);
+
+        export.IsSuccess.ShouldBeTrue(export.IsSuccess ? null : export.Message);
+        using var stream = new MemoryStream();
+        await export.Value.WriteAsync(stream, CancellationToken.None);
+        var csv = Encoding.UTF8.GetString(stream.ToArray());
+        csv.ShouldContain(c.Seed.TaxDeclaration.TaxDeclarationNumber);
+        csv.ShouldContain("100000.00");
+        var audit = await c.Db.AuditLogs.Where(a => a.Action == AuditAction.Export && a.RecordId == runId).SingleAsync();
+        audit.NewValue.ShouldNotBeNull().ShouldContain($"Issued {c.Today:yyyy-MM-dd} on form AR_TAXABLE");
+    }
+
+    [Fact]
+    public async Task RunDownloads_AreRefused_ForAnUnknownRun_AndForAnAbstract()
+    {
+        var (c, scope) = await BeginAsync();
+        await using var _ = scope;
+        var runs = c.Services.GetRequiredService<IRunExportService>();
+        var marketReports = c.Services.GetRequiredService<Prime.Application.Features.MarketData.IMarketDataReportService>();
+        (await runs.RegisterRunAsync(Guid.NewGuid(), ReportFormat.Csv)).Code.ShouldBe("REGISTER_RUN_NOT_FOUND");
+        (await runs.SalesReportRunAsync(Guid.NewGuid(), ReportFormat.Csv)).Code.ShouldBe("MARKET_DATA_REPORT_NOT_FOUND");
+        var abstractRun = await marketReports.CreateAsync(new Prime.Application.Features.MarketData.CreateMarketDataReportRequest(
+            MarketDataReportKind.TransactionsAbstract, c.MunicipalityId, c.Today.AddDays(-30), c.Today, null));
+        abstractRun.IsSuccess.ShouldBeTrue(abstractRun.IsSuccess ? null : abstractRun.Message);
+        (await runs.SalesReportRunAsync(abstractRun.Value.Id, ReportFormat.Csv)).Code.ShouldBe("VALIDATION_FAILED");
+        var sales = await marketReports.CreateAsync(new Prime.Application.Features.MarketData.CreateMarketDataReportRequest(
+            MarketDataReportKind.SalesReport, c.MunicipalityId, c.Today.AddDays(-30), c.Today, null));
+        sales.IsSuccess.ShouldBeTrue(sales.IsSuccess ? null : sales.Message);
+        (await runs.SalesReportRunAsync(sales.Value.Id, ReportFormat.Xlsx)).IsSuccess.ShouldBeTrue();
     }
 }

@@ -6,6 +6,7 @@ import { useAllMunicipalities } from '../../api/referenceData';
 import { ApiRequestError } from '../../lib/apiClient';
 import { marketDataReportKindLabel, type MarketDataReportKind, type MarketDataReportRunDto } from '../../lib/marketDataTypes';
 import { PrintFormButton } from '../../components/PrintFormButton';
+import { RunDownloadButtons } from '../../components/RunDownloadButtons';
 
 const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.apiError.message : (e as Error).message);
 
@@ -45,7 +46,14 @@ export function MarketReportsTab({ municipalityId }: { municipalityId?: string }
           { title: 'City/municipality', dataIndex: 'municipalityName' },
           { title: 'Period', render: (_, r) => `${r.fromDate} to ${r.toDate}` },
           { title: 'Prepared', dataIndex: 'createdAt', render: (v: string) => dayjs(v).format('YYYY-MM-DD HH:mm') },
-          { title: '', render: (_, r) => <PrintFormButton formCode={r.formCode} subjectId={r.id} issuable /> },
+          {
+            title: '', render: (_, r) => (
+              <Space size={4} wrap>
+                <PrintFormButton formCode={r.formCode} subjectId={r.id} issuable />
+                {r.kind === 'SalesReport' && <RunDownloadButtons kind="sales-report-runs" id={r.id} />}
+              </Space>
+            ),
+          },
         ]} />
     </>
   );

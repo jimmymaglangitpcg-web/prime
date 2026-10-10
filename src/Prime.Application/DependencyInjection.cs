@@ -96,7 +96,12 @@ public static class DependencyInjection
         {
             services.AddScoped<Features.Reports.IReport>(sp => ActivatorUtilities.CreateInstance<Features.Reports.PropertySummaryReport>(sp, key));
         }
+        services.AddScoped<Features.Reports.IReport, Features.Reports.TaxDeclarationListReport>();
+        services.AddScoped<Features.Reports.IReport, Features.Reports.ValueSummaryReport>();
+        services.AddScoped<Features.Reports.IReport>(sp => ActivatorUtilities.CreateInstance<Features.Reports.AssessmentHistoryReport>(sp, false));
+        services.AddScoped<Features.Reports.IReport>(sp => ActivatorUtilities.CreateInstance<Features.Reports.AssessmentHistoryReport>(sp, true));
         services.AddScoped<Features.Reports.IReportService, Features.Reports.ReportService>();
+        services.AddScoped<Features.Reports.IRunExportService, Features.Reports.RunExportService>();
         // Dashboard (reporting.md §4.3): figures cached a minute per jurisdiction (Q8).
         services.AddMemoryCache();
         services.AddScoped<Features.Dashboard.IDashboardService, Features.Dashboard.DashboardService>();

@@ -1,3 +1,5 @@
+using Prime.Domain.Enums;
+
 namespace Prime.Application.Features.Reports;
 
 /// <summary>How a column's values are typed in CSV and Excel and formatted on screen.</summary>
@@ -17,6 +19,14 @@ public enum ReportParameter
     AsOf,
     Municipality,
     Barangay,
+    /// <summary>A period, from and to (step R3); without them, the year to date.</summary>
+    Period,
+    /// <summary>A Tax Declaration's status (the TD list).</summary>
+    TdStatus,
+    /// <summary>A FAAS transaction code (the TD list).</summary>
+    TransactionCode,
+    /// <summary>A property's PIN or its leading part (a section, a barangay).</summary>
+    Pin,
 }
 
 public sealed record ReportColumn(string Key, string Title, ReportColumnType Type);
@@ -30,6 +40,11 @@ public sealed record ReportRunRequest
     public DateOnly? AsOf { get; init; }
     public Guid? MunicipalityId { get; init; }
     public Guid? BarangayId { get; init; }
+    public DateOnly? FromDate { get; init; }
+    public DateOnly? ToDate { get; init; }
+    public WorkflowStatus? Status { get; init; }
+    public string? TransactionCode { get; init; }
+    public string? Pin { get; init; }
 }
 
 public sealed record ReportPreviewRequest
@@ -44,9 +59,18 @@ public sealed record ReportPreviewDto(
     string Code, string Title, IReadOnlyList<ReportColumn> Columns, IReadOnlyList<object?[]> Rows, object?[]? Totals,
     int TotalRows, int Page, int PageSize, IReadOnlyList<string> Notes, IReadOnlyList<string> ParameterLines, int SyncRowLimit);
 
-/// <summary>A run's validated parameters, with the names the header block prints.</summary>
+/// <summary>
+/// A run's validated parameters, with the names the header block prints. A report that takes a period has
+/// <see cref="From"/> and <see cref="To"/>, and its <see cref="AsOf"/> is the period's end.
+/// </summary>
 public sealed record ReportScope(DateOnly AsOf, Guid? MunicipalityId, Guid? BarangayId, string? MunicipalityName, string? BarangayName)
 {
+    public DateOnly? From { get; init; }
+    public DateOnly? To { get; init; }
+    public WorkflowStatus? Status { get; init; }
+    public string? TransactionCode { get; init; }
+    public string? Pin { get; init; }
+
     /// <summary>The parameters as the header block and the audit row print them.</summary>
     public IReadOnlyList<string> Lines(IReadOnlyList<ReportParameter> used)
     {
@@ -62,6 +86,22 @@ public sealed record ReportScope(DateOnly AsOf, Guid? MunicipalityId, Guid? Bara
         if (used.Contains(ReportParameter.Barangay) && BarangayName is not null)
         {
             lines.Add($"Barangay: {BarangayName}");
+        }
+        if (used.Contains(ReportParameter.Period) && From is { } from && To is { } to)
+        {
+            lines.Add($"Period: {from:yyyy-MM-dd} to {to:yyyy-MM-dd}");
+        }
+        if (used.Contains(ReportParameter.TdStatus) && Status is { } status)
+        {
+            lines.Add($"Status: {status}");
+        }
+        if (used.Contains(ReportParameter.TransactionCode) && TransactionCode is not null)
+        {
+            lines.Add($"Transaction code: {TransactionCode}");
+        }
+        if (used.Contains(ReportParameter.Pin) && Pin is not null)
+        {
+            lines.Add($"PIN: {Pin}*");
         }
         return lines;
     }

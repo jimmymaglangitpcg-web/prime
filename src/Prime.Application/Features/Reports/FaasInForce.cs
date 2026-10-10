@@ -8,6 +8,8 @@ public sealed class FaasValue
     public Guid PropertyId { get; init; }
     public Guid RpuId { get; init; }
     public bool IsLand { get; init; }
+    /// <summary>The unit's kind, as stored (<see cref="Domain.Enums.RpuType"/>'s name).</summary>
+    public string RpuType { get; init; } = string.Empty;
     public Guid MunicipalityId { get; init; }
     public Guid BarangayId { get; init; }
     public Guid? ZoneId { get; init; }
@@ -42,6 +44,11 @@ public sealed class FaasGroup
     /// <summary>What the row is grouped by; <see cref="FaasGroupBy.None"/> on the total.</summary>
     public FaasGroupBy GroupBy { get; init; }
     public Guid? Key { get; init; }
+    /// <summary>
+    /// The unit kind (<see cref="Domain.Enums.RpuType"/>'s name) of a <see cref="IFaasInForceQuery.KindSummaryAsync"/> row; null on
+    /// the total and on the other summaries.
+    /// </summary>
+    public string? Kind { get; init; }
     public bool IsTotal { get; init; }
     public int Properties { get; init; }
     public int Units { get; init; }
@@ -83,4 +90,10 @@ public interface IFaasInForceQuery
     /// §4.3): each row says which grouping it belongs to.
     /// </summary>
     Task<IReadOnlyList<FaasGroup>> SummaryAsync(FaasScope scope, IReadOnlyCollection<FaasGroupBy> groupings, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The sums per unit kind and classification (<see cref="FaasGroup.Kind"/> and <see cref="FaasGroup.Key"/>), per kind
+    /// (<see cref="FaasGroup.Key"/> null) and in total, in one pass (the value summary, reporting.md §4.2).
+    /// </summary>
+    Task<IReadOnlyList<FaasGroup>> KindSummaryAsync(FaasScope scope, CancellationToken cancellationToken);
 }

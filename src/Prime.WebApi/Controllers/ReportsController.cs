@@ -14,7 +14,7 @@ namespace Prime.WebApi.Controllers;
 /// CSV or Excel (records.export, Q10). Downloads are audited as EXPORT by the report service.
 /// </summary>
 [Route("api/reports")]
-public class ReportsController(IReportService reports) : ApiControllerBase
+public class ReportsController(IReportService reports, IRunExportService runs) : ApiControllerBase
 {
     [RequirePermission(Permissions.RecordsView)]
     [HttpGet]
@@ -28,7 +28,24 @@ public class ReportsController(IReportService reports) : ApiControllerBase
     [RequirePermission(Permissions.RecordsExport)]
     [HttpGet("{code}/export")]
     [EnableRateLimiting(RateLimiting.StrictPolicy)]
-    public async Task<ActionResult> Export(string code, [FromQuery] string? format, [FromQuery] ReportRunRequest request, CancellationToken ct)
+    public Task<ActionResult> Export(string code, [FromQuery] string? format, [FromQuery] ReportRunRequest request, CancellationToken ct) =>
+        WriteAsync(format, chosen => reports.ExportAsync(code, request, chosen, ct), ct);
+
+    /// <summary>A register run's rows as CSV or Excel (step R3): its issued snapshot, else read now.</summary>
+    [RequirePermission(Permissions.RecordsExport)]
+    [HttpGet("register-runs/{id:guid}/export")]
+    [EnableRateLimiting(RateLimiting.StrictPolicy)]
+    public Task<ActionResult> ExportRegisterRun(Guid id, [FromQuery] string? format, CancellationToken ct) =>
+        WriteAsync(format, chosen => runs.RegisterRunAsync(id, chosen, ct), ct);
+
+    /// <summary>A lowest-to-highest sales report run's groups as CSV or Excel (step R3).</summary>
+    [RequirePermission(Permissions.RecordsExport)]
+    [HttpGet("sales-report-runs/{id:guid}/export")]
+    [EnableRateLimiting(RateLimiting.StrictPolicy)]
+    public Task<ActionResult> ExportSalesReportRun(Guid id, [FromQuery] string? format, CancellationToken ct) =>
+        WriteAsync(format, chosen => runs.SalesReportRunAsync(id, chosen, ct), ct);
+
+    private async Task<ActionResult> WriteAsync(string? format, Func<ReportFormat, Task<Result<ReportExport>>> export, CancellationToken ct)
     {
         var parsed = format?.ToLowerInvariant() switch
         {
@@ -40,16 +57,16 @@ public class ReportsController(IReportService reports) : ApiControllerBase
         {
             return HandleResult(Result.Failure<object>("VALIDATION_FAILED", "The format must be csv or xlsx.")).Result!;
         }
-        var result = await reports.ExportAsync(code, request, chosen, ct);
+        var result = await export(chosen);
         if (!result.IsSuccess)
         {
             return HandleResult(Result.Failure<object>(result.Code!, result.Message!)).Result!;
         }
-        var export = result.Value;
-        Response.ContentType = export.ContentType;
-        Response.Headers[HeaderNames.ContentDisposition] = new ContentDispositionHeaderValue("attachment") { FileNameStar = export.FileName }.ToString();
+        var file = result.Value;
+        Response.ContentType = file.ContentType;
+        Response.Headers[HeaderNames.ContentDisposition] = new ContentDispositionHeaderValue("attachment") { FileNameStar = file.FileName }.ToString();
         Response.Headers[HeaderNames.CacheControl] = "no-store";
-        await export.WriteAsync(Response.Body, ct);
+        await file.WriteAsync(Response.Body, ct);
         return new EmptyResult();
     }
 }

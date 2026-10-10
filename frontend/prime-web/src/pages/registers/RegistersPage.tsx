@@ -7,6 +7,7 @@ import { useClassifications } from '../../api/referenceData';
 import { useTaxpayerSearch } from '../../api/taxpayers';
 import { LocationSelect } from '../../components/LocationSelect';
 import { PrintFormButton } from '../../components/PrintFormButton';
+import { RunDownloadButtons } from '../../components/RunDownloadButtons';
 import { ApiRequestError } from '../../lib/apiClient';
 import { registerKindLabel, type RegisterKind, type RegisterRunDto } from '../../lib/types';
 
@@ -133,6 +134,7 @@ export function RegistersPage() {
                 <Space>
                   <PrintFormButton formCode={r.formCode} subjectId={r.id} issuable={false} />
                   <PrintFormButton formCode={r.formCode} subjectId={r.id} issuable label="Issue" />
+                  <RunDownloadButtons kind="register-runs" id={r.id} />
                 </Space>
               ),
             },
