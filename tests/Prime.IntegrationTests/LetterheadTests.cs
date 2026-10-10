@@ -100,10 +100,9 @@ public class LetterheadTests(WebApplicationFactory<Program> factory) : IClassFix
         (await Letterhead(FormSubjectType.TaxDeclaration, orphan.Id)).Office!["code"]!.GetValue<string>().ShouldBe(provincial.Code);
 
         // A register kept by owner has no municipality: the issuing user's office, else the provincial one.
-        var orc = new RegisterRun
-        {
-            Kind = RegisterKind.OwnershipRecordCard, TaxpayerId = await db.Taxpayers.Select(t => t.Id).FirstAsync(), AsOf = today,
-        };
+        // Its own DEMO owner: a fresh (CI) database has no taxpayers unless another test committed one first.
+        var owner = new Taxpayer { TaxpayerType = TaxpayerType.Individual, LastName = $"DEMO_LP5_{tag}", FirstName = "DEMO" };
+        var orc = new RegisterRun { Kind = RegisterKind.OwnershipRecordCard, Taxpayer = owner, AsOf = today };
         db.RegisterRuns.Add(orc);
         await db.SaveChangesAsync();
         user.AppUserId = clerk.Id;
