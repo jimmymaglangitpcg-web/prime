@@ -35,6 +35,12 @@ body {
 .ant-tag.ant-tag-geekblue { color: #10239e !important; }
 .ant-tag.ant-tag-cyan { color: #006d75 !important; }
 
+/*
+ * An empty table's message (its emptyText or "No data") is drawn in the disabled-text colour, about 1.6:1; it is
+ * information, not a disabled control, so it takes the tertiary text colour of the theme (main.tsx), about 5.7:1.
+ */
+.ant-table-wrapper .ant-table-tbody > tr.ant-table-placeholder { color: rgba(0, 0, 0, 0.6) !important; }
+
 /* Printable pages (e.g. the tax map, /gis/print): print only the sheet. */
 @page {
   size: A4 landscape;
