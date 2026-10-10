@@ -27,7 +27,10 @@ test('a user without the permission is refused, and told why', async ({ browser,
   await viewer.goto(`/properties/${created.id}`);
   await expect(viewer.getByText(created.propertyIdentificationNumber).first()).toBeVisible();
   await expect(viewer.getByRole('menuitem', { name: 'Properties' }).first()).toBeVisible();
-  for (const entry of ['Content Packs', 'Audit Trail', 'Sign-up Requests']) {
+  // The grouped menu (ui-theme.md §4.2): open Administration, which the viewer has for offices and configuration views.
+  await viewer.getByRole('menuitem', { name: 'Administration' }).click();
+  await expect(viewer.getByRole('menuitem', { name: 'Offices' })).toBeVisible();
+  for (const entry of ['Content packs', 'Audit trail', /Sign-up requests/]) {
     await expect(viewer.getByRole('menuitem', { name: entry })).toHaveCount(0);
   }
   await viewer.goto('/properties/new');
@@ -128,5 +131,5 @@ test('a new user signs up and an administrator approves them', async ({ browser 
 
   // The applicant is in: PRIME opens instead of the request page.
   await applicant.reload();
-  await expect(applicant.getByRole('menuitem', { name: /Properties/ }).first()).toBeVisible();
+  await expect(applicant.getByRole('menuitem', { name: 'Registry' })).toBeVisible();
 });

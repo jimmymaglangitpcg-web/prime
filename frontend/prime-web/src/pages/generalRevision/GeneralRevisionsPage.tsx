@@ -32,7 +32,7 @@ export function GeneralRevisionsPage() {
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>New general revision</Button>
       </Space>
       <Card>
-        <Table<GeneralRevisionSummaryDto> rowKey="id" size="small" loading={isLoading} dataSource={data} pagination={false}
+        <Table<GeneralRevisionSummaryDto> rowKey="id" size="small" loading={isLoading} dataSource={data} pagination={false} scroll={{ x: true }}
           locale={{ emptyText: 'No general revision yet' }}
           onRow={(r) => ({ onClick: () => navigate(`/general-revision/${r.id}`), style: { cursor: 'pointer' } })}
           columns={[
@@ -108,7 +108,7 @@ function ChecklistTemplateCard() {
         each version. A revision copies the steps in force when its checklist is loaded.
       </Typography.Paragraph>
       {approve.isError && <Alert type="error" showIcon closable style={{ marginBottom: 8 }} title="Could not approve" description={errorText(approve.error)} />}
-      <Table<ChecklistStepDefinitionDto> rowKey="id" size="small" loading={isLoading} dataSource={data} pagination={{ pageSize: 20 }}
+      <Table<ChecklistStepDefinitionDto> rowKey="id" size="small" loading={isLoading} dataSource={data} pagination={{ pageSize: 20 }} scroll={{ x: true }}
         locale={{ emptyText: 'No checklist step configured' }}
         columns={[
           { title: '#', dataIndex: 'sequence', align: 'right' },

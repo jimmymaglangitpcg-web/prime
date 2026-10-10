@@ -5,6 +5,7 @@ import { useApprovalQueue, type ApprovalQueueItemDto } from '../../api/approvals
 import { ApiRequestError } from '../../lib/apiClient';
 import { MunicipalityFilter } from '../../components/MunicipalityFilter';
 import { useState } from 'react';
+import { DocNumber } from '../../components/DocNumber';
 
 const kind: Record<ApprovalQueueItemDto['subjectType'], string> = {
   TaxDeclaration: 'Tax Declaration', Assessment: 'Assessment', PropertyTransaction: 'Transaction',
@@ -40,7 +41,7 @@ export function ApprovalsPage() {
         locale={{ emptyText: <Empty description="Nothing is waiting for you" /> }}
         columns={[
           { title: 'Record', render: (_, i) => <span><Tag>{kind[i.subjectType]}</Tag>{i.reference}</span> },
-          { title: 'Property', render: (_, i) => <Link to={`/properties/${i.propertyId}`}>{i.pin}</Link> },
+          { title: 'Property', render: (_, i) => <Link to={`/properties/${i.propertyId}`}><DocNumber>{i.pin}</DocNumber></Link> },
           {
             title: 'Your step', render: (_, i) => (
               <Space size={4} wrap>

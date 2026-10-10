@@ -958,8 +958,8 @@ Phase 10  LAM alignment (L5, L3, L6, L7; L8 when needed)
 Phase 12  Workflow & security          done 2026-10-08 (docs/SECURITY.md)
 Phase 13  Import / migration      before go-live (see the early step below)
 Phase 14  Production hardening    H1–H4 done; H5 by local testing; H6–H8 before deployment (2026-10-10)
-Phase 11  Reporting               decisions recorded 2026-10-10 (docs/analysis/reporting.md §8.1); R1 done 2026-10-10 (framework, CSV/Excel, property reports); R2 done 2026-10-10 (dashboard); next the UI theme step, then R3
-          UI theme step       after Phase 11 R2 (2026-10-10): logo, grouped sidebar (25 items → 7), colours and type; design document first
+Phase 11  Reporting               decisions recorded 2026-10-10 (docs/analysis/reporting.md §8.1); R1 done 2026-10-10 (framework, CSV/Excel, property reports); R2 done 2026-10-10 (dashboard); UI theme step done; next R3
+          UI theme step       done 2026-10-10 (docs/analysis/ui-theme.md: logo, 7-entry sidebar, colours, Plex fonts, header search, sign-in screens)
 Phase 15  System manual           after all phases
 
 Go-live conditions: Phase 13 (import), H6 deployment, H7 backup and restore drill (before any real LGU data enters
@@ -986,7 +986,7 @@ Supabase), H8 quality gate, a paid Supabase plan, and a short round of testing o
 `records.export`, EXPORT audit row per download); the FAAS in force on a date as one SQL query, checked against the
 Assessment Rolls; property inventory and properties by barangay, classification, actual use and zone; Reports screen.
 Province-wide summaries 7–9 s on the laptop over 400,000 units, a municipality about 2 s (reporting.md §9). No
-migration. **R2 done** (2026-10-10): the dashboard of §55 from live data, cached a minute per jurisdiction (`/api/dashboard`; reporting.md §9); 855 tests; no migration. Next: the UI theme step (design document first), then R3.
+migration. **R2 done** (2026-10-10): the dashboard of §55 from live data, cached a minute per jurisdiction (`/api/dashboard`; reporting.md §9); 855 tests; no migration. **UI theme step done** (2026-10-10, `docs/analysis/ui-theme.md`). Next: R3 (assessment reports).
 
 **Goal**: the report catalog in CLAUDE.md §57 is available in PDF/Excel/
 CSV/print.

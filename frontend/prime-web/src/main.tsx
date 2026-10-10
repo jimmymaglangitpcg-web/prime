@@ -3,7 +3,13 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConfigProvider } from 'antd';
+import '@fontsource/ibm-plex-sans/latin-400.css';
+import '@fontsource/ibm-plex-sans/latin-500.css';
+import '@fontsource/ibm-plex-sans/latin-600.css';
+import '@fontsource/ibm-plex-mono/latin-400.css';
+import '@fontsource/ibm-plex-mono/latin-500.css';
 import './index.css';
+import { primeTheme } from './theme';
 import App from './App.tsx';
 import { ApiRequestError, isConcurrencyConflict } from './lib/apiClient';
 
@@ -28,20 +34,9 @@ const queryClient: QueryClient = new QueryClient({
   },
 });
 
-// WCAG 2.1 AA contrast (docs/analysis/production-hardening.md Q10; docs/TESTING.md §5): Ant Design's default secondary text
-// (45 % black) and placeholders (25 %) fall below 4.5:1 on white; these keep at least that ratio.
-const theme = {
-  colorPrimary: '#1d4ed8',
-  colorLink: '#1d4ed8',
-  colorTextSecondary: 'rgba(0, 0, 0, 0.65)',
-  colorTextTertiary: 'rgba(0, 0, 0, 0.6)',
-  colorTextDescription: 'rgba(0, 0, 0, 0.65)',
-  colorTextPlaceholder: 'rgba(0, 0, 0, 0.56)',
-};
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ConfigProvider theme={{ token: theme }}>
+    <ConfigProvider theme={primeTheme}>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <App />

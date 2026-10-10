@@ -18,7 +18,7 @@ export function ParcelsSection({ propertyId, parcels, location }: { propertyId: 
         </Button>
       </div>
 
-      <Table<ParcelSummaryDto>
+      <Table<ParcelSummaryDto> scroll={{ x: true }}
         rowKey="id"
         dataSource={parcels}
         pagination={false}

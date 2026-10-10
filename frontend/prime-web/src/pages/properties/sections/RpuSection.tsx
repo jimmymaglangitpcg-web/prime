@@ -15,6 +15,7 @@ import { AssessmentsForRpu } from './AssessmentsForRpu';
 import { IndependentAppraisalsForRpu } from './IndependentAppraisalsForRpu';
 import { WorkflowStatusTag } from '../../../components/StatusTag';
 import { TaxabilityTag } from '../../../components/TaxabilityTag';
+import { DocNumber } from '../../../components/DocNumber';
 
 
 type ReasonAction = 'reject' | 'request-cancellation' | 'reject-cancellation';
@@ -93,7 +94,7 @@ function TaxDeclarationsForRpu({ propertyId, rpuId, rpuType }: { propertyId: str
         scroll={{ x: 'max-content' }}
         locale={{ emptyText: <Empty description="No Tax Declarations yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
         columns={[
-          { title: 'TD Number', dataIndex: 'taxDeclarationNumber' },
+          { title: 'TD Number', dataIndex: 'taxDeclarationNumber', render: (v: string) => <DocNumber>{v}</DocNumber> },
           {
             title: 'FAAS No.',
             render: (_, td) => td.faasNumber ?? <Tooltip title="Declares no assessment yet — it becomes a FAAS once it does">—</Tooltip>,

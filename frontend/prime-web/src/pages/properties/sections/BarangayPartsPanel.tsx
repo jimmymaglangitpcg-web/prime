@@ -25,7 +25,7 @@ export function BarangayPartsPanel({ propertyId, municipalityId }: { propertyId:
       {data.length === 0
         ? <Typography.Paragraph type="secondary" style={{ margin: '4px 0 0' }}>No: the parcel lies in one barangay.</Typography.Paragraph>
         : (
-          <Table<BarangayPartDto> size="small" rowKey="sequence" dataSource={data} pagination={false} style={{ marginTop: 8 }}
+          <Table<BarangayPartDto> scroll={{ x: true }} size="small" rowKey="sequence" dataSource={data} pagination={false} style={{ marginTop: 8 }}
             columns={[
               { title: 'Barangay', render: (_, p) => `${p.barangayName}${p.barangayIndex ? ` (${p.barangayIndex})` : ''}` },
               { title: 'Area', dataIndex: 'area', align: 'right', render: (v: number) => `${plain.format(v)} sqm` },

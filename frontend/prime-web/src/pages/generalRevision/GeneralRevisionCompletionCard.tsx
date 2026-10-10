@@ -37,7 +37,7 @@ export function GeneralRevisionCompletionCard({ gr }: { gr: GeneralRevisionDto }
       {complete.isError && <Alert type="error" showIcon closable style={{ marginBottom: 8 }} title="Could not complete" description={errorText(complete.error)} />}
       {data && (
         <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
-          <Table<GateStatusDto> rowKey="gate" size="small" pagination={false} dataSource={data.gates}
+          <Table<GateStatusDto> scroll={{ x: true }} rowKey="gate" size="small" pagination={false} dataSource={data.gates}
             columns={[
               { title: 'Condition (checked by PRIME)', dataIndex: 'gate', render: (g: GateStatusDto['gate']) => gateLabel[g] },
               { title: '', dataIndex: 'met', render: met },
@@ -49,7 +49,7 @@ export function GeneralRevisionCompletionCard({ gr }: { gr: GeneralRevisionDto }
               {open && !data.checklistLoaded && <Button size="small" loading={load.isPending} onClick={() => load.mutate()}>Load the checklist in force</Button>}
             </Space>
             {data.checklistLoaded ? (
-              <Table<ChecklistStepDto> rowKey="id" size="small" pagination={false} dataSource={data.checklist}
+              <Table<ChecklistStepDto> scroll={{ x: true }} rowKey="id" size="small" pagination={false} dataSource={data.checklist}
                 columns={[
                   { title: 'Step', dataIndex: 'code' },
                   { title: 'Title', dataIndex: 'title' },

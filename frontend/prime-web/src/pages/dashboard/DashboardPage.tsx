@@ -10,6 +10,7 @@ import { ApiRequestError } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/format';
 import { WorkflowStatusTag } from '../../components/StatusTag';
 import { generalRevisionStatusColor } from '../../lib/generalRevisionTypes';
+import { DocNumber } from '../../components/DocNumber';
 
 const count = new Intl.NumberFormat('en-PH');
 const area = new Intl.NumberFormat('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -20,13 +21,13 @@ const approvalKind: Record<DashboardApprovalDto['kind'], string> = { TaxDeclarat
  * at each bar's tip in text colour; hover or focus shows the group's figures. A table view gives the same rows for screen
  * readers and copying.
  */
-function GroupBars({ title, groups, emptyText }: { title: string; groups: DashboardGroupDto[]; emptyText: string }) {
+function GroupBars({ title, groups, emptyText, loading }: { title: string; groups: DashboardGroupDto[]; emptyText: string; loading: boolean }) {
   const { token } = theme.useToken();
   const [view, setView] = useState<'Chart' | 'Table'>('Chart');
   // The scale is the named groups'; "Others" sums many and would flatten them, so it is a text row without a bar.
   const max = Math.max(0, ...groups.filter((g) => !g.isOthers).map((g) => g.assessedValue));
   return (
-    <Card size="small" title={title}
+    <Card size="small" title={title} loading={loading}
       extra={groups.length > 0 && <Segmented size="small" options={['Chart', 'Table']} value={view} onChange={(v) => setView(v as 'Chart' | 'Table')} aria-label={`${title}: view`} />}>
       {groups.length === 0 ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />
@@ -107,7 +108,7 @@ export function DashboardPage() {
   const f = d?.figures;
   const where = me.data?.provinceWide ? 'the whole province' : (me.data?.officeName ?? 'your jurisdiction');
   const pin = (propertyId: string, value: string) => (
-    <span style={{ whiteSpace: 'nowrap' }}>{can('property.view') ? <Link to={`/properties/${propertyId}`}>{value}</Link> : value}</span>
+    <span style={{ whiteSpace: 'nowrap' }}>{can('property.view') ? <Link to={`/properties/${propertyId}`}><DocNumber>{value}</DocNumber></Link> : <DocNumber>{value}</DocNumber>}</span>
   );
 
   return (
@@ -166,14 +167,14 @@ export function DashboardPage() {
 
       <Row gutter={[12, 12]}>
         <Col xs={24} lg={12}>
-          <GroupBars title="Assessed value by classification" groups={d?.byClassification ?? []} emptyText="No FAAS in force" />
+          <GroupBars title="Assessed value by classification" groups={d?.byClassification ?? []} emptyText="No FAAS in force" loading={!d && !dashboard.isError} />
         </Col>
         <Col xs={24} lg={12}>
-          <GroupBars title="Assessed value by barangay (top ten)" groups={d?.byBarangay ?? []} emptyText="No FAAS in force" />
+          <GroupBars title="Assessed value by barangay (top ten)" groups={d?.byBarangay ?? []} emptyText="No FAAS in force" loading={!d && !dashboard.isError} />
         </Col>
       </Row>
 
-      <Card size="small" title="General revision">
+      <Card size="small" title="General revision" loading={!d && !dashboard.isError}>
         {d && d.generalRevisions.length === 0 ? (
           <Typography.Text type="secondary">No general revision is planned or in progress.</Typography.Text>
         ) : (

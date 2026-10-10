@@ -57,12 +57,15 @@ export function MfaPage() {
     await queryClient.invalidateQueries();
   };
 
+  // Six boxes, one digit each (ui-theme.md §4.6, Q8); a pasted or autofilled code fills them all.
   const codeInput = (
-    <Space.Compact style={{ width: '100%' }}>
-      <Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="6-digit code" value={code}
-        onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} onPressEnter={verify} aria-label="Authenticator code" />
-      <Button type="primary" onClick={verify} loading={busy} disabled={code.length !== 6}>Verify</Button>
-    </Space.Compact>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div role="group" aria-label="Authenticator code, 6 digits" onKeyDown={(e) => { if (e.key === 'Enter' && code.length === 6) void verify(); }}>
+        <Input.OTP length={6} inputMode="numeric" autoComplete="one-time-code" value={code} size="large"
+          formatter={(v) => v.replace(/\D/g, '')} onChange={(v) => setCode(v)} onInput={(cells) => setCode(cells.join(''))} />
+      </div>
+      <Button type="primary" onClick={verify} loading={busy} disabled={code.length !== 6} block>Verify</Button>
+    </div>
   );
 
   return (

@@ -14,8 +14,23 @@ body,
   padding: 0;
 }
 
+/* IBM Plex, bundled with the application (docs/analysis/ui-theme.md §4.5, Q5); the same stacks as theme.ts. */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #17212b;
+  background: #f4f6f8;
+}
+
+/* Amounts and counts line up in columns: tabular figures in tables, statistics and description lists. */
+.ant-table, .ant-statistic-content, .ant-descriptions, .tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* PINs, TD numbers and other document numbers (DocNumber component). */
+.doc-number {
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.95em;
+  letter-spacing: -0.01em;
 }
 
 /*
@@ -37,9 +52,9 @@ body {
 
 /*
  * An empty table's message (its emptyText or "No data") is drawn in the disabled-text colour, about 1.6:1; it is
- * information, not a disabled control, so it takes the tertiary text colour of the theme (main.tsx), about 5.7:1.
+ * information, not a disabled control, so it takes the tertiary text colour of the theme (theme.ts), 5.9:1.
  */
-.ant-table-wrapper .ant-table-tbody > tr.ant-table-placeholder { color: rgba(0, 0, 0, 0.6) !important; }
+.ant-table-wrapper .ant-table-tbody > tr.ant-table-placeholder { color: #5b6672 !important; }
 
 /* Printable pages (e.g. the tax map, /gis/print): print only the sheet. */
 @page {
@@ -62,5 +77,96 @@ body {
 
   body {
     background: #fff;
+  }
+}
+
+/*
+ * Ant Design 6.6's button loading icon leaves by a CSS transition with no fallback timer: when a request settles very
+ * quickly, the transition never ends, and the invisible icon stays in the button, so assistive technology reads
+ * "loading Approve". Hiding the leaving icon at once skips the shrink animation and keeps the button's name.
+ */
+.ant-btn .ant-btn-loading-icon-motion-leave-active {
+  display: none;
+}
+
+/* Sign-in screens (pages/auth/AuthLayout.tsx; docs/analysis/ui-theme.md §4.6). */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  background: #fff;
+}
+
+.auth-panel {
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 42%;
+  max-width: 560px;
+  background: #10263d;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  padding: 48px;
+}
+
+.auth-pattern {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.12;
+}
+
+.auth-panel-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.auth-office {
+  font-size: 15px;
+  line-height: 1.5;
+  color: #fff;
+}
+
+.auth-tagline {
+  margin: 0;
+  color: #c9d3de;
+}
+
+.auth-main {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+@media (max-width: 767px) {
+  .auth-page {
+    flex-direction: column;
+  }
+
+  .auth-panel {
+    flex: 0 0 auto;
+    max-width: none;
+    padding: 24px 16px;
+  }
+
+  .auth-panel-content {
+    gap: 12px;
+  }
+
+  .auth-tagline {
+    display: none;
+  }
+
+  .auth-main {
+    align-items: flex-start;
+    padding: 24px 16px;
+  }
+
+  .auth-main .ant-segmented-item-label {
+    padding-inline: 4px;
   }
 }

@@ -38,7 +38,7 @@ export function MarketReportsTab({ municipalityId }: { municipalityId?: string }
         The sales report lists accepted sales only. Its frequency (yearly or every three years) awaits the Provincial Assessor's answer (E6).
       </Typography.Paragraph>
       {create.isError && <Alert type="error" showIcon closable style={{ marginBottom: 8 }} title="Could not prepare" description={errorText(create.error)} />}
-      <Table<MarketDataReportRunDto> rowKey="id" size="small" loading={isLoading} dataSource={runs} pagination={{ pageSize: 10 }}
+      <Table<MarketDataReportRunDto> scroll={{ x: true }} rowKey="id" size="small" loading={isLoading} dataSource={runs} pagination={{ pageSize: 10 }}
         locale={{ emptyText: 'Nothing prepared yet' }}
         columns={[
           { title: 'Report', dataIndex: 'kind', render: (k: MarketDataReportKind) => marketDataReportKindLabel[k] },

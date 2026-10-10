@@ -65,7 +65,7 @@ function NoticesSection({ gr, open }: { gr: GeneralRevisionDto; open: boolean })
           options={(['Draft', 'Issued', 'Served'] as NoticeStatus[]).map((s) => ({ value: s, label: s === 'Issued' ? 'Issued, not served' : s }))} />
       </Space>
       {run.isError && <Alert type="error" showIcon closable style={{ marginBottom: 8 }} title="Could not start" description={errorText(run.error)} />}
-      <Table<GeneralRevisionNoticeDto> rowKey="id" size="small" loading={isFetching} dataSource={data?.items ?? []}
+      <Table<GeneralRevisionNoticeDto> scroll={{ x: true }} rowKey="id" size="small" loading={isFetching} dataSource={data?.items ?? []}
         locale={{ emptyText: 'No notice yet: post the assessments, then generate the notices' }}
         rowSelection={open ? { selectedRowKeys: selected, preserveSelectedRowKeys: true, onChange: (k) => setSelected(k as string[]),
           getCheckboxProps: (r) => ({ disabled: r.status !== 'Issued' }) } : undefined}
@@ -104,7 +104,7 @@ function ServiceModal({ id, noticeIds, onClose }: { id: string; noticeIds: strin
           <Alert type={result.failures.length ? 'warning' : 'success'} showIcon style={{ marginBottom: 12 }}
             title={`${result.recorded} recorded${result.failures.length ? `, ${result.failures.length} refused` : ''}`} />
           {result.failures.length > 0 && (
-            <Table rowKey="noticeId" size="small" pagination={false} dataSource={result.failures}
+            <Table scroll={{ x: true }} rowKey="noticeId" size="small" pagination={false} dataSource={result.failures}
               columns={[{ title: 'Notice', dataIndex: 'noticeNumber' }, { title: 'Why', dataIndex: 'message' }]} />
           )}
           <Button style={{ marginTop: 12 }} onClick={() => onClose(true)}>Close</Button>
@@ -140,7 +140,7 @@ function RollGatesSection({ gr }: { gr: GeneralRevisionDto }) {
         The revision&apos;s assessment roll is prepared once every unit is posted and its new TD approved, every notice the units need is served, and the waiting period after the
         latest receipt has passed (GRI 17).
       </Typography.Paragraph>
-      <Table<RollGateDto> rowKey="municipalityId" size="small" loading={isFetching} dataSource={data ?? []} pagination={false}
+      <Table<RollGateDto> scroll={{ x: true }} rowKey="municipalityId" size="small" loading={isFetching} dataSource={data ?? []} pagination={false}
         columns={[
           { title: 'City/municipality', dataIndex: 'municipalityName' },
           { title: 'Units', dataIndex: 'units', align: 'right' },
@@ -186,7 +186,7 @@ function RegisterRunsSection({ gr, open }: { gr: GeneralRevisionDto; open: boole
         </Space>
       )}
       {create.isError && <Alert type="error" showIcon closable style={{ marginBottom: 8 }} title="Could not prepare" description={errorText(create.error)} />}
-      <Table<GeneralRevisionRegisterRunDto> rowKey="id" size="small" loading={isFetching} dataSource={data ?? []} pagination={{ pageSize: 10 }}
+      <Table<GeneralRevisionRegisterRunDto> scroll={{ x: true }} rowKey="id" size="small" loading={isFetching} dataSource={data ?? []} pagination={{ pageSize: 10 }}
         locale={{ emptyText: 'No register run for this revision yet' }}
         columns={[
           { title: 'Register', dataIndex: 'kind', render: (k: GeneralRevisionRegisterKind) => registerKindLabel[k] },

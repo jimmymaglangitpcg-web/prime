@@ -16,6 +16,7 @@ import { ExemptionsSection } from './sections/ExemptionsSection';
 import { NoticesSection } from './sections/NoticesSection';
 import { AuditTable } from '../../components/AuditTable';
 import { useCan } from '../../api/offices';
+import { DocNumber } from '../../components/DocNumber';
 
 /**
  * CLAUDE.md §50 Property Profile — "one of the most important screens in
@@ -47,7 +48,7 @@ export function PropertyProfilePage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <Typography.Title level={3} style={{ margin: 0 }}>
-          {property.propertyIdentificationNumber}
+          <DocNumber>{property.propertyIdentificationNumber}</DocNumber>
         </Typography.Title>
         <Button icon={<GlobalOutlined />} onClick={() => navigate(`/gis?propertyId=${property.id}`)}>
           View on map
@@ -60,7 +61,7 @@ export function PropertyProfilePage() {
           <Descriptions.Item label="Status">
             <Tag>{property.status}</Tag>
           </Descriptions.Item>
-          <Descriptions.Item label="PIN">{property.propertyIdentificationNumber}</Descriptions.Item>
+          <Descriptions.Item label="PIN"><DocNumber>{property.propertyIdentificationNumber}</DocNumber></Descriptions.Item>
           <Descriptions.Item label="Province">{property.provinceName}</Descriptions.Item>
           <Descriptions.Item label="Municipality">{property.municipalityName}</Descriptions.Item>
           <Descriptions.Item label="Barangay">{property.barangayName}</Descriptions.Item>
