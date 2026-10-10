@@ -244,36 +244,74 @@ public sealed class ApprovalChainService(
         Guid? municipalityId = null)
     {
         // Pending records in the jurisdiction (the query filters apply). TDs drafted under a transaction are approved with it.
-        var candidates = new List<(ApprovalSubjectType Type, Guid Id, Guid? CreatedBy, Guid PropertyId, string Pin, string Reference, DateTimeOffset CreatedAt, uint RowVersion)>();
+        var candidates = new List<(ApprovalSubjectType Type, Guid Id, Guid? CreatedBy, Guid PropertyId, string Pin, string Reference, DateTimeOffset CreatedAt,
+            uint RowVersion, Guid MunicipalityId, RpuType? Kind)>();
         candidates.AddRange((await db.TaxDeclarations.AsNoTracking()
                 .Where(x => x.Status == WorkflowStatus.PendingReview && x.PropertyTransactionId == null)
                 .Where(x => municipalityId == null || x.Property!.MunicipalityId == municipalityId)
                 .OrderBy(x => x.CreatedAt).Take(QueueLimit)
-                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.TaxDeclarationNumber, x.CreatedAt, x.RowVersion })
+                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.TaxDeclarationNumber, x.CreatedAt, x.RowVersion,
+                    x.Property.MunicipalityId, x.Rpu!.RpuType })
                 .ToListAsync(cancellationToken))
-            .Select(x => (ApprovalSubjectType.TaxDeclaration, x.Id, x.CreatedBy, x.PropertyId, x.PropertyIdentificationNumber, $"TD {x.TaxDeclarationNumber}", x.CreatedAt, x.RowVersion)));
+            .Select(x => (ApprovalSubjectType.TaxDeclaration, x.Id, x.CreatedBy, x.PropertyId, x.PropertyIdentificationNumber, $"TD {x.TaxDeclarationNumber}",
+                x.CreatedAt, x.RowVersion, x.MunicipalityId, (RpuType?)x.RpuType)));
         candidates.AddRange((await db.Assessments.AsNoTracking()
                 .Where(x => x.Status == WorkflowStatus.PendingReview)
                 .Where(x => municipalityId == null || x.Property!.MunicipalityId == municipalityId)
                 .OrderBy(x => x.CreatedAt).Take(QueueLimit)
-                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.AssessmentYear, x.Rpu!.RpuNumber, x.CreatedAt, x.RowVersion })
+                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.AssessmentYear, x.Rpu!.RpuNumber, x.CreatedAt,
+                    x.RowVersion, x.Property.MunicipalityId, x.Rpu.RpuType })
                 .ToListAsync(cancellationToken))
             .Select(x => (ApprovalSubjectType.Assessment, x.Id, x.CreatedBy, x.PropertyId, x.PropertyIdentificationNumber,
-                $"Assessment {x.AssessmentYear}, RPU {x.RpuNumber}", x.CreatedAt, x.RowVersion)));
+                $"Assessment {x.AssessmentYear}, RPU {x.RpuNumber}", x.CreatedAt, x.RowVersion, x.MunicipalityId, (RpuType?)x.RpuType)));
         candidates.AddRange((await db.PropertyTransactions.AsNoTracking()
                 .Where(x => x.Status == WorkflowStatus.PendingReview)
                 .Where(x => municipalityId == null || x.Property!.MunicipalityId == municipalityId)
                 .OrderBy(x => x.CreatedAt).Take(QueueLimit)
-                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.TransactionNumber, x.CreatedAt, x.RowVersion })
+                .Select(x => new { x.Id, x.CreatedBy, x.PropertyId, x.Property!.PropertyIdentificationNumber, x.TransactionNumber, x.CreatedAt, x.RowVersion,
+                    x.Property.MunicipalityId })
                 .ToListAsync(cancellationToken))
+            // A transaction concerns the property as a whole: only delegations covering every kind apply.
             .Select(x => (ApprovalSubjectType.PropertyTransaction, x.Id, x.CreatedBy, x.PropertyId, x.PropertyIdentificationNumber,
-                $"Transaction {x.TransactionNumber ?? "(unnumbered)"}", x.CreatedAt, x.RowVersion)));
+                $"Transaction {x.TransactionNumber ?? "(unnumbered)"}", x.CreatedAt, x.RowVersion, x.MunicipalityId, (RpuType?)null)));
+
+        // What each candidate's routing needs, loaded once for the whole queue rather than per record (production-hardening.md §9, H4).
+        var ids = candidates.Select(c => c.Id).ToList();
+        var signedBySubject = (await db.ApprovalRecords.AsNoTracking().Where(x => ids.Contains(x.SubjectId)).ToListAsync(cancellationToken))
+            .ToLookup(x => (x.SubjectType, x.SubjectId));
+        var municipalities = candidates.Select(c => c.MunicipalityId).Distinct().ToList();
+        var preparingByMunicipality = (await db.OfficeJurisdictions.AsNoTracking().InForce(asOf).Where(j => municipalities.Contains(j.MunicipalityId))
+                .Select(j => new { j.MunicipalityId, Preparing = new PreparingOffice(j.OfficeId, j.Office!.Code, j.Office.HeadPosition) })
+                .ToListAsync(cancellationToken))
+            .GroupBy(x => x.MunicipalityId).ToDictionary(g => g.Key, g => g.First().Preparing);
+        var types = candidates.Select(c => c.Type).Distinct().ToList();
+        var chainsInForce = await db.ApprovalChains.AsNoTracking().Include(x => x.Steps).InForce(asOf).Where(x => types.Contains(x.SubjectType))
+            .ToListAsync(cancellationToken);
+        var startedChainIds = signedBySubject.SelectMany(g => g).Select(r => r.ApprovalChainId).Distinct().ToList();
+        var startedChains = await db.ApprovalChains.AsNoTracking().Include(x => x.Steps).Where(x => startedChainIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+        var delegationCache = new Dictionary<(Guid, ApprovalSubjectType, RpuType?), ApprovalDelegationDto?>();
 
         var userId = currentUser.AppUserId;
         var items = new List<ApprovalQueueItemDto>();
         foreach (var c in candidates)
         {
-            var plan = await PlanNextStepAsync(c.Type, c.Id, c.CreatedBy, asOf, cancellationToken);
+            var signed = signedBySubject[(c.Type, c.Id)].OrderBy(x => x.StepSequence).ToList();
+            var preparing = preparingByMunicipality.GetValueOrDefault(c.MunicipalityId);
+            var chain = signed.Count > 0
+                ? startedChains[signed[0].ApprovalChainId]
+                : (preparing is not null ? chainsInForce.FirstOrDefault(x => x.SubjectType == c.Type && x.OfficeId == preparing.OfficeId) : null)
+                    ?? chainsInForce.FirstOrDefault(x => x.SubjectType == c.Type && x.OfficeId == null);
+            var type = c.Type;
+            var plan = await DecideNextStepAsync(new StepInputs(signed, chain, preparing, c.Kind), c.CreatedBy, async (officeId, kind) =>
+            {
+                if (!delegationCache.TryGetValue((officeId, type, kind), out var found))
+                {
+                    found = await delegations.FindInForceAsync(officeId, type, kind, asOf, cancellationToken);
+                    delegationCache[(officeId, type, kind)] = found;
+                }
+                return found;
+            }, cancellationToken);
             if (plan.IsFailure)
             {
                 continue; // not this user's step
@@ -299,6 +337,12 @@ public sealed class ApprovalChainService(
     private sealed record StepPlan(ApprovalChain? Chain, ApprovalChainStep? Step, bool IsLast, ApprovalDelegationDto? Delegation,
         Guid? SignerOfficeId, string? PreparingOfficeHeadPosition);
 
+    /// <summary>The office covering the record's municipality, which prepared it.</summary>
+    private sealed record PreparingOffice(Guid OfficeId, string Code, string? HeadPosition);
+
+    /// <summary>What deciding a record's next step needs: the steps signed so far, the chain, the preparing office and the property kind.</summary>
+    private sealed record StepInputs(IReadOnlyList<ApprovalRecord> Signed, ApprovalChain? Chain, PreparingOffice? Preparing, RpuType? Kind);
+
     private async Task<Result<StepPlan>> PlanNextStepAsync(ApprovalSubjectType subjectType, Guid subjectId, Guid? creatorId, DateOnly asOf,
         CancellationToken ct)
     {
@@ -307,7 +351,7 @@ public sealed class ApprovalChainService(
         var (municipalityId, kind) = await SubjectAsync(subjectType, subjectId, ct);
         var preparing = municipalityId is { } m
             ? await db.OfficeJurisdictions.AsNoTracking().InForce(asOf).Where(j => j.MunicipalityId == m)
-                .Select(j => new { j.OfficeId, j.Office!.Code, j.Office.HeadPosition }).FirstOrDefaultAsync(ct)
+                .Select(j => new PreparingOffice(j.OfficeId, j.Office!.Code, j.Office.HeadPosition)).FirstOrDefaultAsync(ct)
             : null;
 
         // A record already in a chain finishes under that chain, even if a newer one was approved since.
@@ -323,6 +367,18 @@ public sealed class ApprovalChainService(
             chain = (preparing is not null ? await inForce.FirstOrDefaultAsync(x => x.OfficeId == preparing.OfficeId, ct) : null)
                 ?? await inForce.FirstOrDefaultAsync(x => x.OfficeId == null, ct);
         }
+        return await DecideNextStepAsync(new StepInputs(signed, chain, preparing, kind), creatorId,
+            (officeId, k) => delegations.FindInForceAsync(officeId, subjectType, k, asOf, ct), ct);
+    }
+
+    /// <summary>
+    /// The next step of a record and whether the current user may sign it now, from its loaded inputs. Signing loads them for
+    /// one record (<see cref="PlanNextStepAsync"/>); the approval queue loads them for all its candidates at once.
+    /// </summary>
+    private async Task<Result<StepPlan>> DecideNextStepAsync(StepInputs inputs, Guid? creatorId,
+        Func<Guid, RpuType?, Task<ApprovalDelegationDto?>> findDelegation, CancellationToken ct)
+    {
+        var (signed, chain, preparing, kind) = inputs;
         if (chain is null)
         {
             return Result.Success(new StepPlan(null, null, false, null, null, null));
@@ -348,7 +404,7 @@ public sealed class ApprovalChainService(
         ApprovalDelegationDto? delegation = null;
         if (step.IsFinalApproval && step.SignerOffice == ApprovalSigner.ProvincialOffice && preparing is not null)
         {
-            delegation = await delegations.FindInForceAsync(preparing.OfficeId, subjectType, kind, asOf, ct);
+            delegation = await findDelegation(preparing.OfficeId, kind);
         }
 
         Guid? signerOfficeId = null;

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Phase | 11 (CLAUDE.md §57, §98; roadmap "Phase 11 — Reporting") |
-| Status | Deferred (user decision, 2026-10-08); design kept, Q1–Q12 undecided |
+| Status | Decisions recorded 2026-10-10 (all recommendations accepted); implementation starts during local testing, before Phase 14 H6–H8 |
 | Sources | CLAUDE.md §55, §57, §71, §73, §76; LAM 2025 Book I Ch. I §5 (reportorial requirements, pp.24–25), Ch. I on idle lands (pp.11–13) and the province's reports (p.15); LAM Annexes I-P, I-Q, I-R, I-S; LAM gap analysis J5–J7 (untracked, `docs/lam/`) |
 | Depends on | Assessments, registers and forms (Phases 6, 10), jurisdiction (LP), permissions and audit (Phase 12) |
 | Order | After Phase 12; Phase 13 skipped for now (user, 2026-10-08) |
@@ -186,6 +186,28 @@ streaming) and checked in a browser before the next.
 
 2026-10-08: Phase 11 deferred by the user before any question was decided. The design is kept; Q1–Q12 are
 answered when the phase is resumed.
+
+2026-10-10: the user accepted every recommendation of Q1–Q12:
+
+- Q1: MiniExcel for Excel exports; official layouts print through the forms.
+- Q2: PDF by the browser's "save as PDF" from the printed HTML; no server-side PDF library.
+- Q3: stream up to `Reports:SyncRowLimit` (20,000 rows); larger reports run as a background job, the file kept 7 days in `ReportFile`.
+- Q4: report definitions in code, one class per report; print layouts as versioned content; no user-defined queries.
+- Q5: effective-dated levy rates per LGU with their ordinance, under maker-checker, DEMO until supplied; the collectible is a report figure only.
+- Q6: QRRPA (LIFT) and MRRPA (BLGF) upload formats DOMAIN VERIFICATION REQUIRED; meanwhile Excel in the annex's column order.
+- Q7: inventory of idle lands deferred until the idle-land designation and the province's levy are confirmed.
+- Q8: dashboard from live queries with a one-minute cache per jurisdiction.
+- Q9: "as of" = posted assessments and approved TDs in force on the date.
+- Q10: reuse `records.view` and `records.export`; no new permission.
+- Q11: half-yearly report as proposed (assessments made and cancelled in the half-year, by kind and classification, counts
+  and assessed values, taxable and exempt), DOMAIN VERIFICATION REQUIRED until the province confirms its content.
+- Q12: steps in the order R1 → R2 → R3 → R4 → R5 → R6.
+
+2026-10-10, also: a UI theme step (PRIME logo, sidebar grouped from 25 items into 7, colours and type) follows R2, so
+the theme is applied together with the new dashboard. It gets its own design document (CLAUDE.md §108) before any code.
+
+Phase 11 starts during the user's local testing, once H4 is finished; Phase 14 H6–H8 are deferred to before
+deployment (production-hardening.md §8.1).
 
 ## 9. Implementation log
 

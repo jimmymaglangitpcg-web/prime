@@ -60,33 +60,38 @@ psql -h localhost -U prime -d prime_volume -At -f tests/perf/samples.sql > sampl
 node tests/perf/measure.mjs http://localhost:<port> samples.json [case filter]
 ```
 
-Measured 2026-10-09, after the H4 fixes (milliseconds; 20 calls per case; before the fixes in brackets where changed):
+Measured 2026-10-10 on the posted set, after the province-wide Value run (400,000 units valued), one municipality's
+19,547 assessments submitted for review and one barangay's approved and posted with its TDs; the audit log then held
+5.7 million rows (milliseconds; 20 calls per case; before the H4 fixes in brackets where changed):
 
 | Case | p50 | p95 | max | Target |
 |---|---:|---:|---:|---|
-| Property search: PIN fragment | 61 | 92 (1,007) | 114 | < 1 s |
-| Property search: exact PIN | 41 | 54 (1,229) | 76 | < 1 s |
-| Property search: no match | 16 | 19 (1,481) | 24 | < 1 s |
-| Property list: barangay | 28 | 36 | 36 | < 1 s |
-| Property list: municipality, page 200 | 71 | 152 | 189 | < 1 s |
-| Owner search: surname | 33 | 75 (558) | 134 | < 1 s |
-| Property Profile (all its calls, in parallel) | 121 | 359 | 758 | < 1.5 s |
-| Tax map: barangay zoom | 47 | 74 | 112 | < 2 s |
-| Tax map: municipality zoom | 249 | 370 | 445 | < 2 s |
-| Tax map: click a parcel | 21 | 34 | 37 | < 1 s |
-| Audit trail: page 1 | 19 | 32 (722) | 42 | < 1 s |
-| Audit trail: one table, page 100 | 413 | 758 | 797 | < 1 s |
-| Audit trail: a property's history | 25 | 36 (715) | 41 | < 1 s |
-| Audit trail: one record | 15 | 20 | 21 | < 1 s |
-| Approval queue: province | 171 | 204 | 224 | < 1 s |
+| Property search: PIN fragment | 101 | 219 (1,007) | 280 | < 1 s |
+| Property search: exact PIN | 63 | 85 (1,229) | 91 | < 1 s |
+| Property search: no match | 17 | 27 (1,481) | 28 | < 1 s |
+| Property list: barangay | 29 | 34 | 38 | < 1 s |
+| Property list: municipality, page 200 | 69 | 225 | 291 | < 1 s |
+| Owner search: surname | 45 | 66 (558) | 160 | < 1 s |
+| Property Profile (all its calls, in parallel) | 154 | 251 | 787 | < 1.5 s |
+| Tax map: barangay zoom | 51 | 86 | 105 | < 2 s |
+| Tax map: municipality zoom | 266 | 332 | 335 | < 2 s |
+| Tax map: click a parcel | 16 | 44 | 58 | < 1 s |
+| Audit trail: page 1 | 16 | 34 (722) | 43 | < 1 s |
+| Audit trail: one table, page 100 | 17 | 33 (over 30 s) | 98 | < 1 s |
+| Audit trail: a property's history | 38 | 53 (715) | 59 | < 1 s |
+| Audit trail: one record | 16 | 19 | 20 | < 1 s |
+| SMV schedule rows (one per barangay and class) | 208 | 236 | 278 | < 1 s |
+| Approval queue: province, 19,547 pending | 32 | 45 (1,525) | 47 | < 1 s |
+| Register: TMCR of a section, issued | 1,374 | 2,350 | 2,656 | none |
+| Register: TMCR of a barangay, issued | 1,039 | 1,178 | 1,307 | none |
+| Register: assessment roll of a barangay, issued | 1,844 | 2,099 | 2,109 | none (140 s before) |
 
-Register runs (TMCR, assessment roll) are not in the table: the script now creates and issues each register, and the earlier figures came from a version that did not. A barangay assessment roll with its rows prefetched took
-2.5 s (140 s before the fix); the cases are timed in the final run. General revision, province-wide (400,000 units): Compile in 5.5 minutes; Value at about
-760 units a minute, about 9 hours in all on this machine. That meets the target here; it is measured again on the
-hosted stack (H6), where every statement crosses the network.
+A register run builds its rows and freezes the printed register, so it is timed but has no list target.
 
-Still to measure (H4): the approval queue and the assessment roll with the general revision's assessments submitted
-and posted, and a final run of every case on the posted set.
+General revision, province-wide (400,000 units): Compile in 5.5 minutes; Value at 760 to 1,130 units a minute, about
+9 hours in all on this machine (the 2026-10-09/10 run stopped overnight and resumed). Batch actions for one barangay
+of 1,028 units: submit 13 s, approve 48 s, post 38 s, submit TDs 18 s, approve TDs 355 s (each approval freezes the
+printed TD and FAAS). Everything is measured again on the hosted stack (H6), where every statement crosses the network.
 
 ## 4. Browser end-to-end suite and CI (Phase 14 step H5)
 

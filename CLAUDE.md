@@ -2325,16 +2325,19 @@ Phase 7   GIS                                        done
 Phase 8   Billing                                    built under the earlier scope; frozen (§0)
 Phase 9   Collection                                 built under the earlier scope; frozen (§0)
 Phase 10  LAM alignment                              in progress (§97)
-Phase 11  Reporting                                  deferred (§98)
+Phase 11  Reporting                                  decided; starts after H4 (§98)
 Phase 12  Workflow & security                        (§99)
 Phase 13  Import / migration                         deferred to before go-live (§100)
-Phase 14  Production hardening                       (§101)
+Phase 14  Production hardening                       H1–H5; H6–H8 before deployment (§101)
 Phase 15  System manual                              after all phases (§119)
 ```
 
-Order of the remaining phases (user decision, 2026-10-02): 10 → 12 → 13 →
-11 → 14 → 15. Phases 11 and 13 do not block the assessor's basic functions.
-Phase 13 must be done before go-live. Its early step 13-0, done during
+Order of the remaining phases (user decision, 2026-10-02, revised
+2026-10-10): Phase 14 H1–H5 → Phase 11 (during the user's local testing) →
+Phase 14 H6–H8 (deployment, backup and restore drill, quality gate, just
+before deployment) → 15. Phase 13 must be done before go-live; go-live also
+needs a paid Supabase plan, H7 before any real LGU data enters Supabase, and
+a short round of testing on the hosted set-up. Phase 13's early step 13-0, done during
 Phase 10, maps a sample export of the province's current records to PRIME's
 fields. `docs/DEVELOPMENT-ROADMAP.md` gives the reasons.
 

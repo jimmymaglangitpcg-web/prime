@@ -503,7 +503,15 @@ design (§48).
   (`TotalIsLowerBound`) and the user narrows the filter.
 - Audit trail: `AuditLogs.RecordId` has its own index (migration
   `AuditRecordIndex`); the `(TableName, RecordId)` index cannot serve the
-  record and property history views, which look up by id alone.
+  record and property history views, which look up by id alone. One
+  table's trail uses `(TableName, Timestamp DESC, Id)` (migration
+  `AuditTableTimestampIndex`, 2026-10-10), and a page selects its ids
+  before its rows; without both, deep pages of an old table timed out once
+  a general revision had added millions of newer rows.
+- Approval queue: partial indexes on `Assessments.CreatedAt` and
+  `TaxDeclarations.CreatedAt` where `Status = 'PendingReview'` (migration
+  `ApprovalQueueIndexes`, 2026-10-10) find the oldest pending records
+  without scanning the table.
 - Spatial: GiST index on every `geometry` column.
 - Effective-date composite indexes per §4 above.
 - Foreign keys are indexed by default via EF Core conventions; verified

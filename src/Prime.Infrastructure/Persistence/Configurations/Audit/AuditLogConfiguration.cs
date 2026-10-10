@@ -23,6 +23,12 @@ public sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
 
         // Primary access pattern: "audit history for this record".
         builder.HasIndex(x => new { x.TableName, x.RecordId });
+        // One table's trail in the viewer's exact order (newest first, then id). Without it the newest-first scan of
+        // IX_AuditLogs_Timestamp wades through every newer row of other tables: past 30 s on page 100 once a general revision
+        // had added millions. An index on (TableName, Timestamp) alone still loses the planner's estimate to that scan
+        // (production-hardening.md §9, H4).
+        builder.HasIndex(x => new { x.TableName, x.Timestamp, x.Id }).IsDescending(false, true, false)
+            .HasDatabaseName("IX_AuditLogs_TableName_Timestamp_Id");
         builder.HasIndex(x => x.Timestamp);
         builder.HasIndex(x => x.UserId);
         // The audit viewer (docs/analysis/workflow-security.md §4.3): a user's activity, and a record's child rows.

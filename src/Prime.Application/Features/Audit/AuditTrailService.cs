@@ -103,8 +103,11 @@ public sealed class AuditTrailService(IApplicationDbContext db, ISecurityEventLo
         }
 
         var (total, more, page) = await CappedCount.CountAsync(logs, query.Page, query.PageSize, ct);
-        var items = await Project(logs.OrderByDescending(a => a.Timestamp).ThenBy(a => a.Id)
-                .Skip((page - 1) * query.PageSize).Take(query.PageSize))
+        // The page's ids first, then its rows: the ids of one table's trail come from IX_AuditLogs_TableName_Timestamp_Id alone,
+        // so a deep page skips index entries rather than whole rows (production-hardening.md §9, H4).
+        var pageIds = logs.OrderByDescending(a => a.Timestamp).ThenBy(a => a.Id)
+            .Skip((page - 1) * query.PageSize).Take(query.PageSize).Select(a => a.Id);
+        var items = await Project(db.AuditLogs.Where(a => pageIds.Contains(a.Id)).OrderByDescending(a => a.Timestamp).ThenBy(a => a.Id))
             .ToListAsync(ct);
         return Result.Success(new PagedResult<AuditLogDto> { Items = items, TotalCount = total, TotalIsLowerBound = more, Page = page, PageSize = query.PageSize });
     }

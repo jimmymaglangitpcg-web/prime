@@ -174,6 +174,9 @@ public class ApprovalRoutingTests(WebApplicationFactory<Program> factory) : ICla
         (await c.SignAsync(td, c.MunAssessor)).Outcome.ShouldNotBeNull();
         (await c.SignAsync(td, c.ProvAssessor)).Code.ShouldBe("APPROVAL_STEP_FORBIDDEN");  // delegated: not the province now
         (await c.SignAsync(td, c.Outsider)).Code.ShouldBe("APPROVAL_STEP_FORBIDDEN");      // not sub-delegable to another office
+        // The queue routes it the same way, naming the delegation.
+        (await QueuedAsync(c, c.ProvAssessor, td)).ShouldBeNull();
+        (await QueuedAsync(c, c.MunAssessor2, td)).ShouldNotBeNull().UnderDelegation.ShouldNotBeNull().ShouldStartWith("DEMO Office Order LP4");
         var final = (await c.SignAsync(td, c.MunAssessor2)).Outcome.ShouldNotBeNull();
         final.Completed.ShouldBeTrue();
         final.Record!.DelegationId.ShouldNotBeNull();
@@ -192,6 +195,12 @@ public class ApprovalRoutingTests(WebApplicationFactory<Program> factory) : ICla
 
         var land = await TdAsync(c.Db, c.Town, c.Creator, RpuType.Land);
         await c.SignAsync(land, c.MunAssessor);
+        // The queue decides per property kind: a building at the same step would go to the municipal Assessor.
+        var waitingBuilding = await TdAsync(c.Db, c.Town, c.Creator, RpuType.Building);
+        await c.SignAsync(waitingBuilding, c.MunAssessor);
+        (await QueuedAsync(c, c.MunAssessor2, land)).ShouldBeNull();
+        (await QueuedAsync(c, c.ProvAssessor, land)).ShouldNotBeNull();
+        (await QueuedAsync(c, c.MunAssessor2, waitingBuilding)).ShouldNotBeNull();
         (await c.SignAsync(land, c.MunAssessor2)).Code.ShouldBe("APPROVAL_STEP_FORBIDDEN");
         (await c.SignAsync(land, c.ProvAssessor)).Outcome!.Record!.DelegationId.ShouldBeNull();
 
@@ -203,6 +212,13 @@ public class ApprovalRoutingTests(WebApplicationFactory<Program> factory) : ICla
         await c.Db.SaveChangesAsync();
         (await c.SignAsync(building, c.MunAssessor2)).Code.ShouldBe("APPROVAL_STEP_FORBIDDEN"); // revoked from today
         (await c.SignAsync(building, c.ProvAssessor)).Outcome.ShouldNotBeNull();
+    }
+
+    /// <summary>The record's entry in <paramref name="user"/>'s approval queue, if listed.</summary>
+    private static async Task<ApprovalQueueItemDto?> QueuedAsync(Ctx c, AppUser user, TaxDeclaration td)
+    {
+        c.User.AppUserId = user.Id;
+        return (await c.Chains.ListAwaitingAsync(c.Today)).Value.SingleOrDefault(i => i.SubjectId == td.Id);
     }
 
     [Fact]

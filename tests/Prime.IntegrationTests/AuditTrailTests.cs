@@ -162,6 +162,11 @@ public class AuditTrailTests(WebApplicationFactory<Program> factory) : IClassFix
         await AddRows(1);
         var capped = (await audit.ListAsync(new AuditLogQuery { Module = module, PageSize = 50 })).Value;
         (capped.TotalCount, capped.TotalIsLowerBound, capped.Items.Count).ShouldBe((Prime.Application.Common.CappedCount.Limit, true, 50));
+        // Pages are fetched by id and then loaded: they stay newest first and follow on without overlap.
+        var second = (await audit.ListAsync(new AuditLogQuery { Module = module, PageSize = 50, Page = 2 })).Value;
+        second.Items.Count.ShouldBe(50);
+        capped.Items.Concat(second.Items).Select(x => x.Timestamp).ShouldBeInOrder(SortDirection.Descending);
+        capped.Items.Select(x => x.Id).Intersect(second.Items.Select(x => x.Id)).ShouldBeEmpty();
         // A page past the cap is served as the last countable one.
         var deep = (await audit.ListAsync(new AuditLogQuery { Module = module, PageSize = 50, Page = 1_000 })).Value;
         deep.Page.ShouldBe(Prime.Application.Common.CappedCount.Limit / 50 + 1);

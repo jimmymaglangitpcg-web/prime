@@ -42,5 +42,7 @@ public sealed class TaxDeclarationConfiguration : IEntityTypeConfiguration<TaxDe
         builder.HasIndex(x => new { x.RpuId, x.EffectivityDate });
         builder.HasIndex(x => x.AssessmentYear);
         builder.HasIndex(x => x.PropertyId);
+        // The approval queue's candidates: pending records, oldest first (production-hardening.md §9, H4).
+        builder.HasIndex(x => x.CreatedAt).HasFilter("\"Status\" = 'PendingReview'").HasDatabaseName("IX_TaxDeclarations_PendingReview_CreatedAt");
     }
 }

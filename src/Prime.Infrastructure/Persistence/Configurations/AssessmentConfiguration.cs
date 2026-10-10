@@ -44,6 +44,8 @@ public sealed class AssessmentConfiguration : IEntityTypeConfiguration<Assessmen
         builder.HasIndex(x => new { x.RpuId, x.EffectiveDate });
         builder.HasIndex(x => x.AssessmentYear);
         builder.HasIndex(x => x.RevisionReference);
+        // The approval queue's candidates: pending records, oldest first (production-hardening.md §9, H4).
+        builder.HasIndex(x => x.CreatedAt).HasFilter("\"Status\" = 'PendingReview'").HasDatabaseName("IX_Assessments_PendingReview_CreatedAt");
         builder.HasIndex(x => x.FaasNumber).IsUnique();
         builder.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.AssessmentId).OnDelete(DeleteBehavior.Restrict);
     }

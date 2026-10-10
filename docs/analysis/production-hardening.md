@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Phase | 14 (CLAUDE.md §101, §107; roadmap "Phase 14 — Production Hardening") |
-| Status | Decisions recorded 2026-10-08 (§8.1); H1, H2 and H3 done; H4 and H5 in progress (§9) |
+| Status | Decisions recorded 2026-10-08 (§8.1); H1, H2, H3 and H4 done; H5 in progress (§9); H6–H8 deferred to before deployment (2026-10-10) |
 | Sources | CLAUDE.md §49, §64, §66, §67, §70, §71, §74, §75, §79, §80, §83, §101, §104, §105, §107; `docs/ARCHITECTURE.md` §3.3, §3.11, §5; `docs/DATABASE.md`; `docs/GIS.md` §4; `docs/SECURITY.md` §9–§11 |
 | Depends on | Phases 0–10 and 12 (built); Phases 11 and 13 deferred (user, 2026-10-08) |
 | Order | After Phase 12, with 11 and 13 set aside; Phase 15 (manual) follows |
@@ -244,6 +244,15 @@ Supabase project settings.
   then the only backup, and the restore drill uses it alone. Moving to a paid plan stays a go-live condition, to be
   revisited before go-live.
 
+
+2026-10-10, the user: **H6–H8 deferred to before deployment.** PRIME is tested locally first. H4 is finished now (the
+province run is under way); H5's remaining manual checks (keyboard pass of the main workflows, print views in Chrome
+and Edge) are done as part of that local testing. H6 (deployment), H7 (backup and restore drill) and H8 (quality gate)
+are done together just before deployment and are go-live conditions, with Phase 13 (import) and a paid Supabase plan.
+H7 must be done before any real LGU data is entered in Supabase. Because the hosted set-up differs from the local one
+(Linux container, Supabase over TLS, real Supabase sign-in instead of the development bypass), a short round of testing
+follows deployment. Phase 11 (reporting) starts meanwhile.
+
 ## 9. Implementation log
 
 ### H1 — Database safety (done 2026-10-08)
@@ -376,7 +385,7 @@ Supabase project settings.
   triggers on 79 tables, all four foreign keys present. From now on each step's migrations are applied to the local
   database and to Supabase as part of the step (user instruction, 2026-10-09).
 
-### H4 — Volume and performance (in progress, 2026-10-09)
+### H4 — Volume and performance (done 2026-10-10)
 
 - **Volume set.** `generate-volume [n]` (`Prime.WebApi/Commands/GenerateVolumeCommand.cs`) builds a separate local
   database, `prime_volume`, from a copy of `prime_dev`. It refuses to run unless the environment is Development, the
@@ -422,9 +431,40 @@ Supabase project settings.
   partitions of a run, a design change left until a measurement on the hosted stack (H6) shows the night is not
   enough. On Render with Supabase, each statement crosses the network, so the rate will be lower than measured here.
 - **Effective-date indexes (from H1).** Not added: no measured query at volume was limited by an effective-date filter.
-- **Still to do in H4:** after the Value run: submit one municipality's items and open the approval queue, post one
-  barangay and run its assessment roll, then a final run of `measure.mjs` against the posted volume set; then
-  `docs/TESTING.md` §3 completed and the roadmap.
+- **Province run completed (2026-10-10).** The province-wide Value run finished: 400,000 units valued and assessed,
+  0 failed. It stopped once overnight when the API process went away (the machine slept) and resumed when the API was
+  started again; the resume first walks the finished items (about 20,000 a minute, 11 minutes for 221,000) before
+  valuing the rest. Steady rate after the resume: 870 to 1,130 units a minute. A resume could skip finished items in
+  one query instead; not needed at this rate.
+- **Batch actions at volume.** One municipality (19 barangays, 19,547 units) submitted barangay by barangay in about
+  5 minutes (75 a second). One barangay (1,028 units): approve 48 s (as the DEMO provincial checker, a different user
+  from the maker), post 38 s (drafting each unit's revised TD), submit TDs 18 s, approve TDs 355 s. Approving a TD
+  takes about 0.35 s because approval freezes the printed TD and FAAS (LP-6 decision: approval is the submission); the
+  FAAS render is most of it. Approving the TDs of the whole province this way would take about 38 hours, spread over
+  the weeks in which the municipalities' TDs are approved; revisited with the hosted measurement (H6) if it matters.
+- **Found and fixed: approval queue.** With 19,547 assessments pending, the province's queue took p50 1.1 s, p95 1.5 s.
+  Each candidate's next step was planned with its own five or so queries (signed steps, municipality, preparing office,
+  chain, delegation), and the candidates were found by a sequential scan of all assessments. Now the queue loads those
+  inputs once for all its candidates and decides each in memory with the same rules as signing
+  (`ApprovalChainService.DecideNextStepAsync`, shared by both), and partial indexes on pending records by creation time
+  (migration `ApprovalQueueIndexes`). p50 32 ms, p95 45 ms; the checker's queue was compared entry by entry before and
+  after (201 entries, same order). `ApprovalRoutingTests` now also check the queue under a delegation and per property
+  kind.
+- **Found and fixed: audit trail of one table.** After the run had added about 4.5 million audit rows, page 100 of one
+  table's trail timed out (over 30 s): the planner scanned the timestamp index newest first and filtered by table, and
+  every `Property` row was older than the millions of revision rows. An index on (table, timestamp) alone did not
+  change its choice. Now an index on (table, timestamp descending, id) (migration `AuditTableTimestampIndex`) and the
+  page's ids are selected first, then its rows: page 100 p50 17 ms, p95 33 ms. Filters by module or action have no
+  matching index; with the ids-first query, page 100 by module took 0.18 s at volume.
+- **Assessment roll after the revision.** For the barangay taken through approval and posting, the taxable assessment
+  roll as of 2027-01-01 lists its 1,028 units under their new TDs (effectivity 2027 Q1, previous TD numbers shown);
+  issuing it takes about 2.2 s. Before the TDs were approved it listed the old ones, as it should: the roll lists TDs
+  in force.
+- **Final measurement.** `docs/TESTING.md` §3, measured on the posted set: every list and search under 1 s at p95, the
+  Property Profile at 0.25 s, the tax map under 0.4 s. Register runs, which build and freeze a document, take 1 to
+  2.7 s and have no target of their own.
+- Migrations `ApprovalQueueIndexes` and `AuditTableTimestampIndex` applied to `prime_dev`, `prime_volume` and Supabase
+  (86).
 
 ### H5 — Regression suite, CI, API and UI review (in progress, 2026-10-09)
 
