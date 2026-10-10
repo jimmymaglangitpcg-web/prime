@@ -26,8 +26,15 @@ test('a property is registered with the keyboard alone, with the focus always vi
 
   await page.keyboard.type(`DEMO-E2E-KB-${tag}`);
   expect(await focusShows()).toBe('visible');
-  // Province, municipality and barangay: type to filter, Enter to choose, Tab on.
-  for (const choice of ['DEMO E2E Province', set.municipality.name, set.barangay.name]) {
+  // Province, municipality and barangay: type to filter, Enter to choose, Tab on. Each select after the first is disabled
+  // until the one before is chosen and then loads its options, so wait for it before tabbing (a Tab that comes sooner
+  // skips the disabled select).
+  const choices: [string, string | null][] = [['DEMO E2E Province', null], [set.municipality.name, 'City/Municipality'], [set.barangay.name, 'Barangay']];
+  for (const [choice, label] of choices) {
+    if (label) {
+      await expect(page.getByLabel(label)).toBeEnabled();
+      await expect(page.locator('.ant-form-item').filter({ has: page.getByLabel(label) }).locator('.ant-select-arrow-loading')).toHaveCount(0);
+    }
     await page.keyboard.press('Tab');
     expect(await focusShows()).toBe('visible');
     await page.keyboard.type(choice);
