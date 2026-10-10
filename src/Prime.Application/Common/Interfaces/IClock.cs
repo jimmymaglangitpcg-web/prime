@@ -16,4 +16,10 @@ public interface IClock
 
     /// <summary>The LGU-local calendar date of <paramref name="instant"/> (e.g. the day an approval happened).</summary>
     DateOnly LocalDate(DateTimeOffset instant);
+
+    /// <summary>
+    /// The instant the LGU-local day <paramref name="date"/> begins. An instant is on or before a date when it is earlier than
+    /// the start of the next day: the form of <see cref="LocalDate"/> a database query can use (docs/analysis/reporting.md §4.1).
+    /// </summary>
+    DateTimeOffset StartOfDay(DateOnly date);
 }

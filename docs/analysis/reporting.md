@@ -211,4 +211,99 @@ deployment (production-hardening.md §8.1).
 
 ## 9. Implementation log
 
-(Starts when the decisions are recorded.)
+### R1 — framework and property reports (2026-10-10)
+
+Built:
+- **Report registry** (`Prime.Application/Features/Reports`): `IReport` (code, title, group, parameters, typed columns,
+  `RunAsync` over a window of rows), `IReportService` (catalogue, preview, export), `ReportsOptions`
+  (`Reports:SyncRowLimit` 20,000, `Reports:FileRetentionDays` 7 for R5).
+- **API** (`ReportsController`): `GET /api/reports` and `POST /api/reports/{code}/preview` need `records.view`;
+  `GET /api/reports/{code}/export?format=csv|xlsx` needs `records.export` and uses the strict rate limit (Q10).
+- **FAAS in force on a date in SQL** (`IFaasInForceQuery`, Infrastructure `FaasInForceQuery`): the registers' rule
+  (approved and effective by the date, not cancelled by then, the latest per unit; the declared assessment, else the
+  unit's posted one in force; taxable/exempt split by assessment lines), written once for the database. It applies the
+  jurisdiction itself, since raw SQL bypasses EF's query filters. A test compares it with the Assessment Rolls, taxable
+  and exempt, on two dates around a cancellation.
+- **Reports**: property inventory (PIN order, owners on record on the date, parcels, units and land TDs in force, land
+  area, values, totals) and properties by barangay, classification, actual use and zone (properties, units, land area,
+  market and assessed values taxable and exempt, totals counting each property once).
+- **Files** (Infrastructure `Reporting/ReportFileWriters.cs`): CSV in UTF-8 with a BOM, titles and rows only, money to
+  the centavo; Excel with MiniExcel 1.46.0 (Apache-2.0): header block (LGU, office, title, parameters, run date and
+  user), typed numbers with number formats and column widths, totals and notes. Text cells that look like formulas are
+  prefixed with an apostrophe (CSV injection).
+- **Audit**: each download writes an EXPORT row to table `Reports`: the report, its parameters, the row count and the
+  format.
+- **Screen** `/reports` (menu "Reports", `records.view`): choose a report, set the date, municipality and barangay, page
+  through it with its totals and notes, download CSV or Excel when the user holds `records.export`. A report over the
+  download limit says so and asks for a narrower scope (the background run comes in R5).
+
+Measured on the DEMO volume database (`prime_volume`: 250,000 properties, 400,000 units), provincial user, through
+the API on the development laptop:
+
+| Read | Province-wide | Largest municipality |
+|---|---|---|
+| A "properties by …" summary | 7–9 s | about 1.8 s |
+| Property inventory, one page with totals | 7.3 s | 2.3 s |
+| Download: barangay summary (Excel, 509 rows) | 10 s | — |
+| Download: inventory of the municipality (CSV, about 19,500 rows) | — | 6 s |
+| Download: inventory of one barangay (CSV or Excel, 642 rows) | — | under 1 s |
+
+Found and fixed on the way:
+- The first version wrote the in-force rule in LINQ. EF made it a correlated sub-query per TD: 104 s for one
+  province-wide summary, and the others hit the 30 s command timeout. The SQL version reads each table once, joined by
+  hash, and a summary is one statement (`GROUPING SETS` give the groups and the total with each property counted once).
+- The scope (jurisdiction, municipality, barangay, a page's properties) is applied inside every sub-query, so a
+  municipality or a page of the inventory reads only its own rows.
+- PostgreSQL overestimated the joined rows (800 million for 400,000) and JIT-compiled the query: 160 s instead of 8 s.
+  Report reads now run in a transaction of their own with `SET LOCAL jit = off` and `SET LOCAL work_mem = '64MB'`
+  (4.4 s in psql for the same query).
+
+Verified: 850 tests pass (12 new in `ReportsTests`); the screen checked in a browser as a provincial assessor and a
+view-only user (no download buttons), axe without violations, no sideways page scroll at phone width (the report table
+scrolls in its own focusable area), CSV and Excel downloaded with the server's file names (CORS now exposes
+`Content-Disposition`).
+
+Open after R1:
+- Province-wide figures take several seconds on the laptop. The dashboard (R2) will cache them for a minute per
+  jurisdiction (Q8). The hosted figures are measured at H6.
+- On the volume database the values are zero: its general revision assessments were valued but never posted. Values
+  are checked by the integration tests on posted DEMO assessments.
+- No print layout in R1: these reports are data lists, downloaded or read on screen. Printed layouts come with R4.
+
+### R2 — dashboard (2026-10-10)
+
+Built:
+- **API** `GET /api/dashboard` (`prime.use`, Q10), `DashboardService` (`Prime.Application/Features/Dashboard`): the user's
+  jurisdiction as of today in the LGU's time zone.
+  - Tiles: active properties and their parcels; properties and units with a FAAS in force; land area; market value and
+    assessed value, taxable and exempt. The "awaiting my approval" tile reads the existing approvals queue, which depends
+    on the user, not only the jurisdiction.
+  - Charts: assessed value by classification and by barangay, largest first, the ten largest and an "Others" row.
+  - General revision: each planned or in-progress programme covering a municipality of the jurisdiction, with its items
+    there valued, posted and declared (an approved TD declares the revision assessment), failed and excluded.
+  - Lists: the ten latest transactions, and the ten latest approvals of TDs, assessments and transactions with the
+    approver's name. No owner names or other personal data.
+- **One pass for the figures.** `IFaasInForceQuery.SummaryAsync` now takes several groupings: the totals, the classes and
+  the barangays come from one statement (`GROUPING SETS ((barangay), (classification), ())`), each row saying which grouping
+  it belongs to. The single-grouping form used by the R1 reports is unchanged.
+- **Cache** (Q8): the totals, charts and revision progress are kept for one minute in memory, per jurisdiction and date.
+  The lists are read on each request. Several API instances would each keep their own cache; that is acceptable for a
+  one-minute cache.
+- **Screen** `/` replaces the placeholder: the tiles; the two charts as horizontal bars (one series, so no legend; value at
+  the bar's tip; hover or keyboard focus shows properties, market and assessed value; a Chart/Table switch for the same
+  rows as a table); "Others" is a text row without a bar, so the named groups keep a readable scale; progress bars per
+  revision; the two lists, with the PIN linking to the property for users with `property.view`. Pending appeals are left
+  out while L7 is deferred (§4.3).
+
+Verified: 855 tests pass (5 new in `DashboardTests`: figures for one municipality, zeros for an empty jurisdiction, the
+one-minute cache, the ten-plus-Others chart rule, the API for a view-only user); production build and lint clean; in a
+browser as the provincial checker, a municipal assessor (their municipality only) and a view-only user; axe on the
+dashboard without serious or critical findings (the e2e accessibility check now waits for the charts); no sideways scroll
+at phone width.
+
+Open after R2:
+- Not measured on the volume database. Its first province-wide read is expected to take about as long as one R1 summary
+  (7–9 s on the laptop), then a minute from cache. Hosted figures are measured at H6.
+- The local development database holds many DEMO classes and barangays left by the integration tests, so its charts
+  show mostly "DEMO_Residential" and "Demo Barangay" rows.
+

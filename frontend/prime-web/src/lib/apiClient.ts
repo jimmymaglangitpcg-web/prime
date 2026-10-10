@@ -62,6 +62,41 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return (await response.json()) as T;
 }
 
+/**
+ * Downloads a file the API writes (a report as CSV or Excel) and hands it to the browser to save. Errors arrive in the
+ * §63 shape like any call. `fileName` is used when the response does not name the file.
+ */
+export async function apiDownload(path: string, fileName: string): Promise<void> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const headers = new Headers();
+  if (session?.access_token) {
+    headers.set('Authorization', `Bearer ${session.access_token}`);
+  }
+  const actAs = getDevActAs();
+  if (actAs) {
+    headers.set(devActAsHeader, actAs);
+  }
+  const response = await fetch(`${apiBaseUrl}${path}`, { headers });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as ApiError | null;
+    throw new ApiRequestError(
+      body ?? { code: 'UNKNOWN_ERROR', message: response.statusText, details: null, traceId: '' },
+      response.status,
+    );
+  }
+  const named = /filename\*=UTF-8''([^;]+)/i.exec(response.headers.get('Content-Disposition') ?? '')?.[1];
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = named ? decodeURIComponent(named) : fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function apiGet<T>(path: string, query?: Record<string, string | number | boolean | undefined | null>): Promise<T> {
   const qs = query
     ? '?' +

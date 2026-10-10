@@ -1,9 +1,9 @@
 import { Route, Routes } from 'react-router-dom';
-import { Typography } from 'antd';
 import { AppShell } from './components/AppShell';
 import { AuthGate } from './components/AuthGate';
 import { SignUpRequestsPage } from './pages/admin/SignUpRequestsPage';
 import { HealthPage } from './pages/HealthPage';
+import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { PropertySearchPage } from './pages/properties/PropertySearchPage';
 import { PropertyRegisterPage } from './pages/properties/PropertyRegisterPage';
 import { PropertyProfilePage } from './pages/properties/PropertyProfilePage';
@@ -17,6 +17,7 @@ import { FormDocumentPage } from './pages/documents/FormDocumentPage';
 import { SwornStatementPage } from './pages/swornStatements/SwornStatementPage';
 import { SwornStatementsPage } from './pages/swornStatements/SwornStatementsPage';
 import { RegistersPage } from './pages/registers/RegistersPage';
+import { ReportsPage } from './pages/reports/ReportsPage';
 import { ExemptionClaimsPage } from './pages/exemptions/ExemptionClaimsPage';
 import { MarketDataPage } from './pages/marketData/MarketDataPage';
 import { GeneralRevisionsPage } from './pages/generalRevision/GeneralRevisionsPage';
@@ -40,26 +41,12 @@ import { SubmissionsPage } from './pages/submissions/SubmissionsPage';
 import { CollectionPage } from './pages/collection/CollectionPage';
 import { PaymentWorkspacePage } from './pages/collection/PaymentWorkspacePage';
 
-function DashboardPlaceholder() {
-  return (
-    <div>
-      <Typography.Title level={3}>Dashboard</Typography.Title>
-      <Typography.Paragraph type="secondary">
-        The real dashboard (CLAUDE.md §55 — totals, collection, delinquency,
-        pending approvals) needs Assessment, Billing, and Collection data
-        that don't exist until Phases 5–9. Use the Properties or Taxpayers
-        sections in the meantime.
-      </Typography.Paragraph>
-    </div>
-  );
-}
-
 export default function App() {
   return (
     <AuthGate>
     <AppShell>
       <Routes>
-        <Route path="/" element={<DashboardPlaceholder />} />
+        <Route path="/" element={<DashboardPage />} />
         <Route path="/health" element={<HealthPage />} />
         <Route path="/properties" element={<PropertySearchPage />} />
         <Route path="/properties/new" element={<PropertyRegisterPage />} />
@@ -73,6 +60,7 @@ export default function App() {
         <Route path="/documents/preview" element={<FormDocumentPage />} />
         <Route path="/documents/:id" element={<FormDocumentPage />} />
         <Route path="/registers" element={<RegistersPage />} />
+        <Route path="/reports" element={<ReportsPage />} />
         <Route path="/exemptions" element={<ExemptionClaimsPage />} />
         <Route path="/market-data" element={<MarketDataPage />} />
         <Route path="/general-revision" element={<GeneralRevisionsPage />} />

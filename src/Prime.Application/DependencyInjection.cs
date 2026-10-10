@@ -90,6 +90,16 @@ public static class DependencyInjection
         services.AddScoped<IFormDataProvider, FaasFormDataProvider>();
         services.AddScoped<IFormDataProvider, Features.Registers.RegisterFormDataProvider>();
         services.AddScoped<Features.Registers.IRegisterService, Features.Registers.RegisterService>();
+        // Reports (docs/analysis/reporting.md §4.1): one class per report, run through the report service.
+        services.AddScoped<Features.Reports.IReport, Features.Reports.PropertyInventoryReport>();
+        foreach (var key in Enum.GetValues<Features.Reports.PropertySummaryKey>())
+        {
+            services.AddScoped<Features.Reports.IReport>(sp => ActivatorUtilities.CreateInstance<Features.Reports.PropertySummaryReport>(sp, key));
+        }
+        services.AddScoped<Features.Reports.IReportService, Features.Reports.ReportService>();
+        // Dashboard (reporting.md §4.3): figures cached a minute per jurisdiction (Q8).
+        services.AddMemoryCache();
+        services.AddScoped<Features.Dashboard.IDashboardService, Features.Dashboard.DashboardService>();
         services.AddScoped<Features.SwornStatements.ISwornStatementService, Features.SwornStatements.SwornStatementService>();
         services.AddScoped<IFormDataProvider, Features.SwornStatements.SwornStatementFormDataProvider>();
         services.AddScoped<IFormDataProvider, TaxBillFormDataProvider>();

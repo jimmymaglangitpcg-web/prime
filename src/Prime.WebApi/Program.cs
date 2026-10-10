@@ -146,6 +146,8 @@ builder.Services.AddCors(options =>
         .WithOrigins(builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
         .AllowAnyHeader()
         .AllowAnyMethod()
+        // Downloads name their file (reports, docs/analysis/reporting.md §4.1).
+        .WithExposedHeaders("Content-Disposition")
         .AllowCredentials());
 });
 

@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Alert, Badge, Button, Layout, Menu, Select, Tag, Tooltip, Typography } from 'antd';
-import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined, NumberOutlined, CloudUploadOutlined, ApartmentOutlined, CheckSquareOutlined, SendOutlined, SafetyCertificateOutlined, LineChartOutlined, SyncOutlined, ExperimentOutlined, ScheduleOutlined, FundOutlined, LockOutlined, UserAddOutlined, LogoutOutlined, HistoryOutlined } from '@ant-design/icons';
+import { DashboardOutlined, HomeOutlined, TeamOutlined, HeartOutlined, GlobalOutlined, FileTextOutlined, BookOutlined, AuditOutlined, CalculatorOutlined, DollarOutlined, BankOutlined, NumberOutlined, CloudUploadOutlined, ApartmentOutlined, CheckSquareOutlined, SendOutlined, SafetyCertificateOutlined, LineChartOutlined, SyncOutlined, ExperimentOutlined, ScheduleOutlined, FundOutlined, LockOutlined, UserAddOutlined, LogoutOutlined, HistoryOutlined, BarChartOutlined } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { devActAsAvailable, getDevActAs, setDevActAs, subscribeDevActAs } from '../lib/devActAs';
@@ -25,6 +25,7 @@ const navItems = [
   { needs: 'smv.view', key: '/smv-impact', icon: <FundOutlined />, label: 'Tax Impact Study' },
   { needs: 'gr.view', key: '/general-revision', icon: <SyncOutlined />, label: 'General Revision' },
   { needs: 'records.view', key: '/registers', icon: <BookOutlined />, label: 'Registers' },
+  { needs: 'records.view', key: '/reports', icon: <BarChartOutlined />, label: 'Reports' },
   { needs: 'treasury.legacy', key: '/collection', icon: <DollarOutlined />, label: 'Collection' },
   { needs: 'office.view', key: '/admin/offices', icon: <ApartmentOutlined />, label: 'Offices' },
   { needs: 'prime.use', key: '/admin/property-identification', icon: <NumberOutlined />, label: 'Property Identification' },

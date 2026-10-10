@@ -125,6 +125,13 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(Prime.Application.Features.Registers.RegistersOptions.SectionName))
             .Validate(o => o.AssessmentRollRowsPerPage >= 0, "Registers:AssessmentRollRowsPerPage cannot be negative.")
             .ValidateOnStart();
+        services.AddOptions<Prime.Application.Features.Reports.ReportsOptions>()
+            .Bind(configuration.GetSection(Prime.Application.Features.Reports.ReportsOptions.SectionName))
+            .Validate(o => o.SyncRowLimit > 0 && o.FileRetentionDays > 0, "Reports:SyncRowLimit and Reports:FileRetentionDays must be positive.")
+            .ValidateOnStart();
+        services.AddScoped<Prime.Application.Features.Reports.IFaasInForceQuery, Reporting.FaasInForceQuery>();
+        services.AddSingleton<Prime.Application.Features.Reports.IReportFileWriter, Reporting.CsvReportWriter>();
+        services.AddSingleton<Prime.Application.Features.Reports.IReportFileWriter, Reporting.ExcelReportWriter>();
 
         // Forms foundation (docs/FORMS-REVISION-PLAN.md): LGU branding, numbering, rendering, provisional forms.
         services.AddOptions<LguOptions>().Bind(configuration.GetSection(LguOptions.SectionName));

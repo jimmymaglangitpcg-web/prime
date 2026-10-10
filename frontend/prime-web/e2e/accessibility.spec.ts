@@ -35,7 +35,7 @@ test.describe('accessibility', () => {
   });
 
   const screens: [string, () => string, (page: Page) => Promise<void>][] = [
-    ['Dashboard', () => '/', async (p) => { await expect(p.getByRole('main')).toBeVisible(); }],
+    ['Dashboard', () => '/', async (p) => { await expect(p.getByText('Assessed value by classification')).toBeVisible(); }],
     ['Property search', () => '/properties', async (p) => { await expect(p.locator('.ant-table')).toBeVisible(); }],
     ['Register property', () => '/properties/new', async (p) => { await expect(p.getByRole('button', { name: 'Register Property' })).toBeVisible(); }],
     ['Property profile', () => `/properties/${propertyId}`, async (p) => { await expect(p.getByRole('tab', { name: /RPUs/ })).toBeVisible(); }],

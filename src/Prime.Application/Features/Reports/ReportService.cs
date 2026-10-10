@@ -1,0 +1,166 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Prime.Application.Common;
+using Prime.Application.Common.Interfaces;
+using Prime.Application.Features.Audit;
+using Prime.Application.Features.Offices;
+
+namespace Prime.Application.Features.Reports;
+
+public interface IReportService
+{
+    IReadOnlyList<ReportDefinitionDto> List();
+    Task<Result<ReportPreviewDto>> PreviewAsync(string code, ReportPreviewRequest request, CancellationToken cancellationToken = default);
+    Task<Result<ReportExport>> ExportAsync(string code, ReportRunRequest request, ReportFormat format, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// The report catalogue and its runs (docs/analysis/reporting.md §4.1): the reports a user may run, a page of one on screen,
+/// and the whole of one as CSV or Excel. A download is limited to <see cref="ReportsOptions.SyncRowLimit"/> rows (Q3); each
+/// writes an EXPORT audit row with the report, its parameters, the format and the row count (P12-3).
+/// </summary>
+public sealed class ReportService(
+    IEnumerable<IReport> reports,
+    IEnumerable<IReportFileWriter> writers,
+    IApplicationDbContext db,
+    IJurisdiction jurisdiction,
+    IClock clock,
+    IOfficeContext office,
+    ICurrentUserService currentUser,
+    ISecurityEventLog events,
+    IOptions<LguOptions> lgu,
+    IOptions<ReportsOptions> options) : IReportService
+{
+    /// <summary>The audit trail's table name for report downloads.</summary>
+    public const string AuditTable = "Reports";
+
+    private const int MaxPageSize = 200;
+
+    public IReadOnlyList<ReportDefinitionDto> List() => reports
+        .Select(r => new ReportDefinitionDto(r.Code, r.Title, r.Group, r.Description, r.Parameters, r.Columns))
+        .ToList();
+
+    public async Task<Result<ReportPreviewDto>> PreviewAsync(string code, ReportPreviewRequest request, CancellationToken cancellationToken = default)
+    {
+        if (Find(code) is not { } report)
+        {
+            return Result.Failure<ReportPreviewDto>("REPORT_NOT_FOUND", "There is no such report.");
+        }
+        if (request.Page < 1 || request.PageSize is < 1 or > MaxPageSize)
+        {
+            return Result.Failure<ReportPreviewDto>("VALIDATION_FAILED", $"The page starts at 1 and holds 1 to {MaxPageSize} rows.");
+        }
+        var scope = await ScopeAsync(report, request.Parameters, cancellationToken);
+        if (!scope.IsSuccess)
+        {
+            return Result.Failure<ReportPreviewDto>(scope.Code!, scope.Message!);
+        }
+        var rows = await report.RunAsync(scope.Value, new ReportWindow((request.Page - 1) * request.PageSize, request.PageSize), cancellationToken);
+        return Result.Success(new ReportPreviewDto(report.Code, report.Title, report.Columns, rows.Rows, rows.Totals, rows.TotalRows,
+            request.Page, request.PageSize, rows.Notes, scope.Value.Lines(report.Parameters), options.Value.SyncRowLimit));
+    }
+
+    public async Task<Result<ReportExport>> ExportAsync(string code, ReportRunRequest request, ReportFormat format, CancellationToken cancellationToken = default)
+    {
+        if (Find(code) is not { } report)
+        {
+            return Result.Failure<ReportExport>("REPORT_NOT_FOUND", "There is no such report.");
+        }
+        if (writers.FirstOrDefault(w => w.Format == format) is not { } writer)
+        {
+            return Result.Failure<ReportExport>("VALIDATION_FAILED", "The format must be csv or xlsx.");
+        }
+        var scope = await ScopeAsync(report, request, cancellationToken);
+        if (!scope.IsSuccess)
+        {
+            return Result.Failure<ReportExport>(scope.Code!, scope.Message!);
+        }
+        var limit = options.Value.SyncRowLimit;
+        var rows = await report.RunAsync(scope.Value, new ReportWindow(0, limit, limit), cancellationToken);
+        if (rows.TotalRows > limit)
+        {
+            return Result.Failure<ReportExport>("REPORT_TOO_LARGE",
+                $"This report has {rows.TotalRows:N0} rows; a download holds at most {limit:N0}. Choose a municipality or barangay to narrow it.");
+        }
+
+        var parameterLines = scope.Value.Lines(report.Parameters);
+        var document = new ReportDocument(report.Title, await HeaderAsync(report, parameterLines, cancellationToken), report.Columns, rows.Rows,
+            rows.Totals, rows.Notes);
+        var what = $"{report.Title} ({string.Join("; ", parameterLines)}), {rows.TotalRows:N0} rows";
+        await events.WriteExportAsync(new ExportEvent(AuditTrailService.ExportModule, AuditTable, Guid.Empty, Truncate(what, 200),
+            format == ReportFormat.Csv ? ExportFormats.Csv : ExportFormats.Excel), cancellationToken);
+        var fileName = $"{report.Code.ToLowerInvariant().Replace('_', '-')}-{scope.Value.AsOf:yyyyMMdd}.{writer.Extension}";
+        return Result.Success(new ReportExport(fileName, writer.ContentType, (stream, ct) => writer.WriteAsync(document, stream, ct)));
+    }
+
+    private IReport? Find(string code) => reports.FirstOrDefault(r => string.Equals(r.Code, code, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Checks the parameters: a barangay of the named municipality, both in the user's jurisdiction. Without a municipality
+    /// the report covers the user's whole jurisdiction (the database's filters, as on every screen).
+    /// </summary>
+    private async Task<Result<ReportScope>> ScopeAsync(IReport report, ReportRunRequest request, CancellationToken ct)
+    {
+        var asOf = request.AsOf ?? clock.Today;
+        if (asOf == default || asOf > clock.Today)
+        {
+            return Result.Failure<ReportScope>("VALIDATION_FAILED", "The as-of date cannot be later than today.");
+        }
+        var municipalityId = report.Parameters.Contains(ReportParameter.Municipality) ? request.MunicipalityId : null;
+        var barangayId = report.Parameters.Contains(ReportParameter.Barangay) ? request.BarangayId : null;
+        string? barangayName = null;
+        if (barangayId is { } b)
+        {
+            var barangay = await db.Barangays.Where(x => x.Id == b).Select(x => new { x.MunicipalityId, x.Name }).FirstOrDefaultAsync(ct);
+            if (barangay is null)
+            {
+                return Result.Failure<ReportScope>("BARANGAY_NOT_FOUND", "The specified barangay does not exist.");
+            }
+            if (municipalityId is { } named && named != barangay.MunicipalityId)
+            {
+                return Result.Failure<ReportScope>("VALIDATION_FAILED", "The barangay is not in the named municipality.");
+            }
+            municipalityId = barangay.MunicipalityId;
+            barangayName = barangay.Name;
+        }
+        string? municipalityName = null;
+        if (municipalityId is { } m)
+        {
+            municipalityName = await db.Municipalities.Where(x => x.Id == m).Select(x => x.Name).FirstOrDefaultAsync(ct);
+            if (municipalityName is null)
+            {
+                return Result.Failure<ReportScope>("MUNICIPALITY_NOT_FOUND", "The specified municipality does not exist.");
+            }
+            if (!jurisdiction.Allows(m))
+            {
+                return Result.Failure<ReportScope>(JurisdictionErrors.Code, JurisdictionErrors.Message);
+            }
+        }
+        return Result.Success(new ReportScope(asOf, municipalityId, barangayId, municipalityName, barangayName));
+    }
+
+    /// <summary>The header block of a file (§4.1): LGU, office, title, parameters, when it was run and by whom.</summary>
+    private async Task<IReadOnlyList<string>> HeaderAsync(IReport report, IReadOnlyList<string> parameterLines, CancellationToken ct)
+    {
+        var scope = await office.GetAsync(ct);
+        var user = currentUser.AppUserId is { } id
+            ? await db.AppUsers.Where(u => u.Id == id).Select(u => u.DisplayName).FirstOrDefaultAsync(ct)
+            : null;
+        var now = clock.UtcNow;
+        var lines = new List<string>();
+        if (!string.IsNullOrWhiteSpace(lgu.Value.Name))
+        {
+            lines.Add(lgu.Value.Name!);
+        }
+        if ((scope.OfficeName ?? lgu.Value.Office) is { Length: > 0 } officeName)
+        {
+            lines.Add(officeName);
+        }
+        lines.Add(report.Title);
+        lines.AddRange(parameterLines);
+        lines.Add($"Run: {clock.LocalDate(now):yyyy-MM-dd} by {user ?? "system"}");
+        return lines;
+    }
+
+    private static string Truncate(string text, int length) => text.Length <= length ? text : text[..(length - 1)] + "…";
+}
