@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Phase | 11 (CLAUDE.md §57, §98; roadmap "Phase 11 — Reporting") |
-| Status | Decisions recorded 2026-10-10 (all recommendations accepted); R1–R3 done; R4 detail Q13–Q21 accepted 2026-10-10 (§10.4); R4 (R4a–R4c) done 2026-10-11 |
+| Status | Decisions recorded 2026-10-10 (all recommendations accepted); R1–R3 done; R4 detail Q13–Q21 accepted 2026-10-10 (§10.4); R4 (R4a–R4c) done 2026-10-11; R5 deferred 2026-10-11 (§8.1); R6 done 2026-10-11: Phase 11 complete except R5 |
 | Sources | CLAUDE.md §55, §57, §71, §73, §76; LAM 2025 Book I Ch. I §5 (reportorial requirements, pp.24–25), Ch. I on idle lands (pp.11–13) and the province's reports (p.15); LAM Annexes I-P, I-Q, I-R, I-S; LAM gap analysis J5–J7 (untracked, `docs/lam/`) |
 | Depends on | Assessments, registers and forms (Phases 6, 10), jurisdiction (LP), permissions and audit (Phase 12) |
 | Order | After Phase 12; Phase 13 skipped for now (user, 2026-10-08) |
@@ -147,7 +147,7 @@ bill. Proposal (Q5):
 | R2 | Dashboard (§4.3) | M |
 | R3 | Assessment reports: TD list, market and assessed value summaries, assessment history, reassessments; CSV/Excel export of register runs and the sales report | M |
 | R4 | LAM/BLGF: levy rates (configuration), MRRPA, QRRPA, half-yearly report; provisional print layouts, LAM layouts as content | M |
-| R5 | Large reports as background jobs (`ReportFile`, progress, download, expiry) | S |
+| R5 | Large reports as background jobs (`ReportFile`, progress, download, expiry) — deferred 2026-10-11 (§8.1) | S |
 | R6 | GIS: parcel inventory, classification map; audit exports | S |
 
 Each step is built, tested (including against a seeded set of DEMO records large enough to exercise paging and
@@ -205,6 +205,10 @@ answered when the phase is resumed.
 
 2026-10-10, also: a UI theme step (PRIME logo, sidebar grouped from 25 items into 7, colours and type) follows R2, so
 the theme is applied together with the new dashboard. It gets its own design document (CLAUDE.md §108) before any code.
+
+2026-10-11: the user deferred R5 (background report runs); R6 comes next. Until R5 is built, a download or print holds
+at most `Reports:SyncRowLimit` (20,000) rows and a larger report asks for a narrower scope (a municipality's whole TD
+list, for example, by barangay). R5 is to be taken up before go-live or when an office needs the larger files.
 
 Phase 11 starts during the user's local testing, once H4 is finished; Phase 14 H6–H8 are deferred to before
 deployment (production-hardening.md §8.1).
@@ -486,6 +490,33 @@ Open after R4:
 - The LAM layouts of the QRRPA and MRRPA (Annexes I-P, I-Q) as form content, and the province's row map, threshold and
   levy rates: LGU content to load (`lgu-content/`).
 - The domain points above, for the Provincial Assessor.
+
+### R6 — GIS and audit exports (2026-10-11)
+
+Built (§4.2 GIS and Audit rows):
+- **Parcel inventory** (`PARCEL_INVENTORY`, group "GIS"; municipality, barangay): the active parcels by municipality,
+  barangay, tax map section and parcel number, with PIN, lot, block, survey and cadastral numbers (the parcel's, else
+  the property's), declared area and whether the parcel has a geometry. Current records (parcels are not
+  effective-dated); retired parcels are left out. Totals: parcels, area, mapped; notes count the parcels without a
+  geometry or an area.
+- **Classification map**: a third colouring of the land value map in the GIS workspace, "By classification": each parcel
+  by its land's classification (the largest strip's, as priced), with or without a unit value; grey without a land
+  record; labelled with the classification when zoomed in; legend with parcel counts; the tax map print carries it.
+  No new endpoint: the value map's features already give the classification.
+- **Audit export**: CSV or Excel of the audit viewer's filter (user, table, record with children, property, action,
+  module, period), newest first, up to the download limit (no count of the whole trail: one row over the limit refuses
+  it). `GET /api/audit-logs/export` needs `audit.view` and `records.export` (old and new values may hold personal data;
+  by default ASSESSOR and the dev admin hold both, AUDITOR only the first — an office can grant it, Q10). The header block
+  lists the filter; times are in the LGU's time zone; each download writes an EXPORT row (table "AuditLogs"). The viewer
+  and the export share one filter (`IAuditTrailService.QueryAsync`).
+
+Verified: 877 tests pass (3 new in `ReportsTests`: the parcel inventory with a mapped, an unmapped and a retired parcel;
+the audit export's rows, header and EXPORT row, and a refused period; the endpoint's two permissions). Production build
+and lint clean. No migration. In a browser: the parcel inventory runs (68 parcels on the dev data, 31 mapped), the
+classification map colours and labels parcels with its legend, the audit trail filtered to one table downloads as CSV and
+Excel; axe without findings on the three screens.
+
+Phase 11 is complete except R5 (deferred, §8.1).
 
 ## 10. Step R4 in detail (2026-10-10; Q13–Q21 accepted)
 

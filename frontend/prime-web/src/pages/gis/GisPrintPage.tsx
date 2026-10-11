@@ -54,7 +54,7 @@ function parseParams(params: URLSearchParams): PrintParams | null {
   ) {
     return null;
   }
-  return { center: [center[0], center[1]], zoom, layers, asOf, valueSmv: params.get('valueSmv'), colorBy: params.get('colorBy') === 'value' ? 'value' : 'subClass' };
+  return { center: [center[0], center[1]], zoom, layers, asOf, valueSmv: params.get('valueSmv'), colorBy: params.get('colorBy') === 'value' ? 'value' : params.get('colorBy') === 'classification' ? 'classification' : 'subClass' };
 }
 
 /**
@@ -215,7 +215,9 @@ export function GisPrintPage() {
               <div style={{ fontWeight: 600, marginBottom: 2 }}>Data sources</div>
               {params.layers.includes('parcels') && <div>Parcels: PRIME parcel registry (current records at time of printing)</div>}
               {params.layers.includes('values') && (
-                <div>Land values: {params.valueSmv ? 'the chosen SMV' : 'the approved SMV in force'} on {params.asOf}, each parcel at its land's principal class, sub-class and use; no lot adjustments.</div>
+                params.colorBy === 'classification'
+                  ? <div>Classification map: each parcel by its land's classification (its largest strip, as priced), current land records.</div>
+                  : <div>Land values: {params.valueSmv ? 'the chosen SMV' : 'the approved SMV in force'} on {params.asOf}, each parcel at its land's principal class, sub-class and use; no lot adjustments.</div>
               )}
               {sources.map((s) => (
                 <div key={s}>{s}</div>

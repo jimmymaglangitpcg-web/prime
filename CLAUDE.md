@@ -2325,7 +2325,7 @@ Phase 7   GIS                                        done
 Phase 8   Billing                                    built under the earlier scope; frozen (§0)
 Phase 9   Collection                                 built under the earlier scope; frozen (§0)
 Phase 10  LAM alignment                              in progress (§97)
-Phase 11  Reporting                                  decided; starts after H4 (§98)
+Phase 11  Reporting                                  done except R5 (deferred) (§98)
 Phase 12  Workflow & security                        (§99)
 Phase 13  Import / migration                         deferred to before go-live (§100)
 Phase 14  Production hardening                       H1–H5; H6–H8 before deployment (§101)

@@ -457,7 +457,8 @@ function ValueMapCard({ options, legend, onChange }: {
         onChange={(v) => onChange({ smvId: v || null })}
         options={[{ value: '', label: 'The approved SMV in force' }, ...choices]} />
       <Radio.Group size="small" style={{ marginTop: 8 }} value={options.colorBy} onChange={(e) => onChange({ colorBy: e.target.value })}
-        options={[{ value: 'subClass', label: 'By sub-class' }, { value: 'value', label: 'By value band' }]} optionType="button" />
+        options={[{ value: 'subClass', label: 'By sub-class' }, { value: 'value', label: 'By value band' }, { value: 'classification', label: 'By classification' }]}
+        optionType="button" />
       <div style={{ marginTop: 8 }}>
         {legend.length === 0 && <Typography.Text type="secondary" style={{ fontSize: 12 }}>Zoom in to street level to load the values.</Typography.Text>}
         {legend.map((e) => (
@@ -469,7 +470,9 @@ function ValueMapCard({ options, legend, onChange }: {
         ))}
       </div>
       <Typography.Paragraph type="secondary" style={{ fontSize: 11, margin: '8px 0 0' }}>
-        The unit value each parcel's land takes (its largest strip), as a valuation would select it; no lot adjustments or independent appraisals.
+        {options.colorBy === 'classification'
+          ? "The classification map: each parcel by its land's classification (that of its largest strip, as priced), with or without a unit value."
+          : "The unit value each parcel's land takes (its largest strip), as a valuation would select it; no lot adjustments or independent appraisals."}
       </Typography.Paragraph>
     </Card>
   );

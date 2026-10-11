@@ -104,6 +104,8 @@ public static class DependencyInjection
         services.AddScoped<Features.Reports.IReport, Features.Reports.MonthlyAssessmentReport>();
         services.AddScoped<Features.Reports.IReport, Features.Reports.HalfYearlyAssessmentReport>();
         services.AddScoped<Features.Reports.IReport, Features.Reports.QuarterlyAssessmentReport>();
+        services.AddScoped<Features.Reports.IReport, Features.Reports.ParcelInventoryReport>();
+        services.AddScoped<Features.Reports.IAuditExportService, Features.Reports.AuditExportService>();
         services.AddScoped<Features.Reports.IReport>(sp => ActivatorUtilities.CreateInstance<Features.Reports.AssessmentHistoryReport>(sp, false));
         services.AddScoped<Features.Reports.IReport>(sp => ActivatorUtilities.CreateInstance<Features.Reports.AssessmentHistoryReport>(sp, true));
         services.AddScoped<Features.Reports.IReportService, Features.Reports.ReportService>();

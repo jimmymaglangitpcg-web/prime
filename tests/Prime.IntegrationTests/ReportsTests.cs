@@ -80,7 +80,7 @@ public class ReportsTests(WebApplicationFactory<Program> factory) : IClassFixtur
 
         c.Reports.List().Select(r => r.Code).ShouldBe(
             ["PROPERTY_INVENTORY", "PROPERTIES_BY_BARANGAY", "PROPERTIES_BY_CLASSIFICATION", "PROPERTIES_BY_ACTUAL_USE", "PROPERTIES_BY_ZONE",
-                "TD_LIST", "VALUE_SUMMARY", "ASSESSMENT_HISTORY", "REASSESSMENTS", "MRRPA", "HALF_YEARLY_RPA", "QRRPA"],
+                "TD_LIST", "VALUE_SUMMARY", "ASSESSMENT_HISTORY", "REASSESSMENTS", "MRRPA", "HALF_YEARLY_RPA", "QRRPA", "PARCEL_INVENTORY"],
             ignoreOrder: true);
         (await c.Reports.PreviewAsync("NO_SUCH_REPORT", new ReportPreviewRequest())).Code.ShouldBe("REPORT_NOT_FOUND");
     }
@@ -674,5 +674,71 @@ public class ReportsTests(WebApplicationFactory<Program> factory) : IClassFixtur
             .ShouldBe("VALIDATION_FAILED");
         var withHeader = await c.Reports.PreviewAsync("MRRPA", new ReportPreviewRequest { Parameters = new() { MunicipalityId = c.MunicipalityId }, WithHeader = true });
         withHeader.Value.HeaderLines.ShouldNotBeNull().ShouldContain("Monthly report on real property assessments (MRRPA)");
+    }
+
+    // ---------------- Step R6: GIS and audit exports ----------------
+
+    [Fact]
+    public async Task ParcelInventory_ListsTheActiveParcels_WithAreaAndWhetherMapped()
+    {
+        var (c, scope) = await BeginAsync();
+        await using var _ = scope;
+        var factory = new NetTopologySuite.Geometries.GeometryFactory(new NetTopologySuite.Geometries.PrecisionModel(), 4326);
+        var square = factory.CreateMultiPolygon([factory.CreatePolygon([
+            new(122.5, 7.5), new(122.5001, 7.5), new(122.5001, 7.5001), new(122.5, 7.5001), new(122.5, 7.5)])]);
+        c.Db.Parcels.AddRange(
+            new Parcel { PropertyId = c.Seed.PropertyId, BarangayId = c.BarangayId, Area = 500m, LotNumber = "DEMO-L1", Geometry = square },
+            new Parcel { PropertyId = c.Seed.PropertyId, BarangayId = c.BarangayId, LotNumber = "DEMO-L2" },
+            new Parcel { PropertyId = c.Seed.PropertyId, BarangayId = c.BarangayId, Area = 99m, LotNumber = "DEMO-L3", Status = RecordStatus.Subdivided });
+        await c.Db.SaveChangesAsync();
+
+        var report = await PreviewAsync(c, "PARCEL_INVENTORY", new ReportRunRequest { MunicipalityId = c.MunicipalityId });
+
+        report.Rows.Select(r => (Cell(report, r, "lot"), Cell(report, r, "area"), Cell(report, r, "mapped"))).OrderBy(x => x.Item1)
+            .ShouldBe([("DEMO-L1", (object?)500m, (object?)"Yes"), ("DEMO-L2", null, "No")]);
+        report.Rows.ShouldAllBe(r => (string?)Cell(report, r, "barangay") == "Demo Barangay");
+        (Cell(report, report.Totals!, "pin"), Cell(report, report.Totals!, "area"), Cell(report, report.Totals!, "mapped"))
+            .ShouldBe(("Total: 2 parcels", 500m, "1 mapped"));
+        report.Notes.ShouldContain("1 parcel(s) have no geometry: they are not on the tax map yet.");
+        report.Notes.ShouldContain("1 parcel(s) have no declared area.");
+    }
+
+    [Fact]
+    public async Task AuditExport_WritesTheViewersFilteredRows_AndAuditsTheDownload()
+    {
+        var (c, scope) = await BeginAsync();
+        await using var _ = scope;
+        var exports = c.Services.GetRequiredService<IAuditExportService>();
+
+        var export = await exports.ExportAsync(new AuditLogQuery { RecordId = c.Seed.PropertyId, IncludeChildren = true }, ReportFormat.Xlsx);
+
+        export.IsSuccess.ShouldBeTrue(export.IsSuccess ? null : export.Message);
+        export.Value.FileName.ShouldBe($"audit-trail-{c.Today:yyyyMMdd}.xlsx");
+        var rows = await ExcelRowsAsync(export.Value);
+        rows.ShouldContain(r => (string?)r.Values.First() == "Audit trail");
+        rows.ShouldContain(r => r.Values.Any(v => v != null && v.ToString() == $"Record: {c.Seed.PropertyId}"));
+        rows.ShouldContain(r => r.Values.Any(v => v != null && v.ToString() == c.Seed.PropertyId.ToString()));
+        var audit = await c.Db.AuditLogs.Where(a => a.Action == AuditAction.Export && a.TableName == "AuditLogs").OrderByDescending(a => a.Timestamp).FirstAsync();
+        audit.NewValue.ShouldNotBeNull().ShouldContain($"Record: {c.Seed.PropertyId}");
+
+        (await exports.ExportAsync(new AuditLogQuery { From = DateTimeOffset.UtcNow, To = DateTimeOffset.UtcNow.AddDays(-1) }, ReportFormat.Csv)).Code
+            .ShouldBe("VALIDATION_FAILED");
+    }
+
+    [Fact]
+    public async Task TheAuditExport_NeedsAuditViewAndRecordsExport()
+    {
+        var client = factory.CreateClient();
+        HttpRequestMessage Get(string actAs)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, $"/api/audit-logs/export?format=csv&tableName=Reports&from={Uri.EscapeDataString(DateTimeOffset.UtcNow.AddHours(-1).ToString("O"))}");
+            request.Headers.Add(DevelopmentAuthenticationHandler.ActAsHeader, actAs);
+            return request;
+        }
+
+        (await client.SendAsync(Get("viewer"))).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        var downloaded = await client.SendAsync(Get("admin"));
+        downloaded.StatusCode.ShouldBe(HttpStatusCode.OK);
+        downloaded.Content.Headers.ContentType!.MediaType.ShouldBe("text/csv");
     }
 }

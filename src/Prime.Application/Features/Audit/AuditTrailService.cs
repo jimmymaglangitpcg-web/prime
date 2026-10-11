@@ -16,6 +16,9 @@ public interface IAuditTrailService
     Task<Result<AuditLogDto>> GetAsync(Guid id, CancellationToken ct = default);
     Task<Result<IReadOnlyList<string>>> ListTablesAsync(CancellationToken ct = default);
     Task<Result<bool>> RecordExportAsync(RecordExportRequest request, CancellationToken ct = default);
+
+    /// <summary>The rows the viewer's filter selects, newest first, with the user's name (the export, reporting.md step R6).</summary>
+    Task<Result<IQueryable<AuditLogDto>>> QueryAsync(AuditLogQuery query, CancellationToken ct = default);
 }
 
 public sealed class AuditLogQuery : PagedRequest
@@ -60,12 +63,40 @@ public sealed class AuditTrailService(IApplicationDbContext db, ISecurityEventLo
 
     public async Task<Result<PagedResult<AuditLogDto>>> ListAsync(AuditLogQuery query, CancellationToken ct = default)
     {
+        var filtered = await FilterAsync(query, ct);
+        if (!filtered.IsSuccess)
+        {
+            return Result.Failure<PagedResult<AuditLogDto>>(filtered.Code!, filtered.Message!);
+        }
+        var logs = filtered.Value;
+
+        var (total, more, page) = await CappedCount.CountAsync(logs, query.Page, query.PageSize, ct);
+        // The page's ids first, then its rows: the ids of one table's trail come from IX_AuditLogs_TableName_Timestamp_Id alone,
+        // so a deep page skips index entries rather than whole rows (production-hardening.md §9, H4).
+        var pageIds = logs.OrderByDescending(a => a.Timestamp).ThenBy(a => a.Id)
+            .Skip((page - 1) * query.PageSize).Take(query.PageSize).Select(a => a.Id);
+        var items = await Project(db.AuditLogs.Where(a => pageIds.Contains(a.Id)).OrderByDescending(a => a.Timestamp).ThenBy(a => a.Id))
+            .ToListAsync(ct);
+        return Result.Success(new PagedResult<AuditLogDto> { Items = items, TotalCount = total, TotalIsLowerBound = more, Page = page, PageSize = query.PageSize });
+    }
+
+    public async Task<Result<IQueryable<AuditLogDto>>> QueryAsync(AuditLogQuery query, CancellationToken ct = default)
+    {
+        var filtered = await FilterAsync(query, ct);
+        return filtered.IsSuccess
+            ? Result.Success(Project(filtered.Value.OrderByDescending(a => a.Timestamp).ThenBy(a => a.Id)))
+            : Result.Failure<IQueryable<AuditLogDto>>(filtered.Code!, filtered.Message!);
+    }
+
+    /// <summary>The viewer's filter, shared by the list and the export.</summary>
+    private async Task<Result<IQueryable<Prime.Domain.Entities.Audit.AuditLog>>> FilterAsync(AuditLogQuery query, CancellationToken ct)
+    {
         if (query.From is { } from && query.To is { } to && to <= from)
         {
-            return Result.Failure<PagedResult<AuditLogDto>>("VALIDATION_FAILED", "The end of the period must be after its start.");
+            return Result.Failure<IQueryable<Prime.Domain.Entities.Audit.AuditLog>>("VALIDATION_FAILED", "The end of the period must be after its start.");
         }
 
-        var logs = db.AuditLogs;
+        IQueryable<Prime.Domain.Entities.Audit.AuditLog> logs = db.AuditLogs;
         if (query.UserId is { } userId)
         {
             logs = logs.Where(a => a.UserId == userId);
@@ -101,15 +132,7 @@ public sealed class AuditTrailService(IApplicationDbContext db, ISecurityEventLo
         {
             logs = logs.Where(a => a.Timestamp < end);
         }
-
-        var (total, more, page) = await CappedCount.CountAsync(logs, query.Page, query.PageSize, ct);
-        // The page's ids first, then its rows: the ids of one table's trail come from IX_AuditLogs_TableName_Timestamp_Id alone,
-        // so a deep page skips index entries rather than whole rows (production-hardening.md §9, H4).
-        var pageIds = logs.OrderByDescending(a => a.Timestamp).ThenBy(a => a.Id)
-            .Skip((page - 1) * query.PageSize).Take(query.PageSize).Select(a => a.Id);
-        var items = await Project(db.AuditLogs.Where(a => pageIds.Contains(a.Id)).OrderByDescending(a => a.Timestamp).ThenBy(a => a.Id))
-            .ToListAsync(ct);
-        return Result.Success(new PagedResult<AuditLogDto> { Items = items, TotalCount = total, TotalIsLowerBound = more, Page = page, PageSize = query.PageSize });
+        return Result.Success(logs);
     }
 
     public async Task<Result<AuditLogDto>> GetAsync(Guid id, CancellationToken ct = default)

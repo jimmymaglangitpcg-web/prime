@@ -49,10 +49,14 @@ export const LAYERS: Record<MapLayerName, LayerDefinition> = {
 
 export const LAYER_ORDER: MapLayerName[] = ['zones', 'barangays', 'submarketareas', 'sections', 'roads', 'values', 'parcels'];
 
-/** How the land value map is drawn: under which SMV (null: the approved SMV in force) and coloured by what. */
+/**
+ * How the land value map is drawn: under which SMV (null: the approved SMV in force) and coloured by what. 'classification'
+ * is the classification map (docs/analysis/reporting.md §4.2, step R6): each parcel by its land's classification, with or
+ * without a unit value.
+ */
 export interface ValueMapOptions {
   smvId: string | null;
-  colorBy: 'subClass' | 'value';
+  colorBy: 'subClass' | 'value' | 'classification';
   /** Upper bounds of the value bands but the last, ascending (colorBy 'value'). */
   bands: number[];
 }
@@ -64,8 +68,14 @@ export const NO_VALUE_COLOR = '#9ca3af';
 
 const hash = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 
-/** The colour of one value-map feature: its sub-class's, its value band's, or grey when it has no value. */
+/**
+ * The colour of one value-map feature: its classification's, its sub-class's or its value band's; grey without a land
+ * record (classification) or without a value (the others).
+ */
 export function valueColor(props: { classification: string | null; subClass: string | null; unitValue: number | null }, options: ValueMapOptions): string {
+  if (options.colorBy === 'classification') {
+    return props.classification == null ? NO_VALUE_COLOR : CATEGORY_COLORS[hash(props.classification) % CATEGORY_COLORS.length];
+  }
   if (props.unitValue == null) {
     return NO_VALUE_COLOR;
   }
@@ -98,7 +108,10 @@ export function valueLegend(features: Feature[], options: ValueMapOptions): Valu
     const color = valueColor(p, options);
     let label: string;
     let order: number;
-    if (p.unitValue == null) {
+    if (options.colorBy === 'classification') {
+      label = p.classification ?? 'No land record';
+      order = p.classification == null ? Number.MAX_SAFE_INTEGER : 0;
+    } else if (p.unitValue == null) {
       label = 'No unit value';
       order = Number.MAX_SAFE_INTEGER;
     } else if (options.colorBy === 'subClass') {
@@ -120,7 +133,7 @@ export function valueLegend(features: Feature[], options: ValueMapOptions): Valu
       entries.set(key, { color, label, parcels: 1, order });
     }
   }
-  return [...entries.values()].sort((a, b) => a.order - b.order).map(({ color, label, parcels }) => ({ color, label, parcels }));
+  return [...entries.values()].sort((a, b) => a.order - b.order || a.label.localeCompare(b.label)).map(({ color, label, parcels }) => ({ color, label, parcels }));
 }
 
 export const highlightStyle = new Style({
@@ -260,8 +273,10 @@ export function createDataLayers(
   values.setStyle((feature, resolution) => {
     const p = feature.getProperties() as { classification: string | null; subClass: string | null; unitValue: number | null };
     const color = valueColor(p, getValueOptions());
-    const label = p.unitValue == null || resolution > PARCEL_LABEL_MAX_RESOLUTION * 2 ? undefined
-      : `${p.subClass ?? ''}\n${p.unitValue.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`.trim();
+    const byClass = getValueOptions().colorBy === 'classification';
+    const label = resolution > PARCEL_LABEL_MAX_RESOLUTION * 2 ? undefined
+      : byClass ? p.classification ?? undefined
+        : p.unitValue == null ? undefined : `${p.subClass ?? ''}\n${p.unitValue.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`.trim();
     return new Style({
       stroke: new Stroke({ color: '#374151', width: 0.5 }),
       fill: new Fill({ color: `${color}b3` }),

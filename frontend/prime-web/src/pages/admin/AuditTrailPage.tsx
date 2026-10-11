@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { DownloadOutlined } from '@ant-design/icons';
 import { Alert, Button, Card, Checkbox, DatePicker, Input, Select, Space, Tag, Typography } from 'antd';
 import type { Dayjs } from 'dayjs';
-import { auditActions, useAuditTables, type AuditAction, type AuditLogFilter } from '../../api/audit';
+import { auditActions, useAuditDownload, useAuditTables, type AuditAction, type AuditLogFilter } from '../../api/audit';
+import { ApiRequestError } from '../../lib/apiClient';
 import { ActionTag, AuditTable } from '../../components/AuditTable';
 import { useCan } from '../../api/offices';
 
@@ -22,6 +24,8 @@ export function AuditTrailPage() {
 
 function AuditTrail() {
   const tables = useAuditTables();
+  const can = useCan();
+  const download = useAuditDownload();
   const [tableName, setTableName] = useState<string>();
   const [action, setAction] = useState<AuditAction>();
   const [recordText, setRecordText] = useState('');
@@ -56,7 +60,17 @@ function AuditTrail() {
           <DatePicker.RangePicker value={range} onChange={(v) => setRange(v)} aria-label="Period" />
           {userId && <Tag closable onClose={() => setUserId(undefined)}>User {userId.slice(0, 8)}</Tag>}
           <Button onClick={clear}>Clear</Button>
+          {can('records.export') && (['csv', 'xlsx'] as const).map((format) => (
+            <Button key={format} icon={<DownloadOutlined />} loading={download.isPending && download.variables?.format === format}
+              onClick={() => download.mutate({ filter, format })}>
+              {format === 'csv' ? 'CSV' : 'Excel'}
+            </Button>
+          ))}
         </Space>
+        {download.error && (
+          <Alert type="error" showIcon style={{ marginTop: 12 }} title="Not downloaded"
+            description={download.error instanceof ApiRequestError ? download.error.apiError.message : (download.error as Error).message} />
+        )}
       </Card>
       <Card size="small" title="Rows" extra={<Typography.Text type="secondary">Newest first; open a row for its values. Click a user to see only theirs.</Typography.Text>}>
         <AuditTable filter={filter} onUser={setUserId} />

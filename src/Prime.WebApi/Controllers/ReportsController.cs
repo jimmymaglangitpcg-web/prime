@@ -14,7 +14,7 @@ namespace Prime.WebApi.Controllers;
 /// CSV or Excel (records.export, Q10). Downloads are audited as EXPORT by the report service.
 /// </summary>
 [Route("api/reports")]
-public class ReportsController(IReportService reports, IRunExportService runs) : ApiControllerBase
+public class ReportsController(IReportService reports, IRunExportService runs, IAuditExportService auditExports) : ApiControllerBase
 {
     [RequirePermission(Permissions.RecordsView)]
     [HttpGet]
@@ -44,6 +44,17 @@ public class ReportsController(IReportService reports, IRunExportService runs) :
     [EnableRateLimiting(RateLimiting.StrictPolicy)]
     public Task<ActionResult> ExportSalesReportRun(Guid id, [FromQuery] string? format, CancellationToken ct) =>
         WriteAsync(format, chosen => runs.SalesReportRunAsync(id, chosen, ct), ct);
+
+    /// <summary>
+    /// The audit viewer's filtered rows as CSV or Excel (step R6). The audit trail holds old and new values, so a download
+    /// needs records.export as well as audit.view.
+    /// </summary>
+    [RequirePermission(Permissions.AuditView)]
+    [RequirePermission(Permissions.RecordsExport)]
+    [HttpGet("~/api/audit-logs/export")]
+    [EnableRateLimiting(RateLimiting.StrictPolicy)]
+    public Task<ActionResult> ExportAuditTrail([FromQuery] string? format, [FromQuery] Application.Features.Audit.AuditLogQuery query, CancellationToken ct) =>
+        WriteAsync(format, chosen => auditExports.ExportAsync(query, chosen, ct), ct);
 
     private async Task<ActionResult> WriteAsync(string? format, Func<ReportFormat, Task<Result<ReportExport>>> export, CancellationToken ct)
     {

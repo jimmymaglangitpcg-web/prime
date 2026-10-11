@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { apiGet, apiPost } from '../lib/apiClient';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { apiDownload, apiGet, apiPost } from '../lib/apiClient';
 import type { PagedResult } from '../lib/types';
 
 /** The audit trail (CLAUDE.md §48; docs/analysis/workflow-security.md §4.3). Read-only; `audit.view`. */
@@ -26,6 +26,19 @@ export const useAuditLogs = (filter: AuditLogFilter, enabled = true) =>
     queryFn: () => apiGet<PagedResult<AuditLogDto>>('/api/audit-logs', { ...filter }),
     enabled,
     placeholderData: (previous) => previous,
+  });
+
+/**
+ * Downloads the filtered audit rows as CSV or Excel (docs/analysis/reporting.md step R6; audit.view and records.export);
+ * the API writes the EXPORT row.
+ */
+export const useAuditDownload = () =>
+  useMutation({
+    mutationFn: ({ filter, format }: { filter: AuditLogFilter; format: 'csv' | 'xlsx' }) => {
+      const query = new URLSearchParams({ format });
+      Object.entries(filter).forEach(([k, v]) => v !== undefined && v !== null && v !== '' && query.set(k, String(v)));
+      return apiDownload(`/api/audit-logs/export?${query}`, `audit-trail.${format}`);
+    },
   });
 
 export const useAuditTables = () => useQuery({ queryKey: ['audit-logs', 'tables'], queryFn: () => apiGet<string[]>('/api/audit-logs/tables') });
