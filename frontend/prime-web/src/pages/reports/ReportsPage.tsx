@@ -1,31 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Card, DatePicker, Empty, Form, Input, Select, Space, Table, Typography } from 'antd';
-import { DownloadOutlined } from '@ant-design/icons';
+import { DownloadOutlined, PrinterOutlined } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBarangays } from '../../api/referenceData';
 import { useCan } from '../../api/offices';
 import {
-  useReportDownload, useReportPreview, useReports, type ReportCell, type ReportColumn, type ReportFileFormat, type ReportRunRequest,
+  printUrl, useReportDownload, useReportPreview, useReports, type ReportCell, type ReportFileFormat, type ReportRunRequest,
 } from '../../api/reports';
 import { MunicipalityFilter } from '../../components/MunicipalityFilter';
 import { ApiRequestError } from '../../lib/apiClient';
-import { formatMoney } from '../../lib/format';
+import { formatCell, numeric } from '../../lib/reportCells';
 
-const area = new Intl.NumberFormat('en-PH', { maximumFractionDigits: 4 });
 const count = new Intl.NumberFormat('en-PH');
-
-function formatCell(column: ReportColumn, value: ReportCell) {
-  if (value === null || value === undefined || value === '') return '';
-  if (typeof value === 'number') {
-    if (column.type === 'Money') return formatMoney(value);
-    if (column.type === 'Area') return area.format(value);
-    if (column.type === 'Integer') return count.format(value);
-  }
-  return String(value);
-}
-
-const numeric = (column: ReportColumn) => column.type === 'Money' || column.type === 'Area' || column.type === 'Integer';
 
 /** A report row with its position in the whole report, as the table's key. */
 interface KeyedRow { key: number; cells: ReportCell[] }
@@ -33,6 +20,9 @@ interface KeyedRow { key: number; cells: ReportCell[] }
 interface ParameterForm {
   asOf?: Dayjs;
   period?: [Dayjs, Dayjs];
+  month?: Dayjs;
+  halfYear?: Dayjs;
+  half?: 1 | 2;
   municipalityId?: string;
   barangayId?: string;
   status?: string;
@@ -50,6 +40,13 @@ const tdStatuses = [
 ];
 
 const blank = (text?: string) => (text?.trim() ? text.trim() : null);
+
+/** The first day of the period a report names: a month, a half-year, else the period's start. */
+function fromDate(values: ParameterForm, parameters: string[]) {
+  if (parameters.includes('Month') && values.month) return values.month.startOf('month').format('YYYY-MM-DD');
+  if (parameters.includes('HalfYear') && values.halfYear) return `${values.halfYear.year()}-${values.half === 2 ? '07' : '01'}-01`;
+  return values.period?.[0].format('YYYY-MM-DD') ?? null;
+}
 
 /**
  * Reports (CLAUDE.md §57; docs/analysis/reporting.md §4.1): choose a report and its parameters, see it a page at a time,
@@ -70,6 +67,7 @@ export function ReportsPage() {
   const [pageSize, setPageSize] = useState(50);
   const preview = useReportPreview(report?.code, run, page, pageSize);
   const download = useReportDownload();
+  const navigate = useNavigate();
 
   const groups = useMemo(() => {
     const byGroup = new Map<string, typeof reports>();
@@ -89,7 +87,7 @@ export function ReportsPage() {
       asOf: (values.asOf ?? dayjs()).format('YYYY-MM-DD'),
       municipalityId: values.municipalityId ?? null,
       barangayId: values.barangayId ?? null,
-      fromDate: values.period?.[0].format('YYYY-MM-DD') ?? null,
+      fromDate: fromDate(values, report?.parameters ?? []),
       toDate: values.period?.[1].format('YYYY-MM-DD') ?? null,
       status: values.status ?? null,
       transactionCode: blank(values.transactionCode),
@@ -133,7 +131,10 @@ export function ReportsPage() {
           {report && <Typography.Paragraph type="secondary" style={{ maxWidth: 560, marginTop: 26, marginBottom: 0 }}>{report.description}</Typography.Paragraph>}
         </div>
         {report && (
-          <Form form={form} layout="vertical" initialValues={{ asOf: dayjs(), period: [dayjs().startOf('year'), dayjs()] }} onFinish={submit}
+          <Form form={form} layout="vertical" initialValues={{
+            asOf: dayjs(), period: [dayjs().startOf('year'), dayjs()], month: dayjs().subtract(1, 'month'), halfYear: dayjs(),
+            half: dayjs().month() < 6 ? 1 : 2,
+          }} onFinish={submit}
             style={{ marginTop: 16 }}>
             <Space wrap align="end">
               {report.parameters.includes('AsOf') && (
@@ -145,6 +146,21 @@ export function ReportsPage() {
                 <Form.Item name="period" label="Period" rules={[{ required: true, message: 'Choose the period' }]}>
                   <DatePicker.RangePicker disabledDate={(d) => d.isAfter(dayjs(), 'day')} allowClear={false} />
                 </Form.Item>
+              )}
+              {report.parameters.includes('Month') && (
+                <Form.Item name="month" label="Month" rules={[{ required: true, message: 'Choose the month' }]}>
+                  <DatePicker picker="month" disabledDate={(d) => d.isAfter(dayjs(), 'month')} allowClear={false} />
+                </Form.Item>
+              )}
+              {report.parameters.includes('HalfYear') && (
+                <>
+                  <Form.Item name="halfYear" label="Year" rules={[{ required: true, message: 'Choose the year' }]}>
+                    <DatePicker picker="year" disabledDate={(d) => d.isAfter(dayjs(), 'year')} allowClear={false} />
+                  </Form.Item>
+                  <Form.Item name="half" label="Half-year" rules={[{ required: true }]}>
+                    <Select style={{ width: 160 }} options={[{ value: 1, label: 'January–June' }, { value: 2, label: 'July–December' }]} />
+                  </Form.Item>
+                </>
               )}
               {report.parameters.includes('Municipality') && (
                 <Form.Item name="municipalityId" label="Municipality">
@@ -192,6 +208,9 @@ export function ReportsPage() {
           title={data.title}
           extra={can('records.export') && (
             <Space>
+              <Button icon={<PrinterOutlined />} disabled={tooLarge || data.totalRows === 0} onClick={() => navigate(printUrl(report.code, run))}>
+                Print
+              </Button>
               {(['csv', 'xlsx'] as ReportFileFormat[]).map((format) => (
                 <Button key={format} icon={<DownloadOutlined />} disabled={tooLarge || data.totalRows === 0}
                   loading={download.isPending && download.variables?.format === format}

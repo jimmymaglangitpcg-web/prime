@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Phase | 11 (CLAUDE.md §57, §98; roadmap "Phase 11 — Reporting") |
-| Status | Decisions recorded 2026-10-10 (all recommendations accepted); R1–R3 done; R4 detail Q13–Q21 accepted 2026-10-10 (§10.4); R4a done 2026-10-11 |
+| Status | Decisions recorded 2026-10-10 (all recommendations accepted); R1–R3 done; R4 detail Q13–Q21 accepted 2026-10-10 (§10.4); R4a–R4b done 2026-10-11 |
 | Sources | CLAUDE.md §55, §57, §71, §73, §76; LAM 2025 Book I Ch. I §5 (reportorial requirements, pp.24–25), Ch. I on idle lands (pp.11–13) and the province's reports (p.15); LAM Annexes I-P, I-Q, I-R, I-S; LAM gap analysis J5–J7 (untracked, `docs/lam/`) |
 | Depends on | Assessments, registers and forms (Phases 6, 10), jurisdiction (LP), permissions and audit (Phase 12) |
 | Order | After Phase 12; Phase 13 skipped for now (user, 2026-10-08) |
@@ -385,6 +385,51 @@ over with the old kept, the precedence order, jurisdiction and validation refusa
 table). Production build and lint clean. Migration applied to the local database and Supabase (87/87). In a browser: the
 maker creates a DEMO rate (effective 2099), the checker approves it, a view-only user sees the tab without "New rate";
 no page errors, axe without findings.
+
+### R4b — MRRPA, half-yearly report and print view (2026-10-11)
+
+Built (Q13, Q14, Q19):
+- **`IFaasInForceQuery.ChangeSummaryAsync`**: one statement reads the FAAS in force at the end of the day before the
+  period and at the end of the period (the R1 query twice, as materialized sets), then compares them. A FAAS in the end
+  set and not in the start set is "assessed"; one in the start set and not the end set is "cancelled". A FAAS whose
+  values changed between the dates (a newer posted assessment read through an unchanged TD) counts as both, so every row
+  balances by construction: start + assessed − cancelled = end. Sums of RPUs and assessed (and market) values, taxable
+  and exempt, per municipality and kind, optionally per classification, and in total (GROUPING SETS). A unit is counted
+  as exempt when it has exempt value only, or no value on an exempt TD; a unit with both parts is counted as taxable,
+  its exempt value in the exempt column, and a note counts them. `Values` now takes a shared parameter list, so one
+  statement can hold the sets of two dates; the R1 query itself is unchanged, and `FaasValue` also carries the TD's
+  taxability.
+- **MRRPA** (`MRRPA`, group "BLGF"): a month (the previous month by default), the municipality or the whole
+  jurisdiction. Per municipality, a row for each of land, building, machinery and other improvements (other kinds when
+  they have units) and a municipal total; the jurisdiction's total. Each row has the four blocks: RPUs and assessed
+  value, taxable and exempt. Notes: the definitions, a month not yet ended, the units with both parts, and the TDs
+  approved in the month that take effect after it (counted in the month they take effect).
+- **Half-yearly report** (`HALF_YEARLY_RPA`): the same blocks over January–June or July–December, down to the
+  classifications of each kind with a subtotal per kind. DOMAIN VERIFICATION REQUIRED until the province confirms it.
+- **Parameters** `Month` and `HalfYear` (sent as any day of the period in `fromDate`); a period not yet ended runs to
+  today and says so. A month or half-year that has not begun is refused.
+- **Print view** `/reports/print` for every report: the whole report up to the download limit (read 200 rows at a
+  time), with the file's header block (the preview returns it when asked, `withHeader`), the totals once at the end,
+  the notes, A4 landscape, and columns that share a prefix ("At the start: …") under one heading. A BLGF report has a
+  line for the assessor's certification. Each print writes an EXPORT row (table "Reports"). The Print button needs
+  `records.export`, like the downloads. The dev "acting as" banner no longer prints.
+
+Verified: 870 tests pass (4 new in `ReportsTests`: the four blocks per kind with an assessed, a cancelled and a
+later-effective TD, balanced on every row; a unit revalued under the same TD; the half-yearly classifications and
+subtotals; the default month, a refused month and the header block). Production build and lint clean. In a browser as
+the provincial checker: both reports run, the MRRPA downloads as Excel and prints (19 pages for 655 rows on the dev
+data, header grouped, totals at the end, certification line); axe without findings on the reports and the print view;
+a view-only user sees neither Print nor downloads; no sideways scroll at phone width.
+
+Measured on `prime_volume` (399,114 units in force; their TDs were approved in October 2026, so October is the month
+they are "assessed"), provincial user, Debug API, warm:
+
+| Read | Province-wide | Titay |
+|---|---|---|
+| MRRPA, October (balances: 119 + 398,996 − 1 = 399,114) | 5.0 s | 1.2 s |
+| MRRPA, September | 2.2 s | — |
+| Half-yearly, July–December | 5.3 s | — |
+| MRRPA download, October (Excel) | 7.8 s | — |
 
 ## 10. Step R4 in detail (2026-10-10; Q13–Q21 accepted)
 

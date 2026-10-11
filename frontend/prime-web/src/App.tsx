@@ -17,6 +17,7 @@ import { FormDocumentPage } from './pages/documents/FormDocumentPage';
 import { SwornStatementPage } from './pages/swornStatements/SwornStatementPage';
 import { SwornStatementsPage } from './pages/swornStatements/SwornStatementsPage';
 import { RegistersPage } from './pages/registers/RegistersPage';
+import { ReportPrintPage } from './pages/reports/ReportPrintPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
 import { ExemptionClaimsPage } from './pages/exemptions/ExemptionClaimsPage';
 import { MarketDataPage } from './pages/marketData/MarketDataPage';
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/documents/:id" element={<FormDocumentPage />} />
         <Route path="/registers" element={<RegistersPage />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/reports/print" element={<ReportPrintPage />} />
         <Route path="/exemptions" element={<ExemptionClaimsPage />} />
         <Route path="/market-data" element={<MarketDataPage />} />
         <Route path="/general-revision" element={<GeneralRevisionsPage />} />

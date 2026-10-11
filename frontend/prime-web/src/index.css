@@ -80,6 +80,28 @@ body {
   }
 }
 
+/* The print view of a report (pages/reports/ReportPrintPage.tsx): a plain table that fits A4 landscape. */
+.report-print { background: #fff; color: #000; padding: 8px; }
+.report-print-header { margin-bottom: 12px; line-height: 1.4; }
+.report-print-lgu { font-weight: 600; }
+.report-print-title { font-size: 16px; font-weight: 700; margin: 4px 0; }
+.report-print-table { border-collapse: collapse; width: 100%; font-size: 9px; }
+.report-print-table th,
+.report-print-table td { border: 1px solid #444; padding: 2px 4px; vertical-align: top; }
+.report-print-table th { background: #eef1f4; font-weight: 600; text-align: left; vertical-align: bottom; }
+.report-print-table th.group { text-align: center; }
+.report-print-table td.num { text-align: right; white-space: nowrap; }
+.report-print-table th.num { text-align: right; }
+.report-print-table tfoot td,
+.report-print-table tr.total td { font-weight: 700; }
+.report-print-table thead { display: table-header-group; }
+/* The totals once, after the last row, not at the foot of every printed page. */
+.report-print-table tfoot { display: table-row-group; }
+.report-print-table tr { break-inside: avoid; }
+.report-print-note { font-size: 11px; margin: 6px 0 0; }
+.report-print-signature { margin-top: 32px; width: 280px; font-size: 12px; }
+.report-print-line { border-bottom: 1px solid #000; height: 36px; margin-bottom: 4px; }
+
 /*
  * Ant Design 6.6's button loading icon leaves by a CSS transition with no fallback timer: when a request settles very
  * quickly, the transition never ends, and the invisible icon stays in the button, so assistive technology reads

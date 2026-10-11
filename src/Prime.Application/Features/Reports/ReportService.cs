@@ -56,8 +56,12 @@ public sealed class ReportService(
             return Result.Failure<ReportPreviewDto>(scope.Code!, scope.Message!);
         }
         var rows = await report.RunAsync(scope.Value, new ReportWindow((request.Page - 1) * request.PageSize, request.PageSize), cancellationToken);
+        var lines = scope.Value.Lines(report.Parameters);
         return Result.Success(new ReportPreviewDto(report.Code, report.Title, report.Columns, rows.Rows, rows.Totals, rows.TotalRows,
-            request.Page, request.PageSize, rows.Notes, scope.Value.Lines(report.Parameters), options.Value.SyncRowLimit));
+            request.Page, request.PageSize, rows.Notes, lines, options.Value.SyncRowLimit)
+        {
+            HeaderLines = request.WithHeader ? await HeaderAsync(report, lines, cancellationToken) : null,
+        });
     }
 
     public async Task<Result<ReportExport>> ExportAsync(string code, ReportRunRequest request, ReportFormat format, CancellationToken cancellationToken = default)
@@ -147,6 +151,23 @@ public sealed class ReportService(
                 return Result.Failure<ReportScope>("VALIDATION_FAILED", "The period cannot start after it ends or end later than today.");
             }
             scope = scope with { AsOf = to, From = from, To = to };
+        }
+        foreach (var (parameter, months) in new[] { (ReportParameter.Month, 1), (ReportParameter.HalfYear, 6) })
+        {
+            if (!report.Parameters.Contains(parameter))
+            {
+                continue;
+            }
+            // Any day of the month or half-year names it; without one, the previous month or the current half-year.
+            var day = request.FromDate ?? (months == 1 ? clock.Today.AddMonths(-1) : clock.Today);
+            var start = new DateOnly(day.Year, months == 1 ? day.Month : day.Month <= 6 ? 1 : 7, 1);
+            if (start > clock.Today)
+            {
+                return Result.Failure<ReportScope>("VALIDATION_FAILED", "The period cannot start later than today.");
+            }
+            var end = ReportScope.PeriodEnd(start, months);
+            var to = end < clock.Today ? end : clock.Today;
+            scope = scope with { AsOf = to, From = start, To = to };
         }
         if (report.Parameters.Contains(ReportParameter.TdStatus) && request.Status is { } status)
         {

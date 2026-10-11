@@ -280,7 +280,7 @@ function DevActAsBanner() {
   const users = useDevUsers(!!actingAs);
   const name = users.data?.find((u) => u.key === actingAs)?.displayName ?? actingAs;
   return actingAs
-    ? <Alert type="warning" showIcon banner style={{ marginBottom: 16 }} title={`Acting as ${name} — development only; requests are made as that DEMO user.`} />
+    ? <Alert className="no-print" type="warning" showIcon banner style={{ marginBottom: 16 }} title={`Acting as ${name} — development only; requests are made as that DEMO user.`} />
     : null;
 }
 

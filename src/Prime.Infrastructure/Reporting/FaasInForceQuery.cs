@@ -36,13 +36,15 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
 
     public async Task<IReadOnlyList<FaasValue>> ListAsync(FaasScope scope, CancellationToken cancellationToken)
     {
-        var (sql, parameters) = Values(scope);
-        return await TunedAsync(() => db.Database.SqlQueryRaw<FaasValue>(sql, parameters).ToListAsync(cancellationToken), cancellationToken);
+        var parameters = new List<object>();
+        var sql = Values(scope, parameters);
+        return await TunedAsync(() => db.Database.SqlQueryRaw<FaasValue>(sql, parameters.ToArray()).ToListAsync(cancellationToken), cancellationToken);
     }
 
     public async Task<IReadOnlyList<FaasGroup>> SummaryAsync(FaasScope scope, IReadOnlyCollection<FaasGroupBy> groupings, CancellationToken cancellationToken)
     {
-        var (values, parameters) = Values(scope);
+        var parameters = new List<object>();
+        var values = Values(scope, parameters);
         var keys = groupings.Where(g => g != FaasGroupBy.None).Distinct().Select(g => (GroupBy: g, Column: g switch
         {
             FaasGroupBy.Barangay => "f.\"BarangayId\"",
@@ -62,12 +64,13 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
             FROM ({{values}}) f
             {{(keys.Count == 0 ? string.Empty : $"GROUP BY GROUPING SETS ({string.Concat(keys.Select(k => $"({k.Column}), "))}())")}}
             """;
-        return await TunedAsync(() => db.Database.SqlQueryRaw<FaasGroup>(sql, parameters).ToListAsync(cancellationToken), cancellationToken);
+        return await TunedAsync(() => db.Database.SqlQueryRaw<FaasGroup>(sql, parameters.ToArray()).ToListAsync(cancellationToken), cancellationToken);
     }
 
     public async Task<IReadOnlyList<FaasGroup>> KindSummaryAsync(FaasScope scope, CancellationToken cancellationToken)
     {
-        var (values, parameters) = Values(scope);
+        var parameters = new List<object>();
+        var values = Values(scope, parameters);
         // GROUPING(classification) is 1 on a kind's subtotal; GROUPING(kind) is 1 only on the total.
         var sql = $$"""
             SELECT 0 AS "GroupBy", f."ClassificationId" AS "Key", f."RpuType" AS "Kind", (GROUPING(f."RpuType") = 1) AS "IsTotal",
@@ -75,7 +78,56 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
             FROM ({{values}}) f
             GROUP BY GROUPING SETS ((f."RpuType", f."ClassificationId"), (f."RpuType"), ())
             """;
-        return await TunedAsync(() => db.Database.SqlQueryRaw<FaasGroup>(sql, parameters).ToListAsync(cancellationToken), cancellationToken);
+        return await TunedAsync(() => db.Database.SqlQueryRaw<FaasGroup>(sql, parameters.ToArray()).ToListAsync(cancellationToken), cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<FaasChangeGroup>> ChangeSummaryAsync(FaasScope scope, DateOnly from, bool byClassification,
+        CancellationToken cancellationToken)
+    {
+        var parameters = new List<object>();
+        var start = Values(scope with { AsOf = from.AddDays(-1) }, parameters);
+        var end = Values(scope, parameters);
+        // The same FAAS with the same values in both sets is unchanged; anything else is cancelled from one and assessed in the other.
+        const string Same = """
+            a."TaxDeclarationId" = b."TaxDeclarationId"
+            AND a."TaxableMarketValue" = b."TaxableMarketValue" AND a."TaxableAssessedValue" = b."TaxableAssessedValue"
+            AND a."ExemptMarketValue" = b."ExemptMarketValue" AND a."ExemptAssessedValue" = b."ExemptAssessedValue"
+            """;
+        var classColumn = byClassification ? "f.\"ClassificationId\"" : "NULL::uuid";
+        var classLevel = byClassification ? " + (1 - GROUPING(f.\"ClassificationId\"))" : string.Empty;
+        var sets = byClassification
+            ? "(f.block, f.\"MunicipalityId\", f.\"RpuType\", f.\"ClassificationId\"), (f.block, f.\"MunicipalityId\", f.\"RpuType\"), (f.block, f.\"MunicipalityId\"), (f.block)"
+            : "(f.block, f.\"MunicipalityId\", f.\"RpuType\"), (f.block, f.\"MunicipalityId\"), (f.block)";
+        var sql = $$"""
+            WITH s AS MATERIALIZED ({{start}}),
+                 e AS MATERIALIZED ({{end}}),
+                 x AS (
+                     SELECT {{(int)FaasChangeBlock.Start}} AS block, s.* FROM s
+                     UNION ALL SELECT {{(int)FaasChangeBlock.End}}, e.* FROM e
+                     UNION ALL SELECT {{(int)FaasChangeBlock.Assessed}}, b.* FROM e b WHERE NOT EXISTS (SELECT 1 FROM s a WHERE {{Same}})
+                     UNION ALL SELECT {{(int)FaasChangeBlock.Cancelled}}, b.* FROM s b WHERE NOT EXISTS (SELECT 1 FROM e a WHERE {{Same}})
+                 ),
+                 f AS (
+                     SELECT x.*,
+                            (x."TaxableMarketValue" = 0 AND x."TaxableAssessedValue" = 0
+                             AND (x."ExemptMarketValue" > 0 OR x."ExemptAssessedValue" > 0 OR x."Taxability" <> 'Taxable')) AS exempt_unit,
+                            ((x."TaxableMarketValue" > 0 OR x."TaxableAssessedValue" > 0)
+                             AND (x."ExemptMarketValue" > 0 OR x."ExemptAssessedValue" > 0)) AS mixed_unit
+                     FROM x
+                 )
+            SELECT f.block AS "Block", f."MunicipalityId", f."RpuType" AS "Kind", {{classColumn}} AS "ClassificationId",
+                   (1 - GROUPING(f."MunicipalityId")) + (1 - GROUPING(f."RpuType")){{classLevel}} AS "Level",
+                   (COUNT(*) FILTER (WHERE NOT f.exempt_unit))::int AS "TaxableUnits",
+                   COALESCE(SUM(f."TaxableMarketValue"), 0) AS "TaxableMarketValue",
+                   COALESCE(SUM(f."TaxableAssessedValue"), 0) AS "TaxableAssessedValue",
+                   (COUNT(*) FILTER (WHERE f.exempt_unit))::int AS "ExemptUnits",
+                   COALESCE(SUM(f."ExemptMarketValue"), 0) AS "ExemptMarketValue",
+                   COALESCE(SUM(f."ExemptAssessedValue"), 0) AS "ExemptAssessedValue",
+                   (COUNT(*) FILTER (WHERE f.mixed_unit))::int AS "MixedUnits"
+            FROM f
+            GROUP BY GROUPING SETS ({{sets}})
+            """;
+        return await TunedAsync(() => db.Database.SqlQueryRaw<FaasChangeGroup>(sql, parameters.ToArray()).ToListAsync(cancellationToken), cancellationToken);
     }
 
     /// <summary>
@@ -96,15 +148,20 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
         return result;
     }
 
-    /// <summary>The SQL of one row per FAAS in force in the scope, and its parameters ({0} the date, {1} the next day's start).</summary>
-    private (string Sql, object[] Parameters) Values(FaasScope scope)
+    /// <summary>
+    /// The SQL of one row per FAAS in force in the scope; its parameters are added to <paramref name="parameters"/>, so one
+    /// statement can hold the sets of several dates.
+    /// </summary>
+    private string Values(FaasScope scope, List<object> parameters)
     {
-        var parameters = new List<object> { scope.AsOf, clock.StartOfDay(scope.AsOf.AddDays(1)) };
         string Parameter(object value)
         {
             parameters.Add(value);
             return $"{{{parameters.Count - 1}}}";
         }
+
+        var day = Parameter(scope.AsOf);
+        var nextDay = Parameter(clock.StartOfDay(scope.AsOf.AddDays(1)));
 
         var conditions = new List<string>();
         if (jurisdiction.Restricted)
@@ -132,7 +189,7 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
         var sql = $$"""
             SELECT td."Id" AS "TaxDeclarationId", td."TaxDeclarationNumber", td."PropertyId", td."RpuId",
                    land."Id" IS NOT NULL AS "IsLand", rpu."RpuType",
-                   td."MunicipalityId", td."BarangayId", td."ZoneId", td."ClassificationId", td."ActualUseId",
+                   td."MunicipalityId", td."BarangayId", td."ZoneId", td."ClassificationId", td."ActualUseId", td."Taxability",
                    CASE WHEN ln."AssessmentId" IS NOT NULL THEN COALESCE(ln.tmv, 0)
                         WHEN td."Taxability" = 'Taxable' THEN COALESCE(da."MarketValue", pa."MarketValue", 0) ELSE 0 END AS "TaxableMarketValue",
                    CASE WHEN ln."AssessmentId" IS NOT NULL THEN COALESCE(ln.tav, 0)
@@ -149,9 +206,9 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
                        t."ClassificationId", t."ActualUseId", p."MunicipalityId", p."BarangayId", p."ZoneId"
                 FROM "TaxDeclarations" t
                 JOIN "Property" p ON p."Id" = t."PropertyId"
-                WHERE t."EffectivityDate" <= {0}
-                  AND (t."Status" = 'Approved' OR (t."Status" = 'Cancelled' AND t."CancelledAt" >= {1}))
-                  AND (t."ApprovedAt" IS NULL OR t."ApprovedAt" < {1})
+                WHERE t."EffectivityDate" <= {{day}}
+                  AND (t."Status" = 'Approved' OR (t."Status" = 'Cancelled' AND t."CancelledAt" >= {{nextDay}}))
+                  AND (t."ApprovedAt" IS NULL OR t."ApprovedAt" < {{nextDay}})
                   {{where}}
                 ORDER BY t."RpuId", t."EffectivityDate" DESC, t."RevisionNumber" DESC, t."CreatedAt" DESC
             ) td
@@ -159,7 +216,7 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
             LEFT JOIN (
                 SELECT DISTINCT ON (a."RpuId") a."RpuId", a."MarketValue", a."AssessedValue"
                 FROM "Assessments" a {{postedJoin}}
-                WHERE a."Status" = 'Posted' AND a."EffectiveDate" <= {0} {{where}}
+                WHERE a."Status" = 'Posted' AND a."EffectiveDate" <= {{day}} {{where}}
                 ORDER BY a."RpuId", a."EffectiveDate" DESC, a."CreatedAt" DESC
             ) pa ON td."AssessmentId" IS NULL AND pa."RpuId" = td."RpuId"
             LEFT JOIN (
@@ -175,6 +232,6 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
             LEFT JOIN "Lands" land ON land."RpuId" = td."RpuId"
             JOIN "RealPropertyUnit" rpu ON rpu."Id" = td."RpuId"
             """;
-        return (sql, [.. parameters]);
+        return sql;
     }
 }

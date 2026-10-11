@@ -15,6 +15,8 @@ public sealed class FaasValue
     public Guid? ZoneId { get; init; }
     public Guid ClassificationId { get; init; }
     public Guid ActualUseId { get; init; }
+    /// <summary>The TD's taxability (<see cref="Domain.Enums.Taxability"/>'s name); the lines' split, where there are lines, is in the values.</summary>
+    public string Taxability { get; init; } = string.Empty;
     public decimal TaxableMarketValue { get; init; }
     public decimal TaxableAssessedValue { get; init; }
     public decimal ExemptMarketValue { get; init; }
@@ -60,6 +62,43 @@ public sealed class FaasGroup
     public decimal ExemptAssessedValue { get; init; }
 }
 
+/// <summary>The four blocks of a change summary (the MRRPA's, reporting.md §10, Q13).</summary>
+public enum FaasChangeBlock
+{
+    /// <summary>In force at the end of the day before the period.</summary>
+    Start = 0,
+    /// <summary>In force at the end and not at the start.</summary>
+    Assessed = 1,
+    /// <summary>In force at the start and not at the end.</summary>
+    Cancelled = 2,
+    /// <summary>In force at the end of the period.</summary>
+    End = 3,
+}
+
+/// <summary>
+/// A group's sums in one block of a change summary. <see cref="Level"/> says how far it is rolled up: 3 a classification
+/// of a kind of a municipality, 2 a kind of a municipality, 1 a municipality, 0 the whole scope.
+/// </summary>
+public sealed class FaasChangeGroup
+{
+    public FaasChangeBlock Block { get; init; }
+    public int Level { get; init; }
+    public Guid? MunicipalityId { get; init; }
+    /// <summary>The unit kind (<see cref="Domain.Enums.RpuType"/>'s name).</summary>
+    public string? Kind { get; init; }
+    public Guid? ClassificationId { get; init; }
+    /// <summary>Units counted as taxable: every unit with a taxable part, or with no value at all on a taxable TD.</summary>
+    public int TaxableUnits { get; init; }
+    public decimal TaxableMarketValue { get; init; }
+    public decimal TaxableAssessedValue { get; init; }
+    /// <summary>Units wholly exempt.</summary>
+    public int ExemptUnits { get; init; }
+    public decimal ExemptMarketValue { get; init; }
+    public decimal ExemptAssessedValue { get; init; }
+    /// <summary>Units with both a taxable and an exempt part (counted as taxable).</summary>
+    public int MixedUnits { get; init; }
+}
+
 /// <summary>
 /// The FAAS in force on a date, read in the database (docs/analysis/reporting.md §4.1, Q9). It is the registers' rule
 /// (<see cref="Registers.RegisterFormDataProvider"/>) written for the database, so a province is summed without reading its
@@ -96,4 +135,13 @@ public interface IFaasInForceQuery
     /// (<see cref="FaasGroup.Key"/> null) and in total, in one pass (the value summary, reporting.md §4.2).
     /// </summary>
     Task<IReadOnlyList<FaasGroup>> KindSummaryAsync(FaasScope scope, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The FAAS in force at the end of the day before <paramref name="from"/> and at the end of <see cref="FaasScope.AsOf"/>,
+    /// compared (the MRRPA and the half-yearly report, reporting.md §10, Q13, Q19): a FAAS in the end set and not in the
+    /// start set is "assessed", one in the start set and not in the end set is "cancelled". A FAAS whose values changed
+    /// between the dates (a newer posted assessment read through an unchanged TD) counts as both, so start + assessed −
+    /// cancelled = end in every group. Sums per municipality and kind, optionally per classification, and in total.
+    /// </summary>
+    Task<IReadOnlyList<FaasChangeGroup>> ChangeSummaryAsync(FaasScope scope, DateOnly from, bool byClassification, CancellationToken cancellationToken);
 }

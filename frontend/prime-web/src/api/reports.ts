@@ -3,7 +3,7 @@ import { apiDownload, apiGet, apiPost } from '../lib/apiClient';
 
 /** Reports (CLAUDE.md §57; docs/analysis/reporting.md §4.1). */
 export type ReportColumnType = 'Text' | 'Integer' | 'Money' | 'Area' | 'Date';
-export type ReportParameter = 'AsOf' | 'Municipality' | 'Barangay' | 'Period' | 'TdStatus' | 'TransactionCode' | 'Pin';
+export type ReportParameter = 'AsOf' | 'Municipality' | 'Barangay' | 'Period' | 'TdStatus' | 'TransactionCode' | 'Pin' | 'Month' | 'HalfYear';
 
 export interface ReportColumn { key: string; title: string; type: ReportColumnType }
 
@@ -41,6 +41,8 @@ export interface ReportPreviewDto {
   notes: string[];
   parameterLines: string[];
   syncRowLimit: number;
+  /** The file's header block (LGU, office, title, parameters, run by); only when asked for (the print view). */
+  headerLines?: string[] | null;
 }
 
 export const useReports = () =>
@@ -52,6 +54,28 @@ export const useReportPreview = (code: string | undefined, parameters: ReportRun
     queryFn: () => apiPost<ReportPreviewDto>(`/api/reports/${code}/preview`, { parameters, page, pageSize }),
     enabled: !!code && !!parameters,
     placeholderData: (previous) => (previous?.code === code ? previous : undefined),
+  });
+
+/** The URL of the print view of a run (pages/reports/ReportPrintPage.tsx). */
+export const printUrl = (code: string, run: ReportRunRequest) =>
+  `/reports/print?${new URLSearchParams({ report: code, run: JSON.stringify(run) })}`;
+
+/** A whole report for the print view, read a page of 200 at a time up to the download limit. */
+export const useReportPrint = (code: string | undefined, parameters: ReportRunRequest | undefined) =>
+  useQuery({
+    queryKey: ['reports', code, 'print', parameters],
+    enabled: !!code && !!parameters,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const pageSize = 200;
+      const first = await apiPost<ReportPreviewDto>(`/api/reports/${code}/preview`, { parameters, page: 1, pageSize, withHeader: true });
+      const rows = [...first.rows];
+      const pages = Math.ceil(Math.min(first.totalRows, first.syncRowLimit) / pageSize);
+      for (let page = 2; page <= pages; page++) {
+        rows.push(...(await apiPost<ReportPreviewDto>(`/api/reports/${code}/preview`, { parameters, page, pageSize })).rows);
+      }
+      return { ...first, rows };
+    },
   });
 
 export type ReportFileFormat = 'csv' | 'xlsx';

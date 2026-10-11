@@ -27,6 +27,10 @@ public enum ReportParameter
     TransactionCode,
     /// <summary>A property's PIN or its leading part (a section, a barangay).</summary>
     Pin,
+    /// <summary>A calendar month (step R4b), sent as any day of it in <see cref="ReportRunRequest.FromDate"/>; without it, the previous month.</summary>
+    Month,
+    /// <summary>A half-year, January–June or July–December (step R4b), sent as any day of it in <see cref="ReportRunRequest.FromDate"/>; without it, the current one.</summary>
+    HalfYear,
 }
 
 public sealed record ReportColumn(string Key, string Title, ReportColumnType Type);
@@ -50,6 +54,8 @@ public sealed record ReportRunRequest
 public sealed record ReportPreviewRequest
 {
     public ReportRunRequest Parameters { get; init; } = new();
+    /// <summary>Also return the header block (the print view).</summary>
+    public bool WithHeader { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 50;
 }
@@ -57,7 +63,11 @@ public sealed record ReportPreviewRequest
 /// <summary>One page of a report on screen. <see cref="Totals"/> is the whole report's, not the page's.</summary>
 public sealed record ReportPreviewDto(
     string Code, string Title, IReadOnlyList<ReportColumn> Columns, IReadOnlyList<object?[]> Rows, object?[]? Totals,
-    int TotalRows, int Page, int PageSize, IReadOnlyList<string> Notes, IReadOnlyList<string> ParameterLines, int SyncRowLimit);
+    int TotalRows, int Page, int PageSize, IReadOnlyList<string> Notes, IReadOnlyList<string> ParameterLines, int SyncRowLimit)
+{
+    /// <summary>The header block a file or a print carries (LGU, office, title, parameters, run by); set when asked for.</summary>
+    public IReadOnlyList<string>? HeaderLines { get; init; }
+}
 
 /// <summary>
 /// A run's validated parameters, with the names the header block prints. A report that takes a period has
@@ -70,6 +80,9 @@ public sealed record ReportScope(DateOnly AsOf, Guid? MunicipalityId, Guid? Bara
     public WorkflowStatus? Status { get; init; }
     public string? TransactionCode { get; init; }
     public string? Pin { get; init; }
+
+    /// <summary>The last day of the period of <paramref name="months"/> months starting on <paramref name="start"/>.</summary>
+    public static DateOnly PeriodEnd(DateOnly start, int months) => start.AddMonths(months).AddDays(-1);
 
     /// <summary>The parameters as the header block and the audit row print them.</summary>
     public IReadOnlyList<string> Lines(IReadOnlyList<ReportParameter> used)
@@ -90,6 +103,16 @@ public sealed record ReportScope(DateOnly AsOf, Guid? MunicipalityId, Guid? Bara
         if (used.Contains(ReportParameter.Period) && From is { } from && To is { } to)
         {
             lines.Add($"Period: {from:yyyy-MM-dd} to {to:yyyy-MM-dd}");
+        }
+        if (used.Contains(ReportParameter.Month) && From is { } month && To is { } monthTo)
+        {
+            lines.Add($"Month: {month.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}"
+                + (monthTo < PeriodEnd(month, 1) ? $" (to {monthTo:yyyy-MM-dd})" : string.Empty));
+        }
+        if (used.Contains(ReportParameter.HalfYear) && From is { } half && To is { } halfTo)
+        {
+            lines.Add($"Half-year: {(half.Month == 1 ? "January–June" : "July–December")} {half.Year}"
+                + (halfTo < PeriodEnd(half, 6) ? $" (to {halfTo:yyyy-MM-dd})" : string.Empty));
         }
         if (used.Contains(ReportParameter.TdStatus) && Status is { } status)
         {

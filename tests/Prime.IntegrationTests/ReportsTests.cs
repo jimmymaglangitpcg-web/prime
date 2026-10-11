@@ -80,7 +80,7 @@ public class ReportsTests(WebApplicationFactory<Program> factory) : IClassFixtur
 
         c.Reports.List().Select(r => r.Code).ShouldBe(
             ["PROPERTY_INVENTORY", "PROPERTIES_BY_BARANGAY", "PROPERTIES_BY_CLASSIFICATION", "PROPERTIES_BY_ACTUAL_USE", "PROPERTIES_BY_ZONE",
-                "TD_LIST", "VALUE_SUMMARY", "ASSESSMENT_HISTORY", "REASSESSMENTS"],
+                "TD_LIST", "VALUE_SUMMARY", "ASSESSMENT_HISTORY", "REASSESSMENTS", "MRRPA", "HALF_YEARLY_RPA"],
             ignoreOrder: true);
         (await c.Reports.PreviewAsync("NO_SUCH_REPORT", new ReportPreviewRequest())).Code.ShouldBe("REPORT_NOT_FOUND");
     }
@@ -107,7 +107,7 @@ public class ReportsTests(WebApplicationFactory<Program> factory) : IClassFixtur
 
     /// <summary>A further unit of the seeded property with its TD and, when <paramref name="assessedValue"/> is given, a posted assessment the TD does not declare.</summary>
     private static async Task AddUnitAsync(Ctx c, RpuType type, Taxability taxability, WorkflowStatus status, decimal? assessedValue,
-        DateTimeOffset? cancelledAt = null)
+        DateTimeOffset? cancelledAt = null, DateTimeOffset? approvedAt = null, DateOnly? effective = null)
     {
         var seeded = await c.Db.Assessments.AsNoTracking().SingleAsync(x => x.Id == c.Seed.AssessmentId);
         var rpu = new RealPropertyUnit { PropertyId = c.Seed.PropertyId, RpuNumber = $"RPU-{Guid.NewGuid():N}", RpuType = type, EffectivityDate = new DateOnly(2024, 1, 1) };
@@ -122,9 +122,10 @@ public class ReportsTests(WebApplicationFactory<Program> factory) : IClassFixtur
         }
         c.Db.TaxDeclarations.Add(new TaxDeclaration
         {
-            Rpu = rpu, PropertyId = c.Seed.PropertyId, TaxDeclarationNumber = $"TD-{Guid.NewGuid():N}", EffectivityDate = new DateOnly(2024, 1, 1),
+            Rpu = rpu, PropertyId = c.Seed.PropertyId, TaxDeclarationNumber = $"TD-{Guid.NewGuid():N}", EffectivityDate = effective ?? new DateOnly(2024, 1, 1),
             Taxability = taxability, ClassificationId = c.Seed.TaxDeclaration.ClassificationId, ActualUseId = c.Seed.TaxDeclaration.ActualUseId,
-            AssessmentYear = 2024, Status = status, ApprovedAt = status is WorkflowStatus.Approved or WorkflowStatus.Cancelled ? DateTimeOffset.UtcNow.AddDays(-30) : null,
+            AssessmentYear = 2024, Status = status,
+            ApprovedAt = status is WorkflowStatus.Approved or WorkflowStatus.Cancelled ? approvedAt ?? DateTimeOffset.UtcNow.AddDays(-30) : null,
             CancelledAt = cancelledAt,
         });
         await c.Db.SaveChangesAsync();
@@ -551,5 +552,127 @@ public class ReportsTests(WebApplicationFactory<Program> factory) : IClassFixtur
             MarketDataReportKind.SalesReport, c.MunicipalityId, c.Today.AddDays(-30), c.Today, null));
         sales.IsSuccess.ShouldBeTrue(sales.IsSuccess ? null : sales.Message);
         (await runs.SalesReportRunAsync(sales.Value.Id, ReportFormat.Xlsx)).IsSuccess.ShouldBeTrue();
+    }
+
+    /// <summary>The seeded land TD approved before the current month began, so it is in force at the month's start.</summary>
+    private static async Task<DateTimeOffset> BeforeThisMonthAsync(Ctx c)
+    {
+        var before = c.Services.GetRequiredService<IClock>().StartOfDay(new DateOnly(c.Today.Year, c.Today.Month, 1)).AddDays(-10);
+        var td = await c.Db.TaxDeclarations.SingleAsync(x => x.Id == c.Seed.TaxDeclaration.Id);
+        td.ApprovedAt = before;
+        await c.Db.SaveChangesAsync();
+        return before;
+    }
+
+    private static object?[] KindRow(ReportPreviewDto report, string kind) => report.Rows.Single(r => (string?)Cell(report, r, "kind") == kind);
+
+    private static void ShouldBalance(ReportPreviewDto report, object?[] row)
+    {
+        foreach (var measure in new[] { "TaxableUnits", "TaxableAssessedValue", "ExemptUnits", "ExemptAssessedValue" })
+        {
+            decimal V(string block) => Convert.ToDecimal(Cell(report, row, block + measure));
+            (V("start") + V("assessed") - V("cancelled")).ShouldBe(V("end"), $"{measure} of {string.Join(" / ", row.Take(4))}");
+        }
+    }
+
+    [Fact]
+    public async Task Mrrpa_GivesTheFourBlocksPerKind_FromTheInForceSets_AndBalances()
+    {
+        var (c, scope) = await BeginAsync();
+        await using var _ = scope;
+        var before = await BeforeThisMonthAsync(c);
+        await AddUnitAsync(c, RpuType.Building, Taxability.Exempt, WorkflowStatus.Approved, 40_000m, approvedAt: DateTimeOffset.UtcNow); // assessed this month
+        await AddUnitAsync(c, RpuType.Machinery, Taxability.Taxable, WorkflowStatus.Cancelled, 30_000m, DateTimeOffset.UtcNow, before); // cancelled this month
+        await AddUnitAsync(c, RpuType.OtherImprovement, Taxability.Taxable, WorkflowStatus.Approved, 20_000m, approvedAt: DateTimeOffset.UtcNow,
+            effective: new DateOnly(c.Today.Year + 1, 1, 1)); // approved now, effective next year
+
+        var report = await PreviewAsync(c, "MRRPA", new ReportRunRequest { FromDate = c.Today, MunicipalityId = c.MunicipalityId });
+
+        report.Rows.Select(r => Cell(report, r, "kind")).ShouldBe(["Land", "Building", "Machinery", "Other improvement", "Total"]);
+        report.Rows.ShouldAllBe(r => (string?)r[0] == "Demo Municipality");
+        var land = KindRow(report, "Land");
+        (Cell(report, land, "startTaxableUnits"), Cell(report, land, "startTaxableAssessedValue")).ShouldBe((1, 100_000m));
+        (Cell(report, land, "assessedTaxableUnits"), Cell(report, land, "cancelledTaxableUnits")).ShouldBe((0, 0));
+        var building = KindRow(report, "Building");
+        (Cell(report, building, "startExemptUnits"), Cell(report, building, "assessedExemptUnits"), Cell(report, building, "endExemptAssessedValue"))
+            .ShouldBe((0, 1, 40_000m));
+        var machinery = KindRow(report, "Machinery");
+        (Cell(report, machinery, "startTaxableAssessedValue"), Cell(report, machinery, "cancelledTaxableAssessedValue"), Cell(report, machinery, "endTaxableUnits"))
+            .ShouldBe((30_000m, 30_000m, 0));
+        Cell(report, KindRow(report, "Other improvement"), "endTaxableUnits").ShouldBe(0);
+        (Cell(report, report.Totals!, "startTaxableAssessedValue"), Cell(report, report.Totals!, "endTaxableAssessedValue"),
+            Cell(report, report.Totals!, "endExemptAssessedValue")).ShouldBe((130_000m, 100_000m, 40_000m));
+        foreach (var row in report.Rows.Append(report.Totals!))
+        {
+            ShouldBalance(report, row);
+        }
+        report.ParameterLines.ShouldContain(l => l.StartsWith($"Month: {c.Today.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}"));
+        report.Notes.ShouldContain("1 Tax Declaration(s) approved in the month take effect after it; they will be counted in the month they take effect.");
+    }
+
+    [Fact]
+    public async Task Mrrpa_AUnitRevaluedUnderTheSameTd_CountsAsCancelledAndAssessed()
+    {
+        var (c, scope) = await BeginAsync(declareAssessment: false);
+        await using var _ = scope;
+        await BeforeThisMonthAsync(c);
+        var posted = await c.Db.Assessments.AsNoTracking().SingleAsync(x => x.Id == c.Seed.AssessmentId);
+        c.Db.Assessments.Add(new Assessment
+        {
+            RpuId = posted.RpuId, PropertyId = posted.PropertyId, ValuationId = posted.ValuationId, AssessmentYear = c.Today.Year, MarketValue = 600_000m,
+            AssessedValue = 120_000m, Status = WorkflowStatus.Posted, EffectiveDate = c.Today, PreviousAssessmentId = posted.Id,
+        });
+        await c.Db.SaveChangesAsync();
+
+        var report = await PreviewAsync(c, "MRRPA", new ReportRunRequest { FromDate = c.Today, MunicipalityId = c.MunicipalityId });
+
+        var land = KindRow(report, "Land");
+        (Cell(report, land, "startTaxableAssessedValue"), Cell(report, land, "assessedTaxableAssessedValue"),
+            Cell(report, land, "cancelledTaxableAssessedValue"), Cell(report, land, "endTaxableAssessedValue")).ShouldBe((100_000m, 120_000m, 100_000m, 120_000m));
+        ShouldBalance(report, land);
+    }
+
+    [Fact]
+    public async Task HalfYearly_GoesDownToClassifications_WithASubtotalPerKind_AndBalances()
+    {
+        var (c, scope) = await BeginAsync();
+        await using var _ = scope;
+        var halfStart = c.Services.GetRequiredService<IClock>().StartOfDay(new DateOnly(c.Today.Year, c.Today.Month <= 6 ? 1 : 7, 1));
+        var td = await c.Db.TaxDeclarations.SingleAsync(x => x.Id == c.Seed.TaxDeclaration.Id);
+        td.ApprovedAt = halfStart.AddDays(-10);
+        await c.Db.SaveChangesAsync();
+        await AddUnitAsync(c, RpuType.Building, Taxability.Taxable, WorkflowStatus.Approved, 50_000m, approvedAt: DateTimeOffset.UtcNow);
+
+        var report = await PreviewAsync(c, "HALF_YEARLY_RPA", new ReportRunRequest { FromDate = c.Today, MunicipalityId = c.MunicipalityId });
+
+        var className = (string?)Cell(report, report.Rows[0], "classification");
+        className.ShouldNotBeNullOrEmpty();
+        var landRows = report.Rows.Where(r => (string?)Cell(report, r, "kind") == "Land").ToList();
+        landRows.Select(r => Cell(report, r, "classification")).ShouldBe([className, "Subtotal, land"]);
+        Cell(report, landRows[0], "endTaxableAssessedValue").ShouldBe(100_000m);
+        var buildingClass = report.Rows.First(r => (string?)Cell(report, r, "kind") == "Building");
+        (Cell(report, buildingClass, "assessedTaxableUnits"), Cell(report, buildingClass, "assessedTaxableAssessedValue")).ShouldBe((1, 50_000m));
+        foreach (var row in report.Rows.Append(report.Totals!))
+        {
+            ShouldBalance(report, row);
+        }
+        report.ParameterLines.ShouldContain(l => l.StartsWith($"Half-year: {(c.Today.Month <= 6 ? "January–June" : "July–December")} {c.Today.Year}"));
+    }
+
+    [Fact]
+    public async Task Mrrpa_DefaultsToThePreviousMonth_AndRefusesAMonthNotBegun()
+    {
+        var (c, scope) = await BeginAsync();
+        await using var _ = scope;
+        var last = c.Today.AddMonths(-1);
+
+        var report = await PreviewAsync(c, "MRRPA", new ReportRunRequest { MunicipalityId = c.MunicipalityId });
+        report.ParameterLines.ShouldContain($"Month: {last.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}");
+        report.Notes.ShouldNotContain(n => n.Contains("has not ended"));
+
+        (await c.Reports.PreviewAsync("MRRPA", new ReportPreviewRequest { Parameters = new() { FromDate = c.Today.AddMonths(1) } })).Code
+            .ShouldBe("VALIDATION_FAILED");
+        var withHeader = await c.Reports.PreviewAsync("MRRPA", new ReportPreviewRequest { Parameters = new() { MunicipalityId = c.MunicipalityId }, WithHeader = true });
+        withHeader.Value.HeaderLines.ShouldNotBeNull().ShouldContain("Monthly report on real property assessments (MRRPA)");
     }
 }
