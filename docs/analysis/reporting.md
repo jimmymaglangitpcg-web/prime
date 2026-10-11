@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Phase | 11 (CLAUDE.md §57, §98; roadmap "Phase 11 — Reporting") |
-| Status | Decisions recorded 2026-10-10 (all recommendations accepted); implementation starts during local testing, before Phase 14 H6–H8 |
+| Status | Decisions recorded 2026-10-10 (all recommendations accepted); R1–R3 done; R4 detail Q13–Q21 accepted 2026-10-10 (§10.4); R4a done 2026-10-11 |
 | Sources | CLAUDE.md §55, §57, §71, §73, §76; LAM 2025 Book I Ch. I §5 (reportorial requirements, pp.24–25), Ch. I on idle lands (pp.11–13) and the province's reports (p.15); LAM Annexes I-P, I-Q, I-R, I-S; LAM gap analysis J5–J7 (untracked, `docs/lam/`) |
 | Depends on | Assessments, registers and forms (Phases 6, 10), jurisdiction (LP), permissions and audit (Phase 12) |
 | Order | After Phase 12; Phase 13 skipped for now (user, 2026-10-08) |
@@ -364,3 +364,76 @@ Open after R3:
   hosted figures are measured.
 - A municipality's whole TD list (30,816 rows on the volume set) is over the download limit until R5's background run.
 - The volume set has no reassessments; the report is checked by the integration test.
+
+### R4a — levy rates (2026-10-11)
+
+Built (Q5, Q18):
+- **`LevyRate`** (configuration, effective-dated, maker-checker; migration `LevyRates`): the levy (basic tax, SEF,
+  idle-land tax), the municipality or the whole province, the classification or every class, the rate as a percent of
+  assessed value, the ordinance as legal basis. The keys form its `Code`, so a new approved rate for the same keys
+  closes the old one the day before it takes effect. Approved rows are refused DELETE and TRUNCATE, like the other
+  configuration (CLAUDE.md §49); row version and RLS as the other tables.
+- **`ILevyRateService`**: create, approve (not by the maker), list, and `InForceAsync(date)`, which returns a
+  `LevyRateTable` whose `Find` gives the most specific rate: the municipality's for the class, its rate for every class,
+  then the province's likewise. A municipal office sets only its municipalities' rates; a province-wide rate needs the
+  whole province in jurisdiction.
+- **API** `/api/levy-rates` (list `prime.use`; create `config.edit`; approve `config.approve`).
+- **Screen**: a "Levy rates" tab on Valuation rules. No rate is built in; the repository ships none.
+
+Verified: 866 tests pass (4 new in `LevyRateTests`: second-user approval before a rate is in force, a new rate taking
+over with the old kept, the precedence order, jurisdiction and validation refusals; the history guard test lists the
+table). Production build and lint clean. Migration applied to the local database and Supabase (87/87). In a browser: the
+maker creates a DEMO rate (effective 2099), the checker approves it, a view-only user sees the tab without "New rate";
+no page errors, axe without findings.
+
+## 10. Step R4 in detail (2026-10-10; Q13–Q21 accepted)
+
+R4's line in §6 (levy rates, MRRPA, QRRPA, half-yearly report) was approved with Q5, Q6 and Q11. Reading the annexes
+for the build shows choices that line does not settle. They are set out here before any code (CLAUDE.md §108).
+
+### 10.1 What the LAM asks (paraphrased; Book I pp.24–25, Annexes I-P and I-Q)
+
+- **MRRPA** (monthly, uploaded to the BLGF's reporting system): per LGU and kind of property, the number of RPUs and
+  their assessed value, taxable and exempt, in four blocks: in force at the end of the previous month, assessed during
+  the month, cancelled during the month, and in force at the end of the month. Prepared and certified by the assessor.
+- **QRRPA** (quarterly; the first three by the 15th of the month after the quarter, the year-end one by 28 February;
+  uploaded to LIFT): per classification row, the land area, the RPUs by kind, the market value by kind (residential
+  buildings split at a value threshold), the assessed value by kind, the rates of levy (basic, SEF, idle land) and
+  the collectibles. The rows come in groups: taxable properties by classification (the special classes by sub-kind),
+  exempt properties by kind of exemption, properties with restrictions (under agrarian reform, under litigation,
+  others) by classification, and idle lands. The header gives the LGU, the period and the number of barangays in the
+  report; a footer records the type of the last revision.
+- **Half-yearly report** to the local chief executive and the Sanggunian: named, no layout (Q11).
+
+The layouts themselves are LAM content: they come in from `lgu-content/` as form versions (CLAUDE.md §118), and PRIME
+ships provisional layouts of its own.
+
+### 10.2 What PRIME has for it
+
+| Need | PRIME |
+|---|---|
+| FAAS in force on a date, by kind, class, taxable/exempt | `IFaasInForceQuery` (R1, R3) |
+| Kind of exemption of an exempt line | `AssessmentLine.PropertyExemptionId` → `ExemptionType` (configuration) |
+| Restrictions (agrarian reform, litigation) | Not recorded as such; TD annotations have configurable types (lis pendens, court orders …) |
+| Idle land | Not recorded (Q7, deferred) |
+| Levy rates | None in scope. The frozen billing code has its own rates; R4 does not build on it (CLAUDE.md §0) |
+| A threshold for residential buildings' market value | None |
+
+### 10.3 Review questions
+
+| # | Question | Recommendation |
+|---|---|---|
+| Q13 | What "assessed" and "cancelled during the month" mean in the MRRPA | By the FAAS in force at the two month-ends, as the rolls read them: a unit's FAAS in force at the end and not at the start is "assessed"; one in force at the start and not at the end (or replaced) is "cancelled". The report then balances by construction (exit criterion 6). A TD approved in the month but effective later appears in the month it takes effect; a note counts those. Alternative: count TD approvals and cancellations in the month, which does not balance when effectivity is in the future |
+| Q14 | Rows of the MRRPA for a province | One block per municipality (the "LGU" column) with a row per kind (land, building, machinery, other improvements) and a provincial total; a municipal user gets their municipality only |
+| Q15 | How the QRRPA's rows are found | A row mapping kept as configuration, loaded with the LAM layout from `lgu-content/` and approved by a second user: classification → taxable row; exemption type → exempt row; annotation type → restriction group. A unit not mapped lands in an "others" row of its group, and a note counts them. PRIME ships a DEMO mapping only |
+| Q16 | The residential-building value threshold of the QRRPA's market value columns | A dated system parameter with its legal basis, entered by the office, approved by a second user. Until it is set, the two columns are shown as one with a note. The figure on the annex is not written into code (CLAUDE.md §5, §7). DOMAIN VERIFICATION REQUIRED: its legal basis |
+| Q17 | Idle-land rows and the idle-land collectible | Rows and collectible left empty, with a note, until the idle-land designation is built (Q7). The idle-land rate can still be entered |
+| Q18 | Levy rates and collectibles | Rates per municipality (or the whole province), kind (basic, SEF, idle land), effective-dated, with the ordinance as legal basis, under maker-checker (Q5). The QRRPA uses the rates in force on the quarter's last day. Collectible = taxable assessed value × rate, per row, rounded to the centavo; exempt rows have none. Shown as report figures only (CLAUDE.md §0) |
+| Q19 | The half-yearly report | The MRRPA's four blocks over the half-year (January–June, July–December), by kind and classification, from the same code, DOMAIN VERIFICATION REQUIRED until the province confirms it (Q11) |
+| Q20 | The year-end QRRPA | The fourth quarter's report, as of 31 December; no separate report |
+| Q21 | Delivery | R4a: levy rates (migration, admin screen, maker-checker). R4b: MRRPA and the half-yearly report (screen, CSV/Excel, provisional print layout). R4c: QRRPA with the row mapping and the threshold parameter (migration). The LAM layouts are loaded as content when the office loads them |
+
+### 10.4 Decisions
+
+2026-10-10: the user accepted every recommendation of Q13–Q21. R4 is built as R4a (levy rates), R4b (MRRPA and the
+half-yearly report), R4c (QRRPA).

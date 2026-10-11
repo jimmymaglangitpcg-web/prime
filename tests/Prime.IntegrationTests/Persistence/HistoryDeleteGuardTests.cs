@@ -34,7 +34,7 @@ public class HistoryDeleteGuardTests(WebApplicationFactory<Program> factory) : I
         "PropertyExemptions", "ExemptionEvidence",
         "Smvs", "SmvSchedules", "SmvCoverages", "SmvBuildingCosts", "SmvExtraItemCosts",
         "SmvDepreciationSchedules", "SmvDepreciationRows", "AdjustmentFactors", "AdjustmentFactorRows",
-        "AssessmentLevels", "AssessmentLevelCeilings", "SmvPreparations", "SmvPreparationEvents", "SmvConsultations",
+        "AssessmentLevels", "AssessmentLevelCeilings", "LevyRates", "SmvPreparations", "SmvPreparationEvents", "SmvConsultations",
         "GeneralRevisionProgrammes", "GeneralRevisionJobs", "GeneralRevisionItems", "GeneralRevisionRunIssues",
         "TerritorialChangeJobs", "TerritorialChangeItems", "TerritorialChangeMappings",
         "ApprovalRecords", "ApprovalDelegations", "RolePermissionChanges", "SignUpRequests", "UserStatusChanges",

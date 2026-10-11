@@ -958,7 +958,7 @@ Phase 10  LAM alignment (L5, L3, L6, L7; L8 when needed)
 Phase 12  Workflow & security          done 2026-10-08 (docs/SECURITY.md)
 Phase 13  Import / migration      before go-live (see the early step below)
 Phase 14  Production hardening    H1–H4 done; H5 by local testing; H6–H8 before deployment (2026-10-10)
-Phase 11  Reporting               decisions recorded 2026-10-10 (docs/analysis/reporting.md §8.1); R1 done 2026-10-10 (framework, CSV/Excel, property reports); R2 done 2026-10-10 (dashboard); UI theme step done; R3 done 2026-10-10 (assessment reports, run downloads); next R4
+Phase 11  Reporting               decisions recorded 2026-10-10 (docs/analysis/reporting.md §8.1); R1 done 2026-10-10 (framework, CSV/Excel, property reports); R2 done 2026-10-10 (dashboard); UI theme step done; R3 done 2026-10-10 (assessment reports, run downloads); R4a done 2026-10-11 (levy rates); next R4b
           UI theme step       done 2026-10-10 (docs/analysis/ui-theme.md: logo, 7-entry sidebar, colours, Plex fonts, header search, sign-in screens)
 Phase 15  System manual           after all phases
 
@@ -980,13 +980,13 @@ Supabase), H8 quality gate, a paid Supabase plan, and a short round of testing o
   and map its fields to PRIME's, so gaps in the data model surface while it
   is still cheap to change. No import is built in 13-0.
 
-## Phase 11 — Reporting (decisions recorded 2026-10-10; R1–R3 done 2026-10-10)
+## Phase 11 — Reporting (decisions recorded 2026-10-10; R1–R3 done 2026-10-10; R4a done 2026-10-11)
 
 **R1 done** (2026-10-10): report registry and `/api/reports` (preview with `records.view`, CSV/Excel download with
 `records.export`, EXPORT audit row per download); the FAAS in force on a date as one SQL query, checked against the
 Assessment Rolls; property inventory and properties by barangay, classification, actual use and zone; Reports screen.
 Province-wide summaries 7–9 s on the laptop over 400,000 units, a municipality about 2 s (reporting.md §9). No
-migration. **R2 done** (2026-10-10): the dashboard of §55 from live data, cached a minute per jurisdiction (`/api/dashboard`; reporting.md §9); 855 tests; no migration. **UI theme step done** (2026-10-10, `docs/analysis/ui-theme.md`). **R3 done** (2026-10-10): Tax Declaration list, market and assessed value summary by kind and classification, assessment history and reassessments over a period; CSV/Excel downloads of register runs (from the issued snapshot when there is one) and of the sales report; 862 tests; no migration (reporting.md §9). Next: R4 (levy rates, MRRPA, QRRPA, half-yearly report).
+migration. **R2 done** (2026-10-10): the dashboard of §55 from live data, cached a minute per jurisdiction (`/api/dashboard`; reporting.md §9); 855 tests; no migration. **UI theme step done** (2026-10-10, `docs/analysis/ui-theme.md`). **R3 done** (2026-10-10): Tax Declaration list, market and assessed value summary by kind and classification, assessment history and reassessments over a period; CSV/Excel downloads of register runs (from the issued snapshot when there is one) and of the sales report; 862 tests; no migration (reporting.md §9). R4 detail Q13–Q21 accepted 2026-10-10 (reporting.md §10). **R4a done** (2026-10-11): levy rates per municipality or province and classification, effective-dated, maker-checker, for the QRRPA collectibles (report figures only); 866 tests; migration `LevyRates`, local and Supabase 87/87. Next: R4b (MRRPA and the half-yearly report), then R4c (QRRPA).
 
 **Goal**: the report catalog in CLAUDE.md §57 is available in PDF/Excel/
 CSV/print.

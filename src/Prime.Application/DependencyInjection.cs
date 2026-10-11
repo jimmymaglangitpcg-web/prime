@@ -64,6 +64,7 @@ public static class DependencyInjection
         services.AddScoped<ITransactionService, TransactionService>();
         services.AddScoped<Features.Exemptions.IExemptionService, Features.Exemptions.ExemptionService>();
         services.AddScoped<Features.AssessmentLevels.IAssessmentLevelCeilingService, Features.AssessmentLevels.AssessmentLevelCeilingService>();
+        services.AddScoped<Features.LevyRates.ILevyRateService, Features.LevyRates.LevyRateService>();
         services.AddScoped<INoticeService, NoticeService>();
         services.AddScoped<IFormDataProvider, NoticeFormDataProvider>();
         services.AddScoped<Features.Notices.INoticeOfCancellationService, Features.Notices.NoticeOfCancellationService>();

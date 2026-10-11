@@ -46,6 +46,7 @@ public interface IApplicationDbContext
     DbSet<Prime.Domain.Entities.Registers.AssessmentRollEntry> AssessmentRollEntries { get; }
     DbSet<Prime.Domain.Entities.Exemptions.ExemptionType> ExemptionTypes { get; }
     DbSet<Prime.Domain.Entities.AssessmentLevelCeiling> AssessmentLevelCeilings { get; }
+    DbSet<Prime.Domain.Entities.LevyRate> LevyRates { get; }
     DbSet<Prime.Domain.Entities.Exemptions.PropertyExemption> PropertyExemptions { get; }
     DbSet<Prime.Domain.Entities.Exemptions.ExemptionEvidence> ExemptionEvidence { get; }
     DbSet<Prime.Domain.Entities.SwornStatements.SwornStatement> SwornStatements { get; }

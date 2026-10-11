@@ -19,6 +19,7 @@ import { AuditHistoryCard } from '../../components/AuditTable';
 import { ApproveButton } from './ApproveButton';
 import { BuildingCostsTab } from './BuildingCostsTab';
 import { MachineryIndicesTab } from './MachineryIndicesTab';
+import { LevyRatesTab } from './LevyRatesTab';
 
 /**
  * The rules valuation and assessment use (docs/analysis/value-and-assess.md §3):
@@ -40,6 +41,7 @@ export function ValuationRulesPage() {
         { key: 'machinery', label: 'Machinery indices', children: <MachineryIndicesTab /> },
         { key: 'levels', label: 'Assessment levels', children: <LevelsTab /> },
         { key: 'ceilings', label: 'Level ceilings', children: <CeilingsTab /> },
+        { key: 'levies', label: 'Levy rates', children: <LevyRatesTab /> },
       ]} />
     </Space>
   );
