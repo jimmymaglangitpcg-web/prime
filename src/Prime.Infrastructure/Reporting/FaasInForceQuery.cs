@@ -130,6 +130,69 @@ public sealed class FaasInForceQuery(PrimeDbContext db, IClock clock, IJurisdict
         return await TunedAsync(() => db.Database.SqlQueryRaw<FaasChangeGroup>(sql, parameters.ToArray()).ToListAsync(cancellationToken), cancellationToken);
     }
 
+    public async Task<IReadOnlyList<FaasPart>> PartsAsync(FaasScope scope, IReadOnlyCollection<Guid> restrictionTypeIds, decimal? buildingThreshold,
+        CancellationToken cancellationToken)
+    {
+        var parameters = new List<object>();
+        var values = Values(scope, parameters);
+        string Parameter(object value)
+        {
+            parameters.Add(value);
+            return $"{{{parameters.Count - 1}}}";
+        }
+        var day = Parameter(scope.AsOf);
+        var nextDay = Parameter(clock.StartOfDay(scope.AsOf.AddDays(1)));
+        var types = Parameter(restrictionTypeIds.ToArray());
+        var threshold = buildingThreshold is { } t ? Parameter(t) : null;
+        var over = threshold is null ? "FALSE" : $"(p.\"RpuType\" = 'Building' AND p.\"TaxableMarketValue\" + p.\"ExemptMarketValue\" > {threshold})";
+        // Parts: the taxable part; the exempt lines by exemption type; or the whole exempt value under the unit's exemption.
+        var sql = $$"""
+            WITH f AS MATERIALIZED ({{values}}),
+                 td AS (SELECT t."Id", t."AssessmentId" FROM "TaxDeclarations" t JOIN f ON f."TaxDeclarationId" = t."Id"),
+                 ex AS (
+                     SELECT td."Id" AS tdid, pe."ExemptionTypeId" AS et, SUM(l."MarketValue") AS mv, SUM(l."AssessedValue") AS av
+                     FROM td JOIN "AssessmentLines" l ON l."AssessmentId" = td."AssessmentId" AND l."Taxability" = 'Exempt'
+                     LEFT JOIN "PropertyExemptions" pe ON pe."Id" = l."PropertyExemptionId"
+                     GROUP BY td."Id", pe."ExemptionTypeId"
+                 ),
+                 p AS (
+                     SELECT f.*, FALSE AS exempt, NULL::uuid AS et, f."TaxableMarketValue" AS mv, f."TaxableAssessedValue" AS av
+                     FROM f
+                     WHERE f."TaxableMarketValue" > 0 OR f."TaxableAssessedValue" > 0
+                        OR (f."ExemptMarketValue" = 0 AND f."ExemptAssessedValue" = 0 AND f."Taxability" = 'Taxable')
+                     UNION ALL
+                     SELECT f.*, TRUE, ex.et, ex.mv, ex.av FROM f JOIN ex ON ex.tdid = f."TaxDeclarationId"
+                     UNION ALL
+                     SELECT f.*, TRUE,
+                            (SELECT pe."ExemptionTypeId" FROM "PropertyExemptions" pe
+                             WHERE pe."RpuId" = f."RpuId" AND pe."Status" = 'Approved' AND pe."EffectiveDate" <= {{day}}
+                               AND (pe."ExpiryDate" IS NULL OR pe."ExpiryDate" >= {{day}}) AND (pe."EndedOn" IS NULL OR pe."EndedOn" > {{day}})
+                             ORDER BY pe."EffectiveDate" DESC LIMIT 1),
+                            f."ExemptMarketValue", f."ExemptAssessedValue"
+                     FROM f
+                     WHERE NOT EXISTS (SELECT 1 FROM ex WHERE ex.tdid = f."TaxDeclarationId")
+                       AND (f."ExemptMarketValue" > 0 OR f."ExemptAssessedValue" > 0 OR f."Taxability" <> 'Taxable')
+                 ),
+                 r AS (
+                     SELECT DISTINCT ON (a."TaxDeclarationId") a."TaxDeclarationId", a."AnnotationTypeId"
+                     FROM "TaxDeclarationAnnotations" a JOIN f ON f."TaxDeclarationId" = a."TaxDeclarationId"
+                     WHERE a."AnnotationTypeId" = ANY({{types}}) AND a."EffectiveDate" <= {{day}}
+                       AND (a."LiftedAt" IS NULL OR a."LiftedAt" >= {{nextDay}})
+                     ORDER BY a."TaxDeclarationId", array_position({{types}}, a."AnnotationTypeId")
+                 )
+            SELECT p."MunicipalityId", p."ClassificationId", p."ActualUseId", p.exempt AS "Exempt", p.et AS "ExemptionTypeId",
+                   r."AnnotationTypeId" AS "RestrictionTypeId", p."RpuType" AS "Kind", {{over}} AS "OverThreshold",
+                   COUNT(*)::int AS "Units",
+                   COALESCE(SUM(p."LandAreaSqm"), 0) AS "LandAreaSqm",
+                   (COUNT(*) FILTER (WHERE p."LandAreaUnconverted"))::int AS "UnconvertedLandUnits",
+                   COALESCE(SUM(p.mv), 0) AS "MarketValue", COALESCE(SUM(p.av), 0) AS "AssessedValue",
+                   (SELECT COUNT(DISTINCT "BarangayId") FROM f)::int AS "Barangays"
+            FROM p LEFT JOIN r ON r."TaxDeclarationId" = p."TaxDeclarationId"
+            GROUP BY p."MunicipalityId", p."ClassificationId", p."ActualUseId", p.exempt, p.et, r."AnnotationTypeId", p."RpuType", 8
+            """;
+        return await TunedAsync(() => db.Database.SqlQueryRaw<FaasPart>(sql, parameters.ToArray()).ToListAsync(cancellationToken), cancellationToken);
+    }
+
     /// <summary>
     /// Runs a report read with settings for one large aggregate, in a transaction of its own so <c>SET LOCAL</c> ends with
     /// it (inside a caller's transaction, they last until that one ends). Measured on 400,000 units: the planner overestimates

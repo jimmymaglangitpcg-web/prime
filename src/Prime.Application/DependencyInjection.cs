@@ -65,6 +65,8 @@ public static class DependencyInjection
         services.AddScoped<Features.Exemptions.IExemptionService, Features.Exemptions.ExemptionService>();
         services.AddScoped<Features.AssessmentLevels.IAssessmentLevelCeilingService, Features.AssessmentLevels.AssessmentLevelCeilingService>();
         services.AddScoped<Features.LevyRates.ILevyRateService, Features.LevyRates.LevyRateService>();
+        services.AddScoped<Features.ReportConfiguration.IReportRowMapService, Features.ReportConfiguration.ReportRowMapService>();
+        services.AddScoped<Features.ReportConfiguration.ISystemParameterService, Features.ReportConfiguration.SystemParameterService>();
         services.AddScoped<INoticeService, NoticeService>();
         services.AddScoped<IFormDataProvider, NoticeFormDataProvider>();
         services.AddScoped<Features.Notices.INoticeOfCancellationService, Features.Notices.NoticeOfCancellationService>();
@@ -101,6 +103,7 @@ public static class DependencyInjection
         services.AddScoped<Features.Reports.IReport, Features.Reports.ValueSummaryReport>();
         services.AddScoped<Features.Reports.IReport, Features.Reports.MonthlyAssessmentReport>();
         services.AddScoped<Features.Reports.IReport, Features.Reports.HalfYearlyAssessmentReport>();
+        services.AddScoped<Features.Reports.IReport, Features.Reports.QuarterlyAssessmentReport>();
         services.AddScoped<Features.Reports.IReport>(sp => ActivatorUtilities.CreateInstance<Features.Reports.AssessmentHistoryReport>(sp, false));
         services.AddScoped<Features.Reports.IReport>(sp => ActivatorUtilities.CreateInstance<Features.Reports.AssessmentHistoryReport>(sp, true));
         services.AddScoped<Features.Reports.IReportService, Features.Reports.ReportService>();

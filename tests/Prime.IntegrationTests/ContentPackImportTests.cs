@@ -89,13 +89,15 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
         // 1 province, 2 towns, 4 barangays, 2 classifications, 1 sub-class, 1 actual use, 2 parts, 2 materials,
         // 4 draft versions, 1 office with 2 draft jurisdictions, a draft SMV with 2 unit values, 2 factors and 1 level, 2 barangay boundaries,
         // 1 structural type, 1 building kind, 1 component type, and the SMV's construction cost, extra-item cost and depreciation table (L1-5), 2 exchange rates and 1 price index (L1-6),
-        // 2 draft exemption types (L3-1a), 1 draft assessment-level ceiling (L3-2), 2 conveyance modes (L6-1), 4 draft checklist steps (L6-6c)
-        record.CreatedCount.ShouldBe(48);
+        // 2 draft exemption types (L3-1a), 1 draft assessment-level ceiling (L3-2), 2 conveyance modes (L6-1), 4 draft checklist steps (L6-6c),
+        // 2 annotation types and 1 draft QRRPA row map (R4c)
+        record.CreatedCount.ShouldBe(51);
         record.ChangedCount.ShouldBe(0);
         record.ImportedBy.ShouldBe(c.Importer.Id);
         record.ImportedByName.ShouldBe("DEMO Importer");
         record.Fingerprint.ShouldBe(preview.Fingerprint);
-        record.Files.Count.ShouldBe(30); // + exemption-types (L3-1a), assessment-level-ceilings (L3-2), conveyance-modes (L6-1), general-revision-checklist (L6-6c)
+        record.Files.Count.ShouldBe(32); // + exemption-types (L3-1a), assessment-level-ceilings (L3-2), conveyance-modes (L6-1), general-revision-checklist (L6-6c),
+                                         // annotation-types and report-row-maps (R4c)
 
         var province = await c.Db.Provinces.SingleAsync(x => x.PsgcCode == "9900000000");
         province.PinIndexNumber.ShouldBe("998");
@@ -127,7 +129,11 @@ public class ContentPackImportTests(WebApplicationFactory<Program> factory) : IC
         (table.Reading, table.MinimumRemainingPercent, table.Rows.Count, table.Status).ShouldBe((DepreciationReading.YearlyWithinBand, 20m, 2, WorkflowStatus.Draft));
 
         var items = (await c.Service.ListImportItemsAsync(record.Id, new PagedRequest { PageSize = 100 })).Value;
-        items.TotalCount.ShouldBe(48);
+        items.TotalCount.ShouldBe(51);
+        // Step R4c: the DEMO QRRPA row map arrives as a draft, its codes checked against the pack's lookups.
+        var rowMap = await c.Db.ReportRowMaps.SingleAsync(x => x.Code == "QRRPA" && x.Name == "DEMO QRRPA rows");
+        (rowMap.Status, rowMap.EffectiveDate, Prime.Application.Features.ReportConfiguration.ReportRowMapDefinition.Parse(rowMap.Definition).Rows.Count)
+            .ShouldBe((WorkflowStatus.Draft, new DateOnly(2099, 1, 1), 9));
         items.Items.ShouldAllBe(i => i.Action == ContentImportAction.Created && i.Source.Length > 0 && i.Line >= 1);
         items.Items.Single(i => i.Key == "9900200001").Source.ShouldBe("DEMO data (row-level source)");
         items.Items.Single(i => i.Key == "9900200001").EntityId.ShouldBe((await c.Db.Barangays.SingleAsync(x => x.PsgcCode == "9900200001")).Id);

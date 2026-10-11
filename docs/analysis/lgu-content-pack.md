@@ -74,6 +74,11 @@ lgu-content/                         (gitignored)
     │   ├── general-revision-checklist.json  kind "general-revision-checklist" (L6-6c): code, sequence, title, description, gate (optional: Compiled, Valued, Approved, Posted, TaxDeclarationsApproved, NoticesServed, RollWaitElapsed, AssessmentRollRun, OwnershipRecordsRun, CompletionReportIssued), legalBasis, effectiveDate
     │   ├── assessment-level-ceilings.json  kind "assessment-level-ceilings" (L3-2): code, propertyType, classification?, actualUse?, lowerValue, upperValue?, maximumPercentage, description, legalBasis, effectiveDate
     │   └── assessment-levels.csv    kind "assessment-levels"
+    ├── reports/                     (Phase 11 R4c)
+    │   └── report-row-maps.json     kind "report-row-maps": code ("QRRPA"), name, definition {restrictions[] (code, label,
+    │                                annotationTypes[]), rows[] (section Taxable/Exempt/Restricted/IdleLand, code, label,
+    │                                restriction?, classifications?, actualUses?, exemptionTypes?, splitsBuildings?, others?)},
+    │                                legalBasis, effectiveDate
     └── gis/
         └── <layer>.geojson
 ```

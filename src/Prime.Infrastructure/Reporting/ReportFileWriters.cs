@@ -76,6 +76,7 @@ public sealed class ExcelReportWriter : IReportFileWriter
                     ReportColumnType.Money => "#,##0.00",
                     ReportColumnType.Area => "#,##0.00",
                     ReportColumnType.Integer => "#,##0",
+                    ReportColumnType.Percent => "0.000###",
                     ReportColumnType.Date => "yyyy-mm-dd",
                     _ => null,
                 },

@@ -21,6 +21,7 @@ interface ParameterForm {
   asOf?: Dayjs;
   period?: [Dayjs, Dayjs];
   month?: Dayjs;
+  quarter?: Dayjs;
   halfYear?: Dayjs;
   half?: 1 | 2;
   municipalityId?: string;
@@ -44,6 +45,7 @@ const blank = (text?: string) => (text?.trim() ? text.trim() : null);
 /** The first day of the period a report names: a month, a half-year, else the period's start. */
 function fromDate(values: ParameterForm, parameters: string[]) {
   if (parameters.includes('Month') && values.month) return values.month.startOf('month').format('YYYY-MM-DD');
+  if (parameters.includes('Quarter') && values.quarter) return values.quarter.format('YYYY-MM-DD');
   if (parameters.includes('HalfYear') && values.halfYear) return `${values.halfYear.year()}-${values.half === 2 ? '07' : '01'}-01`;
   return values.period?.[0].format('YYYY-MM-DD') ?? null;
 }
@@ -132,7 +134,7 @@ export function ReportsPage() {
         </div>
         {report && (
           <Form form={form} layout="vertical" initialValues={{
-            asOf: dayjs(), period: [dayjs().startOf('year'), dayjs()], month: dayjs().subtract(1, 'month'), halfYear: dayjs(),
+            asOf: dayjs(), period: [dayjs().startOf('year'), dayjs()], month: dayjs().subtract(1, 'month'), quarter: dayjs().subtract(3, 'month'), halfYear: dayjs(),
             half: dayjs().month() < 6 ? 1 : 2,
           }} onFinish={submit}
             style={{ marginTop: 16 }}>
@@ -150,6 +152,11 @@ export function ReportsPage() {
               {report.parameters.includes('Month') && (
                 <Form.Item name="month" label="Month" rules={[{ required: true, message: 'Choose the month' }]}>
                   <DatePicker picker="month" disabledDate={(d) => d.isAfter(dayjs(), 'month')} allowClear={false} />
+                </Form.Item>
+              )}
+              {report.parameters.includes('Quarter') && (
+                <Form.Item name="quarter" label="Quarter" rules={[{ required: true, message: 'Choose the quarter' }]}>
+                  <DatePicker picker="quarter" disabledDate={(d) => d.isAfter(dayjs(), 'day')} allowClear={false} />
                 </Form.Item>
               )}
               {report.parameters.includes('HalfYear') && (

@@ -152,15 +152,15 @@ public sealed class ReportService(
             }
             scope = scope with { AsOf = to, From = from, To = to };
         }
-        foreach (var (parameter, months) in new[] { (ReportParameter.Month, 1), (ReportParameter.HalfYear, 6) })
+        foreach (var (parameter, months) in new[] { (ReportParameter.Month, 1), (ReportParameter.Quarter, 3), (ReportParameter.HalfYear, 6) })
         {
             if (!report.Parameters.Contains(parameter))
             {
                 continue;
             }
-            // Any day of the month or half-year names it; without one, the previous month or the current half-year.
-            var day = request.FromDate ?? (months == 1 ? clock.Today.AddMonths(-1) : clock.Today);
-            var start = new DateOnly(day.Year, months == 1 ? day.Month : day.Month <= 6 ? 1 : 7, 1);
+            // Any day of the period names it; without one, the previous month or quarter, or the current half-year.
+            var day = request.FromDate ?? (months == 6 ? clock.Today : clock.Today.AddMonths(-months));
+            var start = new DateOnly(day.Year, (day.Month - 1) / months * months + 1, 1);
             if (start > clock.Today)
             {
                 return Result.Failure<ReportScope>("VALIDATION_FAILED", "The period cannot start later than today.");

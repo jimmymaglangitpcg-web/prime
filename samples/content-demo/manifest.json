@@ -74,6 +74,12 @@
       "source": "DEMO data"
     },
     {
+      "kind": "lookup",
+      "lookup": "annotation-types",
+      "path": "lookups/annotation-types.csv",
+      "source": "DEMO data"
+    },
+    {
       "kind": "transaction-types",
       "path": "catalogues/transaction-types.json",
       "source": "DEMO data"
@@ -163,6 +169,11 @@
     {
       "kind": "general-revision-checklist",
       "path": "catalogues/general-revision-checklist.json",
+      "source": "DEMO data"
+    },
+    {
+      "kind": "report-row-maps",
+      "path": "reports/report-row-maps.json",
       "source": "DEMO data"
     }
   ]

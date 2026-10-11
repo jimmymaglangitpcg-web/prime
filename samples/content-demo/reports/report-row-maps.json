@@ -1,0 +1,25 @@
+[
+  {
+    "code": "QRRPA",
+    "name": "DEMO QRRPA rows",
+    "definition": {
+      "restrictions": [
+        { "code": "DEMO-RA", "label": "DEMO restriction group A", "annotationTypes": ["DEMO-AN-RESTRICT-A"] },
+        { "code": "DEMO-RB", "label": "DEMO restriction group B", "annotationTypes": ["DEMO-AN-RESTRICT-B"] }
+      ],
+      "rows": [
+        { "section": "Taxable", "code": "DEMO-T-R", "label": "DEMO residential", "classifications": ["DEMO-CP-R"], "splitsBuildings": true },
+        { "section": "Taxable", "code": "DEMO-T-A", "label": "DEMO agricultural", "classifications": ["DEMO-CP-A"] },
+        { "section": "Taxable", "code": "DEMO-T-O", "label": "DEMO other classes", "others": true },
+        { "section": "Exempt", "code": "DEMO-E-COOP", "label": "DEMO cooperative", "exemptionTypes": ["DEMO-EX-COOP"] },
+        { "section": "Exempt", "code": "DEMO-E-O", "label": "DEMO other exemptions", "others": true },
+        { "section": "Restricted", "restriction": "DEMO-RA", "code": "DEMO-RA-R", "label": "DEMO residential", "classifications": ["DEMO-CP-R"] },
+        { "section": "Restricted", "restriction": "DEMO-RA", "code": "DEMO-RA-O", "label": "DEMO other classes", "others": true },
+        { "section": "Restricted", "restriction": "DEMO-RB", "code": "DEMO-RB-O", "label": "DEMO all classes", "others": true },
+        { "section": "IdleLand", "code": "DEMO-I", "label": "DEMO idle lands" }
+      ]
+    },
+    "legalBasis": "DEMO — invented rows, not the LAM's Annex I-P",
+    "effectiveDate": "2099-01-01"
+  }
+]

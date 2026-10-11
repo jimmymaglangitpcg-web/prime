@@ -30,6 +30,7 @@ import { SmvPreparationsPage } from './pages/smvPreparation/SmvPreparationsPage'
 import { SmvPreparationPage } from './pages/smvPreparation/SmvPreparationPage';
 import { SalesAnalysisPage } from './pages/smvPreparation/SalesAnalysisPage';
 import { ValuationRulesPage } from './pages/admin/ValuationRulesPage';
+import { ReportSettingsPage } from './pages/admin/ReportSettingsPage';
 import { FormsAdminPage } from './pages/admin/FormsAdminPage';
 import { CollectionSetupPage } from './pages/admin/CollectionSetupPage';
 import { PropertyIdentificationPage } from './pages/admin/PropertyIdentificationPage';
@@ -77,6 +78,7 @@ export default function App() {
         <Route path="/sworn-statements/:id" element={<SwornStatementPage />} />
         <Route path="/admin/forms" element={<FormsAdminPage />} />
         <Route path="/admin/valuation" element={<ValuationRulesPage />} />
+        <Route path="/admin/report-settings" element={<ReportSettingsPage />} />
         <Route path="/admin/collection" element={<CollectionSetupPage />} />
         <Route path="/admin/property-identification" element={<PropertyIdentificationPage />} />
         <Route path="/admin/content-packs" element={<ContentPacksPage />} />

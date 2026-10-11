@@ -77,6 +77,8 @@ public class PrimeDbContext(DbContextOptions<PrimeDbContext> options, Prime.Infr
     public DbSet<Prime.Domain.Entities.Exemptions.ExemptionType> ExemptionTypes => Set<Prime.Domain.Entities.Exemptions.ExemptionType>();
     public DbSet<Prime.Domain.Entities.AssessmentLevelCeiling> AssessmentLevelCeilings => Set<Prime.Domain.Entities.AssessmentLevelCeiling>();
     public DbSet<Prime.Domain.Entities.LevyRate> LevyRates => Set<Prime.Domain.Entities.LevyRate>();
+    public DbSet<Prime.Domain.Entities.ReportRowMap> ReportRowMaps => Set<Prime.Domain.Entities.ReportRowMap>();
+    public DbSet<Prime.Domain.Entities.SystemParameter> SystemParameters => Set<Prime.Domain.Entities.SystemParameter>();
     public DbSet<Prime.Domain.Entities.Exemptions.PropertyExemption> PropertyExemptions => Set<Prime.Domain.Entities.Exemptions.PropertyExemption>();
     public DbSet<Prime.Domain.Entities.Exemptions.ExemptionEvidence> ExemptionEvidence => Set<Prime.Domain.Entities.Exemptions.ExemptionEvidence>();
     public DbSet<Prime.Domain.Entities.SwornStatements.SwornStatement> SwornStatements => Set<Prime.Domain.Entities.SwornStatements.SwornStatement>();

@@ -52,6 +52,8 @@ public static class ContentFileKinds
     public const string AssessmentLevelCeilings = "assessment-level-ceilings";
     /// <summary>The general revision instructions' checklist (L6-6c).</summary>
     public const string GeneralRevisionChecklist = "general-revision-checklist";
+    /// <summary>Report row maps, e.g. the QRRPA's rows (Phase 11 R4c).</summary>
+    public const string ReportRowMaps = "report-row-maps";
 
     /// <summary>CSV tables (step C1–C2).</summary>
     public static readonly IReadOnlySet<string> Csv = new HashSet<string> { Provinces, Municipalities, Barangays, Lookup };
@@ -64,7 +66,7 @@ public static class ContentFileKinds
     public static readonly IReadOnlySet<string> Versioned = new HashSet<string>
         { TransactionTypes, NumberingSchemes, ApprovalChains, Forms, Offices, Smv, SmvSchedules, AssessmentLevels, AdjustmentFactors,
           BuildingCosts, ExtraItemCosts, DepreciationRates, ExchangeRates, PriceIndices, ExemptionTypes, AssessmentLevelCeilings,
-          GeneralRevisionChecklist };
+          GeneralRevisionChecklist, ReportRowMaps };
 
     /// <summary>Kinds PRIME reads and imports; GeoJSON map layers from step C5.</summary>
     public static readonly IReadOnlySet<string> Supported = Csv.Union(Versioned).Append(GisLayer).ToHashSet();

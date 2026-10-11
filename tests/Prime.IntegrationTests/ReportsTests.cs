@@ -80,7 +80,7 @@ public class ReportsTests(WebApplicationFactory<Program> factory) : IClassFixtur
 
         c.Reports.List().Select(r => r.Code).ShouldBe(
             ["PROPERTY_INVENTORY", "PROPERTIES_BY_BARANGAY", "PROPERTIES_BY_CLASSIFICATION", "PROPERTIES_BY_ACTUAL_USE", "PROPERTIES_BY_ZONE",
-                "TD_LIST", "VALUE_SUMMARY", "ASSESSMENT_HISTORY", "REASSESSMENTS", "MRRPA", "HALF_YEARLY_RPA"],
+                "TD_LIST", "VALUE_SUMMARY", "ASSESSMENT_HISTORY", "REASSESSMENTS", "MRRPA", "HALF_YEARLY_RPA", "QRRPA"],
             ignoreOrder: true);
         (await c.Reports.PreviewAsync("NO_SUCH_REPORT", new ReportPreviewRequest())).Code.ShouldBe("REPORT_NOT_FOUND");
     }

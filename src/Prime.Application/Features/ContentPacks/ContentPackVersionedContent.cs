@@ -73,7 +73,9 @@ public sealed partial class ContentPackVersionedContent(
     IValidator<AssessmentLevels.CreateAssessmentLevelCeilingRequest> ceilingValidator,
     AssessmentLevels.IAssessmentLevelCeilingService ceilings,
     IValidator<GeneralRevision.CreateChecklistStepDefinitionRequest> checklistValidator,
-    GeneralRevision.IGeneralRevisionCompletionService generalRevisions)
+    GeneralRevision.IGeneralRevisionCompletionService generalRevisions,
+    IValidator<ReportConfiguration.CreateReportRowMapRequest> rowMapValidator,
+    ReportConfiguration.IReportRowMapService rowMaps)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
 
@@ -138,6 +140,8 @@ public sealed partial class ContentPackVersionedContent(
                 ContentFileKinds.AssessmentLevelCeilings => await LevelCeilingsAsync(Parse<LevelCeilingItem>(bytes), fileSource, pending ?? PackPending.None,
                     ceilingValidator, result, ct),
                 ContentFileKinds.GeneralRevisionChecklist => await ChecklistAsync(Parse<ChecklistStepItem>(bytes), fileSource, checklistValidator, result, ct),
+                ContentFileKinds.ReportRowMaps => await ReportRowMapsAsync(Parse<ReportRowMapItem>(bytes), fileSource, pending ?? PackPending.None,
+                    rowMapValidator, result, ct),
                 _ => throw new InvalidOperationException($"Not a versioned kind: {kind}"),
             };
         }
@@ -170,6 +174,7 @@ public sealed partial class ContentPackVersionedContent(
         Valuation.CreatePriceIndexRequest r => Map("PriceIndex", await machineryIndices.CreatePriceIndexAsync(r, ct), x => x.Id),
         Exemptions.CreateExemptionTypeRequest r => Map("ExemptionType", await exemptions.CreateTypeAsync(r, ct), x => x.Id),
         PackLevelCeiling r => await CreateLevelCeilingAsync(r, ceilings, ct),
+        ReportConfiguration.CreateReportRowMapRequest r => Map("ReportRowMap", await rowMaps.CreateAsync(r, ct), x => x.Id),
         GeneralRevision.CreateChecklistStepDefinitionRequest r => Map("GeneralRevisionChecklistStepDefinition", await generalRevisions.CreateStepDefinitionAsync(r, ct), x => x.Id),
         _ => throw new InvalidOperationException("Unknown planned version."),
     };

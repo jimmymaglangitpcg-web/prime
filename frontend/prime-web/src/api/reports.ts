@@ -2,8 +2,8 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { apiDownload, apiGet, apiPost } from '../lib/apiClient';
 
 /** Reports (CLAUDE.md §57; docs/analysis/reporting.md §4.1). */
-export type ReportColumnType = 'Text' | 'Integer' | 'Money' | 'Area' | 'Date';
-export type ReportParameter = 'AsOf' | 'Municipality' | 'Barangay' | 'Period' | 'TdStatus' | 'TransactionCode' | 'Pin' | 'Month' | 'HalfYear';
+export type ReportColumnType = 'Text' | 'Integer' | 'Money' | 'Area' | 'Date' | 'Percent';
+export type ReportParameter = 'AsOf' | 'Municipality' | 'Barangay' | 'Period' | 'TdStatus' | 'TransactionCode' | 'Pin' | 'Month' | 'HalfYear' | 'Quarter';
 
 export interface ReportColumn { key: string; title: string; type: ReportColumnType }
 

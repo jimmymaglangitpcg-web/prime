@@ -100,6 +100,34 @@ public sealed class FaasChangeGroup
 }
 
 /// <summary>
+/// Sums of the parts of the FAAS in force on a date (the QRRPA's figures, reporting.md §10, Q15–Q18): each FAAS gives a
+/// taxable part and an exempt part per exemption type, as its lines split it (else wholly one or the other, as the TD
+/// says). Grouped by everything the QRRPA's rows and rates read.
+/// </summary>
+public sealed class FaasPart
+{
+    public Guid MunicipalityId { get; init; }
+    public Guid ClassificationId { get; init; }
+    public Guid ActualUseId { get; init; }
+    public bool Exempt { get; init; }
+    /// <summary>The exemption type of an exempt part: its lines' exemption, else the unit's approved exemption in force; null if none is recorded.</summary>
+    public Guid? ExemptionTypeId { get; init; }
+    /// <summary>The first of the given restriction annotation types the TD carries on the date (not lifted by then); null if none.</summary>
+    public Guid? RestrictionTypeId { get; init; }
+    /// <summary>The unit kind (<see cref="Domain.Enums.RpuType"/>'s name).</summary>
+    public string Kind { get; init; } = string.Empty;
+    /// <summary>A building whose whole market value is over the threshold given; false without one.</summary>
+    public bool OverThreshold { get; init; }
+    public int Units { get; init; }
+    public decimal LandAreaSqm { get; init; }
+    public int UnconvertedLandUnits { get; init; }
+    public decimal MarketValue { get; init; }
+    public decimal AssessedValue { get; init; }
+    /// <summary>The barangays with a FAAS in force in the whole scope (the same on every row).</summary>
+    public int Barangays { get; init; }
+}
+
+/// <summary>
 /// The FAAS in force on a date, read in the database (docs/analysis/reporting.md §4.1, Q9). It is the registers' rule
 /// (<see cref="Registers.RegisterFormDataProvider"/>) written for the database, so a province is summed without reading its
 /// records into memory (CLAUDE.md §71):
@@ -144,4 +172,8 @@ public interface IFaasInForceQuery
     /// cancelled = end in every group. Sums per municipality and kind, optionally per classification, and in total.
     /// </summary>
     Task<IReadOnlyList<FaasChangeGroup>> ChangeSummaryAsync(FaasScope scope, DateOnly from, bool byClassification, CancellationToken cancellationToken);
+
+    /// <summary>The parts of the FAAS in force (see <see cref="FaasPart"/>), summed per municipality, keys and kind.</summary>
+    Task<IReadOnlyList<FaasPart>> PartsAsync(FaasScope scope, IReadOnlyCollection<Guid> restrictionTypeIds, decimal? buildingThreshold,
+        CancellationToken cancellationToken);
 }

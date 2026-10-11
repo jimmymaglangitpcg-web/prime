@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Phase | 11 (CLAUDE.md §57, §98; roadmap "Phase 11 — Reporting") |
-| Status | Decisions recorded 2026-10-10 (all recommendations accepted); R1–R3 done; R4 detail Q13–Q21 accepted 2026-10-10 (§10.4); R4a–R4b done 2026-10-11 |
+| Status | Decisions recorded 2026-10-10 (all recommendations accepted); R1–R3 done; R4 detail Q13–Q21 accepted 2026-10-10 (§10.4); R4 (R4a–R4c) done 2026-10-11 |
 | Sources | CLAUDE.md §55, §57, §71, §73, §76; LAM 2025 Book I Ch. I §5 (reportorial requirements, pp.24–25), Ch. I on idle lands (pp.11–13) and the province's reports (p.15); LAM Annexes I-P, I-Q, I-R, I-S; LAM gap analysis J5–J7 (untracked, `docs/lam/`) |
 | Depends on | Assessments, registers and forms (Phases 6, 10), jurisdiction (LP), permissions and audit (Phase 12) |
 | Order | After Phase 12; Phase 13 skipped for now (user, 2026-10-08) |
@@ -430,6 +430,62 @@ they are "assessed"), provincial user, Debug API, warm:
 | MRRPA, September | 2.2 s | — |
 | Half-yearly, July–December | 5.3 s | — |
 | MRRPA download, October (Excel) | 7.8 s | — |
+
+### R4c — QRRPA, row map and parameters (2026-10-11)
+
+Built (Q15–Q18, Q20; migration `ReportRowMapsAndSystemParameters`):
+- **Report row map** (`ReportRowMap`, configuration keyed by the report's code, maker-checker, delete-guarded): the
+  restriction groups (each a set of TD annotation types) and the rows. A row belongs to a section (Taxable, Exempt,
+  Restricted with its group, IdleLand) and lists the classification, actual-use or exemption-type codes it takes; an
+  "others" row takes what no other row of its section takes; one row may split building market values at the
+  threshold. The definition is checked on entry: structure, one "others" row per section and group, and every code
+  against PRIME (or the lookups the same content pack adds). `/api/report-row-maps`; content-pack kind
+  `report-row-maps` (exemption-type codes are checked at import, when the pack's exemption types exist). The repository
+  ships a DEMO map only (`samples/content-demo/reports/report-row-maps.json`, with two DEMO annotation types); the
+  LAM's rows are loaded from `lgu-content/`.
+- **System parameters** (`SystemParameter`, maker-checker, delete-guarded): dated values of the parameters PRIME reads,
+  listed in code (`SystemParameterCatalog`) without a value. The first is the QRRPA's residential building value
+  threshold; the annex's figure is not in code (Q16). `/api/system-parameters` (and `/catalog`).
+- **`IFaasInForceQuery.PartsAsync`**: the FAAS in force on the date, each split into its taxable part and its exempt
+  parts by exemption type (the declared assessment's exempt lines by their exemption, else the whole exempt value
+  under the unit's approved exemption in force), with the first restriction annotation of the given types in force on
+  the TD, and whether a building's whole market value is over the threshold. Summed per municipality, classification,
+  actual use, exemption type, restriction, kind and threshold side, in one statement; also the number of barangays.
+- **QRRPA** (`QRRPA`, group "BLGF"; `Quarter` parameter, the previous quarter by default; the fourth quarter is the
+  year-end report, Q20): the FAAS in force at the quarter's end in the map's rows, with land area, RPUs, market values
+  (the split row in two columns when the threshold is set) and assessed values by kind, the basic and SEF rates in
+  force on the quarter's last day and the collectibles: taxable assessed value × rate, rounded to the centavo per
+  municipality and classification (Q18). A rate is shown only where one rate applies to the whole row; exempt rows
+  have no rates or collectibles; idle-land rows and the idle-land collectible are left empty (Q17). Subtotals per
+  restriction group, totals per section and in all. Without an approved map in force, the rows are PRIME's
+  classifications and exemption types. Notes: the map, the threshold, the rates (pairs without a rate), parts that no
+  row takes, barangays included, land in unconverted units, a quarter not ended.
+- **Screens**: Administration → **Report settings** (new page) with the Levy rates tab (moved from Valuation rules,
+  whose nine tabs overflowed and failed axe's tablist rule), QRRPA rows (versions with their rows; a new version
+  entered as JSON) and Parameters. The Quarter picker on `/reports`; percent cells.
+
+Decided in building (DOMAIN VERIFICATION REQUIRED, noted on the report):
+- A unit whose TD carries a restriction annotation is counted under its restriction group, not under taxable; its
+  exempt part stays under exempt. So taxable + exempt + restricted = all units in force.
+- A unit with a taxable and an exempt part is counted in both rows (its RPU twice, its land area twice).
+- The idle-land rate column stays empty until idle lands exist (Q7).
+- The annex's header items "number of barangays" (a note) and the footer's type of last revision (not filled).
+
+Verified: 874 tests pass (4 new in `QrrpaTests`: rows, threshold split, rates and collectibles across all four
+sections; the report without a map in force; the map's checks and jurisdiction; parameters; the content pack test now
+imports the DEMO map as a draft). Production build and lint clean. Migration applied to the local database,
+`prime_volume` and Supabase (88/88; RLS on). In a browser: the maker enters a DEMO map and a DEMO threshold, the
+checker approves them, the QRRPA runs with them, downloads as Excel and prints; axe without findings on the three
+settings tabs, the report and the print view. The dev database keeps that DEMO map and threshold (effective
+2026-01-01).
+
+Measured on `prime_volume`, provincial user, Debug API: QRRPA Q4 2026 province-wide 4.0 s warm (8.1 s cold), Titay
+1.6 s, Excel 4.1 s; its 399,114 units agree with the MRRPA's end block.
+
+Open after R4:
+- The LAM layouts of the QRRPA and MRRPA (Annexes I-P, I-Q) as form content, and the province's row map, threshold and
+  levy rates: LGU content to load (`lgu-content/`).
+- The domain points above, for the Provincial Assessor.
 
 ## 10. Step R4 in detail (2026-10-10; Q13–Q21 accepted)
 

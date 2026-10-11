@@ -61,6 +61,7 @@ const navEntries: NavEntry[] = [
       { section: 'Configuration', children: [
         { needs: 'prime.use', key: '/admin/property-identification', label: 'Property identification' },
         { needs: 'prime.use', key: '/admin/valuation', label: 'Valuation rules' },
+        { needs: 'prime.use', key: '/admin/report-settings', label: 'Report settings' },
         { needs: 'prime.use', key: '/admin/forms', label: 'Forms & numbering' },
         { needs: 'config.edit', key: '/admin/content-packs', label: 'Content packs' },
       ] },

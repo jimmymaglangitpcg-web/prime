@@ -11,6 +11,8 @@ public enum ReportColumnType
     /// <summary>Square metres.</summary>
     Area,
     Date,
+    /// <summary>A rate in percent, as the ordinance states it (step R4c).</summary>
+    Percent,
 }
 
 /// <summary>A parameter a report takes (docs/analysis/reporting.md §4.1); the screen shows only those the report lists.</summary>
@@ -31,6 +33,8 @@ public enum ReportParameter
     Month,
     /// <summary>A half-year, January–June or July–December (step R4b), sent as any day of it in <see cref="ReportRunRequest.FromDate"/>; without it, the current one.</summary>
     HalfYear,
+    /// <summary>A calendar quarter (step R4c), sent as any day of it in <see cref="ReportRunRequest.FromDate"/>; without it, the previous quarter.</summary>
+    Quarter,
 }
 
 public sealed record ReportColumn(string Key, string Title, ReportColumnType Type);
@@ -108,6 +112,11 @@ public sealed record ReportScope(DateOnly AsOf, Guid? MunicipalityId, Guid? Bara
         {
             lines.Add($"Month: {month.ToString("MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}"
                 + (monthTo < PeriodEnd(month, 1) ? $" (to {monthTo:yyyy-MM-dd})" : string.Empty));
+        }
+        if (used.Contains(ReportParameter.Quarter) && From is { } quarter && To is { } quarterTo)
+        {
+            lines.Add($"Quarter: Q{(quarter.Month + 2) / 3} {quarter.Year} ({quarter:yyyy-MM-dd} to {PeriodEnd(quarter, 3):yyyy-MM-dd})"
+                + (quarterTo < PeriodEnd(quarter, 3) ? $", figures to {quarterTo:yyyy-MM-dd}" : string.Empty));
         }
         if (used.Contains(ReportParameter.HalfYear) && From is { } half && To is { } halfTo)
         {
